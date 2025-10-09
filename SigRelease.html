@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Signal Release Function Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .control-group select,
+        .control-group input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .control-group input[type="range"] {
+            padding: 0;
+        }
+
+        .scenarios {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .scenario {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+
+        .scenario h2 {
+            color: #2563eb;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .scenario.scenario-2 h2 {
+            color: #059669;
+        }
+
+        .road {
+            position: relative;
+            height: 50px;
+            margin-bottom: 20px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: visible;
+        }
+
+        .lane-marker {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #fff;
+            opacity: 0.5;
+        }
+
+        .signal-pole {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background: #4b5563;
+            top: 15px;
+        }
+
+        .signal-1 .signal-pole {
+            left: 55%;
+        }
+
+        .signal-2 .signal-pole {
+            left: 92%;
+        }
+
+        .signal-light {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            top: 18px;
+            transition: background-color 0.3s;
+        }
+
+        .signal-1 .signal-light {
+            left: calc(55% - 7px);
+        }
+
+        .signal-2 .signal-light {
+            left: calc(92% - 7px);
+        }
+
+        .signal-light.green {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        .signal-light.red {
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+        
+        .arrival-detection {
+            position: absolute;
+            width: 2px;
+            height: 50px;
+            background: #fbbf24;
+            top: 0;
+            border-left: 3px dashed #f59e0b;
+            z-index: 5;
+            left: calc(92% - 80px);
+        }
+        
+        .arrival-detection::after {
+            content: '← Arrival';
+            position: absolute;
+            top: -15px;
+            left: 5px;
+            font-size: 8px;
+            font-weight: 700;
+            color: #d97706;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
+        
+        .signal-2 .arrival-detection {
+            /* Override - already positioned via left calc */
+        }
+
+        .vehicle {
+            position: absolute;
+            width: 14px;
+            height: 10px;
+            border-radius: 2px;
+            top: 20px;
+            transition: left 0.05s linear, background-color 0.3s;
+            border: 1px solid rgba(0,0,0,0.3);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 13px;
+        }
+
+        .stat-box {
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 4px;
+            border-left: 3px solid #2563eb;
+        }
+
+        .scenario-2 .stat-box {
+            border-left-color: #059669;
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .histogram {
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .histogram-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .histogram-bars {
+            display: flex;
+            align-items: flex-end;
+            height: 80px;
+            gap: 3px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        
+        .histogram-bar {
+            flex: 1;
+            background: #3b82f6;
+            min-height: 2px;
+            position: relative;
+            transition: height 0.3s;
+        }
+        
+        .scenario-2 .histogram-bar {
+            background: #10b981;
+        }
+        
+        .histogram-bar:hover::after {
+            content: attr(data-count);
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+        
+        .histogram-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #666;
+            margin-top: 3px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-play {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-play:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-reset {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-reset:hover {
+            background: #4b5563;
+        }
+
+        .info-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .info-panel h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .info-panel p {
+            margin-bottom: 8px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .value-display {
+            display: inline-block;
+            min-width: 60px;
+            font-weight: 700;
+            color: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Traffic Signal Release Function Visualizer</h1>
+
+        <div class="controls">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                <div class="control-group">
+                    <label>Arrival Rate: <span class="value-display" id="rateDisplay">0.5</span> veh/s</label>
+                    <input type="range" id="arrivalRate" min="0.1" max="1.0" step="0.05" value="0.5">
+                </div>
+                <div class="control-group">
+                    <label>Vehicle Speed: <span class="value-display" id="speedDisplay">60</span> px/s</label>
+                    <input type="range" id="speedSlider" min="30" max="300" step="10" value="60">
+                </div>
+                <div class="control-group">
+                    <label>Cycle Length: <span class="value-display" id="cycleDisplay">60</span>s</label>
+                    <input type="range" id="cycleLength" min="20" max="120" step="5" value="60">
+                </div>
+                <div class="control-group">
+                    <label>Green Time: <span class="value-display" id="greenDisplay">30</span>s</label>
+                    <input type="range" id="greenTime" min="10" max="50" step="5" value="30">
+                </div>
+                <div class="control-group">
+                    <label>Signal Offset: <span class="value-display" id="offsetDisplay">0</span>s</label>
+                    <input type="range" id="offsetSlider" min="0" max="60" step="5" value="0">
+                </div>
+                <div class="control-group">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="signal1Toggle" checked style="width: auto;">
+                        Enable First Signal
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-play" id="playBtn">▶ Play</button>
+            <button class="btn-reset" id="resetBtn">↻ Reset</button>
+            <div style="display: flex; align-items: center; gap: 15px; margin-left: 20px;">
+                <div style="background: white; padding: 12px 20px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <span style="font-weight: 600; color: #666;">Simulation Time:</span>
+                    <span id="simTime" style="font-size: 20px; font-weight: 700; color: #2563eb; margin-left: 8px;">0.0s</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="scenarios">
+            <div class="scenario scenario-1">
+                <h2>Scenario 1: Random Uniform Release</h2>
+                <div class="road" id="road1">
+                    <div class="lane-marker"></div>
+                    <div class="signal-1">
+                        <div class="signal-pole"></div>
+                        <div class="signal-light" id="light1-1"></div>
+                    </div>
+                    <div class="signal-2">
+                        <div class="arrival-detection"></div>
+                        <div class="signal-pole"></div>
+                        <div class="signal-light" id="light1-2"></div>
+                    </div>
+                </div>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Queue at Signal 1</div>
+                        <div class="stat-value" id="queue1-1">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Queue at Signal 2</div>
+                        <div class="stat-value" id="queue1-2">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Total Vehicles</div>
+                        <div class="stat-value" id="total1">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Cumulative Released</div>
+                        <div class="stat-value" id="cumulative1">0</div>
+                    </div>
+                </div>
+                
+                <div class="histogram">
+                    <div class="histogram-title">Cumulative Arrivals at Signal 2</div>
+                    <div class="histogram-bars" id="histogram1">
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                    </div>
+                    <div class="histogram-labels">
+                        <span>0-10s</span>
+                        <span>10-20s</span>
+                        <span>20-30s</span>
+                        <span>30-40s</span>
+                        <span>40-50s</span>
+                        <span>50-60s</span>
+                        <span>60-70s</span>
+                        <span>70-80s</span>
+                        <span>80-90s</span>
+                        <span>90-100s</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="scenario scenario-2">
+                <h2>Scenario 2: Negative Exponential Release</h2>
+                <div class="road" id="road2">
+                    <div class="lane-marker"></div>
+                    <div class="signal-1">
+                        <div class="signal-pole"></div>
+                        <div class="signal-light" id="light2-1"></div>
+                    </div>
+                    <div class="signal-2">
+                        <div class="arrival-detection"></div>
+                        <div class="signal-pole"></div>
+                        <div class="signal-light" id="light2-2"></div>
+                    </div>
+                </div>
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Queue at Signal 1</div>
+                        <div class="stat-value" id="queue2-1">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Queue at Signal 2</div>
+                        <div class="stat-value" id="queue2-2">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Total Vehicles</div>
+                        <div class="stat-value" id="total2">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Cumulative Released</div>
+                        <div class="stat-value" id="cumulative2">0</div>
+                    </div>
+                </div>
+                
+                <div class="histogram">
+                    <div class="histogram-title">Cumulative Arrivals at Signal 2</div>
+                    <div class="histogram-bars" id="histogram2">
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                        <div class="histogram-bar" data-count="0"></div>
+                    </div>
+                    <div class="histogram-labels">
+                        <span>0-10s</span>
+                        <span>10-20s</span>
+                        <span>20-30s</span>
+                        <span>30-40s</span>
+                        <span>40-50s</span>
+                        <span>50-60s</span>
+                        <span>60-70s</span>
+                        <span>70-80s</span>
+                        <span>80-90s</span>
+                        <span>90-100s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h3>Release Functions (TransModeler Departure Headway Distributions)</h3>
+            <p><strong>Random Uniform (Top):</strong> Headway uniformly distributed between 0 and 2T. At T=2s: headways range from 0-4s evenly. Formula: <code>h = U × 2T</code> where U ~ Uniform[0,1]. Headways are NOT independent - bounded variability.</p>
+            <p><strong>Random Negative Exponential (Bottom):</strong> Headways follow exponential distribution (Poisson process). At T=2s: mean=2s but high variance - can have very short (0.1s) or very long (8s+) headways. Formula: <code>h = -T × ln(1-U)</code> where U ~ Uniform[0,1]. Headways are independent - unbounded variability.</p>
+            <p><strong>Vehicle Colors:</strong> Darker colors = slower speeds (stopped/decelerating), lighter colors = faster speeds (free flow). Each vehicle has individual speed (±15%) and deceleration (±20%) characteristics.</p>
+            <p><strong>Corridor Design:</strong> Signal 1 at 55%, Signal 2 at 92% of corridor width. Only 37% distance between signals but 55% of corridor available for vehicle spawning and acceleration before first signal. This ensures vehicles can spawn even when first signal is red.</p>
+            <p><strong>Performance:</strong> Maximum deceleration scaled to 120 px/s² with 2.5× safety multiplier and 400px detection range. Emergency braking at 180 px/s² when very close to signals. At 345 px/s (max with variation), stopping distance is ~496px.</p>
+            <p><strong>Why arrivals look similar:</strong> Car following behavior and signal queuing dominate downstream patterns. Initial departure variability gets smoothed by: (1) Vehicle interactions, (2) Signal timing and queue discharge, (3) Platoon formation/dispersion. This convergence is realistic - random arrivals become more regular after bottlenecks.</p>
+            <p><strong>To see more difference:</strong> Increase arrival rate to 0.8-1.0 veh/s, disable first signal, or run 200+ seconds.</p>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        var isRunning = false;
+        var time = 0;
+        var vehicles1 = [];
+        var vehicles2 = [];
+        var queue1 = []; // Virtual queue for scenario 1
+        var queue2 = []; // Virtual queue for scenario 2
+        var nextDeparture1 = 0;
+        var nextDeparture2 = 0;
+        var animationId = null;
+        var lastTime = null;
+        var cumulativeReleased1 = 0;
+        var cumulativeReleased2 = 0;
+        var arrivalTimes1 = []; // Track when vehicles arrive at signal 2
+        var arrivalTimes2 = [];
+        var departureTimes1 = []; // Track departure headways
+        var departureTimes2 = [];
+        var signal1Enabled = true;
+
+        // Parameters
+        var arrivalRate = 0.5;
+        var cycleLength = 60;
+        var greenTime = 30;
+        var roadWidth = 0; // Will be set dynamically
+        var signal1Pos = 0; // Will be calculated as 20% of road width
+        var signal2Pos = 0; // Will be calculated as 75% of road width
+        var roadLength = 0; // Will be set to 100% of road width
+        var vehicleSpeed = 60;
+        var offset = 0;
+        
+        // Car following parameters (Modified GM model)
+        var vehicleLength = 14; // pixels (smaller)
+        var minSpacing = 5; // minimum gap between vehicles (pixels)
+        var desiredTimeGap = 1.5; // seconds (typical following headway)
+        var maxAccel = 30; // pixels/s^2 (increased for higher speeds)
+        var maxDecel = 120; // pixels/s^2 (much more aggressive!)
+        var reactionTime = 0.8; // seconds
+        var spawnPosition = -40; // Start vehicles off-screen
+        var arrivalDetectionOffset = 80; // 80px before signal 2 (increased for better detection)
+        
+        // Initialize road dimensions
+        function initRoadDimensions() {
+            var road = document.getElementById('road1');
+            roadWidth = road.offsetWidth;
+            signal1Pos = roadWidth * 0.55; // Moved to 55% - much more room for spawning
+            signal2Pos = roadWidth * 0.92; // Moved to 92% - near edge
+            roadLength = roadWidth;
+            arrivalDetectionPos = signal2Pos - arrivalDetectionOffset;
+        }
+        
+        // Call on load and resize
+        window.addEventListener('load', initRoadDimensions);
+        window.addEventListener('resize', initRoadDimensions);
+        
+        var arrivalDetectionPos = 0; // Will be calculated
+        
+        // Speed and deceleration distributions
+        var speedDistribution = [0.85, 0.90, 0.95, 1.0, 1.05, 1.10, 1.15]; // multipliers
+        var speedDistWeights = [0.05, 0.10, 0.20, 0.30, 0.20, 0.10, 0.05]; // percentages
+        var decelDistribution = [0.80, 0.90, 1.0, 1.10, 1.20]; // multipliers
+        var decelDistWeights = [0.15, 0.25, 0.30, 0.20, 0.10]; // percentages
+
+        // DOM elements
+        var playBtn = document.getElementById('playBtn');
+        var resetBtn = document.getElementById('resetBtn');
+        var arrivalRateInput = document.getElementById('arrivalRate');
+        var cycleLengthInput = document.getElementById('cycleLength');
+        var greenTimeInput = document.getElementById('greenTime');
+        var offsetSlider = document.getElementById('offsetSlider');
+        var speedSlider = document.getElementById('speedSlider');
+        var signal1Toggle = document.getElementById('signal1Toggle');
+        var road1 = document.getElementById('road1');
+        var road2 = document.getElementById('road2');
+
+        // Update displays
+        arrivalRateInput.addEventListener('input', function(e) {
+            arrivalRate = parseFloat(e.target.value);
+            document.getElementById('rateDisplay').textContent = arrivalRate.toFixed(2);
+        });
+
+        cycleLengthInput.addEventListener('input', function(e) {
+            cycleLength = parseInt(e.target.value);
+            document.getElementById('cycleDisplay').textContent = cycleLength;
+            greenTimeInput.max = cycleLength - 10;
+            offsetSlider.max = cycleLength;
+        });
+
+        greenTimeInput.addEventListener('input', function(e) {
+            greenTime = parseInt(e.target.value);
+            document.getElementById('greenDisplay').textContent = greenTime;
+        });
+        
+        offsetSlider.addEventListener('input', function(e) {
+            offset = parseInt(e.target.value);
+            document.getElementById('offsetDisplay').textContent = offset;
+        });
+        
+        speedSlider.addEventListener('input', function(e) {
+            vehicleSpeed = parseInt(e.target.value);
+            document.getElementById('speedDisplay').textContent = vehicleSpeed;
+        });
+        
+        signal1Toggle.addEventListener('change', function(e) {
+            signal1Enabled = e.target.checked;
+            // Update visibility of first signal
+            var signals1 = document.querySelectorAll('.signal-1');
+            for (var i = 0; i < signals1.length; i++) {
+                signals1[i].style.opacity = signal1Enabled ? '1' : '0.3';
+            }
+        });
+
+        // Generate headway
+        function generateHeadway(type, mean) {
+            if (type == 'deterministic') {
+                return mean;
+            } else if (type == 'exponential') {
+                return -mean * Math.log(1 - Math.random());
+            }
+            return mean;
+        }
+
+        // Get color based on speed (relative to desired speed)
+        function getSpeedColor(velocity, desiredSpeed, scenario) {
+            var speedRatio = velocity / desiredSpeed;
+            
+            if (scenario == 1) {
+                // Blue tones for scenario 1
+                if (speedRatio < 0.3) return '#1e3a8a'; // Very slow - dark blue
+                if (speedRatio < 0.6) return '#2563eb'; // Slow - medium blue
+                if (speedRatio < 0.9) return '#60a5fa'; // Medium - light blue
+                return '#93c5fd'; // Fast - very light blue
+            } else {
+                // Green tones for scenario 2
+                if (speedRatio < 0.3) return '#14532d'; // Very slow - dark green
+                if (speedRatio < 0.6) return '#059669'; // Slow - medium green
+                if (speedRatio < 0.9) return '#34d399'; // Medium - light green
+                return '#6ee7b7'; // Fast - very light green
+            }
+        }
+
+        // Sample from distribution
+        function sampleFromDistribution(values, weights) {
+            var rand = Math.random();
+            var cumulative = 0;
+            for (var i = 0; i < weights.length; i++) {
+                cumulative += weights[i];
+                if (rand < cumulative) {
+                    return values[i];
+                }
+            }
+            return values[values.length - 1];
+        }
+
+        // Check if there's room to spawn a vehicle
+        function canSpawnVehicle(vehicles) {
+            if (vehicles.length == 0) return true;
+            
+            // Find the rearmost vehicle
+            var rearmost = vehicles[0];
+            for (var i = 1; i < vehicles.length; i++) {
+                if (vehicles[i].position < rearmost.position) {
+                    rearmost = vehicles[i];
+                }
+            }
+            
+            // Check if there's enough space behind the rearmost vehicle
+            var requiredGap = vehicleLength + minSpacing + desiredTimeGap * vehicleSpeed;
+            return (rearmost.position - spawnPosition) > requiredGap;
+        }
+
+        // Try to spawn vehicles from virtual queue
+        function processQueue(vehicles, queue, road) {
+            while (queue.length > 0 && canSpawnVehicle(vehicles)) {
+                var vData = queue.shift();
+                var element = createVehicleElement(vData.scenario);
+                road.appendChild(element);
+                
+                // Assign individual speed and deceleration based on distributions
+                var speedMultiplier = sampleFromDistribution(speedDistribution, speedDistWeights);
+                var decelMultiplier = sampleFromDistribution(decelDistribution, decelDistWeights);
+                
+                vehicles.push({
+                    position: spawnPosition,
+                    velocity: vehicleSpeed * speedMultiplier * 0.5, // Start at half of desired speed
+                    desiredSpeed: vehicleSpeed * speedMultiplier,
+                    decelFactor: decelMultiplier,
+                    element: element
+                });
+            }
+        }
+        function isSignalGreen(currentTime, signalOffset) {
+            if (signalOffset == undefined) signalOffset = 0;
+            var effectiveTime = (currentTime + signalOffset) % cycleLength;
+            return effectiveTime < greenTime;
+        }
+
+        // Create vehicle element
+        function createVehicleElement(scenario) {
+            var div = document.createElement('div');
+            div.className = 'vehicle';
+            return div;
+        }
+
+        // Update histogram with cumulative arrivals
+        function updateHistogram(arrivalTimes, histogramId, currentTime) {
+            var bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            var binSize = 10; // 10 second bins for 0-100s
+            
+            // Count ALL arrivals in each bin (cumulative from start)
+            for (var i = 0; i < arrivalTimes.length; i++) {
+                var t = arrivalTimes[i];
+                var binIndex = Math.floor(t / binSize);
+                if (binIndex >= 0 && binIndex < 10) {
+                    bins[binIndex]++;
+                } else if (binIndex >= 10) {
+                    // If beyond 100s, add to last bin
+                    bins[9]++;
+                }
+            }
+            
+            // Find max for scaling
+            var maxCount = Math.max.apply(Math, bins);
+            if (maxCount == 0) maxCount = 1;
+            
+            // Update bars
+            var histogram = document.getElementById(histogramId);
+            var bars = histogram.getElementsByClassName('histogram-bar');
+            for (var i = 0; i < bars.length; i++) {
+                var height = (bins[i] / maxCount) * 100;
+                bars[i].style.height = height + '%';
+                bars[i].setAttribute('data-count', bins[i]);
+            }
+        }
+        
+        // Update vehicle positions with car following behavior
+        function updateVehicles(vehicles, road, scenario, deltaTime, arrivalTimes) {
+            var queueSignal1 = 0;
+            var queueSignal2 = 0;
+            var released = 0;
+
+            // Sort vehicles by position (from front to back for proper processing)
+            vehicles.sort(function(a, b) { return b.position - a.position; });
+
+            for (var i = 0; i < vehicles.length; i++) {
+                var v = vehicles[i];
+                var sig1Green = isSignalGreen(time, 0);
+                var sig2Green = isSignalGreen(time, offset);
+                
+                // Initialize velocity if not set
+                if (v.velocity == undefined) v.velocity = vehicleSpeed;
+                if (v.desiredSpeed == undefined) v.desiredSpeed = vehicleSpeed;
+                if (v.decelFactor == undefined) v.decelFactor = 1.0;
+                if (v.passedSignal2 == undefined) v.passedSignal2 = false;
+                
+                var desiredVelocity = v.desiredSpeed;
+                var acceleration = 0;
+                
+                // Find lead vehicle (next vehicle in front)
+                var leadVehicle = null;
+                var gap = Infinity;
+                
+                // Look for the closest vehicle ahead
+                for (var j = 0; j < vehicles.length; j++) {
+                    if (j != i && vehicles[j].position > v.position) {
+                        var potentialGap = vehicles[j].position - v.position - vehicleLength;
+                        if (potentialGap < gap) {
+                            gap = potentialGap;
+                            leadVehicle = vehicles[j];
+                        }
+                    }
+                }
+                
+                // Check distance to signals (measure from front of vehicle)
+                var distToSignal1 = signal1Pos - (v.position + vehicleLength);
+                var distToSignal2 = signal2Pos - (v.position + vehicleLength);
+                
+                // Determine if we should stop at a signal
+                var targetDist = Infinity;
+                var shouldStopAtSignal = false;
+                var approachingSignal = 0; // 1 or 2
+                
+                // Check which signal we're approaching
+                if (v.position + vehicleLength <= signal1Pos) {
+                    // Before first signal - haven't crossed it yet
+                    approachingSignal = 1;
+                    if (signal1Enabled && !sig1Green) {
+                        targetDist = Math.max(0, distToSignal1);
+                        shouldStopAtSignal = true;
+                        queueSignal1++;
+                    }
+                } else if (v.position + vehicleLength <= signal2Pos) {
+                    // Between signals - haven't crossed signal 2 yet
+                    approachingSignal = 2;
+                    if (!sig2Green) {
+                        targetDist = Math.max(0, distToSignal2);
+                        shouldStopAtSignal = true;
+                        queueSignal2++;
+                    }
+                    
+                    // Track arrival at signal 2 (at detection zone before signal)
+                    // Check if vehicle has passed the detection line
+                    if (!v.arrivedAtSignal2 && v.position >= arrivalDetectionPos) {
+                        v.arrivedAtSignal2 = true;
+                        arrivalTimes.push(time);
+                        console.log('Vehicle arrived at signal 2 at time:', time.toFixed(2), 'position:', v.position.toFixed(0));
+                    }
+                } else {
+                    // After second signal - count as released
+                    if (!v.passedSignal2) {
+                        v.passedSignal2 = true;
+                        if (scenario == 1) {
+                            cumulativeReleased1++;
+                        } else {
+                            cumulativeReleased2++;
+                        }
+                    }
+                    released++;
+                }
+                
+                // Car following logic (Modified GM-style)
+                var needsToStopAtSignal = shouldStopAtSignal && targetDist < 400; // Even more detection range
+                var adjustedMaxDecel = maxDecel * v.decelFactor;
+                
+                if (needsToStopAtSignal && (leadVehicle == null || targetDist < gap)) {
+                    // RED SIGNAL is the primary constraint - BRAKE HARD!
+                    if (targetDist > minSpacing) {
+                        // Calculate deceleration needed to stop at signal
+                        var stoppingDecel = (v.velocity * v.velocity) / (2 * Math.max(1, targetDist));
+                        // Apply 2.5x the calculated deceleration for safety margin
+                        acceleration = -Math.min(stoppingDecel * 2.5, adjustedMaxDecel);
+                    } else {
+                        // At or past the stop line - EMERGENCY BRAKE
+                        acceleration = -adjustedMaxDecel * 1.5; // Even harder brake
+                        if (v.velocity < 5) {
+                            v.velocity = 0;
+                            acceleration = 0;
+                        }
+                    }
+                } else if (leadVehicle != null && gap < 200) {
+                    // Following another vehicle
+                    var desiredGap = minSpacing + v.velocity * desiredTimeGap;
+                    var gapError = gap - desiredGap;
+                    
+                    // If we're too close, slow down significantly
+                    if (gap < minSpacing + 10) {
+                        acceleration = -adjustedMaxDecel * 0.8;
+                    } else {
+                        // Proportional control for car following
+                        var alpha = 0.6;
+                        acceleration = alpha * gapError;
+                        
+                        // Consider relative velocity
+                        var relativeVelocity = v.velocity - (leadVehicle.velocity || 0);
+                        acceleration -= 0.8 * relativeVelocity;
+                    }
+                } else {
+                    // Free flow - accelerate to desired speed
+                    if (v.velocity < desiredVelocity) {
+                        acceleration = maxAccel * 0.4;
+                    } else {
+                        acceleration = 0;
+                    }
+                }
+                
+                // Limit acceleration
+                acceleration = Math.max(-maxDecel, Math.min(maxAccel, acceleration));
+                
+                // Update velocity
+                v.velocity += acceleration * deltaTime;
+                v.velocity = Math.max(0, Math.min(v.desiredSpeed * 1.1, v.velocity));
+                
+                // Update position
+                v.position += v.velocity * deltaTime;
+                
+                // Update DOM - position and color
+                v.element.style.left = v.position + 'px';
+                v.element.style.backgroundColor = getSpeedColor(v.velocity, v.desiredSpeed, scenario);
+            }
+
+            // Remove vehicles that left the screen
+            vehicles = vehicles.filter(function(v) {
+                if (v.position > roadLength) {
+                    v.element.remove();
+                    return false;
+                }
+                return true;
+            });
+
+            // Update stats
+            document.getElementById('queue' + scenario + '-1').textContent = queueSignal1;
+            document.getElementById('queue' + scenario + '-2').textContent = queueSignal2;
+            document.getElementById('total' + scenario).textContent = vehicles.length;
+            document.getElementById('cumulative' + scenario).textContent = (scenario == 1 ? cumulativeReleased1 : cumulativeReleased2);
+
+            return vehicles;
+        }
+
+        // Update signal lights
+        function updateSignals() {
+            var sig1Green = signal1Enabled && isSignalGreen(time, 0);
+            var sig2Green = isSignalGreen(time, offset);
+
+            // Scenario 1
+            document.getElementById('light1-1').className = 'signal-light ' + (sig1Green ? 'green' : 'red');
+            document.getElementById('light1-2').className = 'signal-light ' + (sig2Green ? 'green' : 'red');
+
+            // Scenario 2
+            document.getElementById('light2-1').className = 'signal-light ' + (sig1Green ? 'green' : 'red');
+            document.getElementById('light2-2').className = 'signal-light ' + (sig2Green ? 'green' : 'red');
+        }
+
+        // Animation loop
+        function animate(timestamp) {
+            if (!isRunning) return;
+
+            if (lastTime == null) lastTime = timestamp;
+            var deltaTime = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            time += deltaTime;
+
+            // Generate new vehicles for scenario 1 (uniform)
+            if (time >= nextDeparture1) {
+                var meanHeadway = 1 / arrivalRate;
+                var headway = generateHeadway('uniform', meanHeadway);
+                nextDeparture1 = time + headway;
+                
+                departureTimes1.push(time);
+
+                // Add to virtual queue instead of spawning directly
+                queue1.push({
+                    scenario: 1,
+                    arrivalTime: time
+                });
+            }
+
+            // Generate new vehicles for scenario 2 (exponential)
+            if (time >= nextDeparture2) {
+                var meanHeadway = 1 / arrivalRate;
+                var headway = generateHeadway('exponential', meanHeadway);
+                nextDeparture2 = time + headway;
+                
+                departureTimes2.push(time);
+
+                // Add to virtual queue instead of spawning directly
+                queue2.push({
+                    scenario: 2,
+                    arrivalTime: time
+                });
+            }
+
+            // Try to spawn vehicles from queues
+            processQueue(vehicles1, queue1, road1);
+            processQueue(vehicles2, queue2, road2);
+
+            // Update vehicles
+            vehicles1 = updateVehicles(vehicles1, road1, 1, deltaTime, arrivalTimes1);
+            vehicles2 = updateVehicles(vehicles2, road2, 2, deltaTime, arrivalTimes2);
+
+            // Update signal lights
+            updateSignals();
+            
+            // Update simulation time display
+            document.getElementById('simTime').textContent = time.toFixed(1) + 's';
+            
+            // Update histograms every half second
+            if (Math.floor(time * 2) != Math.floor((time - deltaTime) * 2)) {
+                updateHistogram(arrivalTimes1, 'histogram1', time);
+                updateHistogram(arrivalTimes2, 'histogram2', time);
+            }
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // Play/Pause
+        playBtn.addEventListener('click', function() {
+            isRunning = !isRunning;
+            if (isRunning) {
+                playBtn.textContent = '⏸ Pause';
+                playBtn.style.background = '#dc2626';
+                lastTime = null;
+                animationId = requestAnimationFrame(animate);
+            } else {
+                playBtn.textContent = '▶ Play';
+                playBtn.style.background = '#2563eb';
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            }
+        });
+
+        // Reset
+        resetBtn.addEventListener('click', function() {
+            isRunning = false;
+            playBtn.textContent = '▶ Play';
+            playBtn.style.background = '#2563eb';
+            time = 0;
+            nextDeparture1 = 0;
+            nextDeparture2 = 0;
+            lastTime = null;
+            cumulativeReleased1 = 0;
+            cumulativeReleased2 = 0;
+            arrivalTimes1 = [];
+            arrivalTimes2 = [];
+            departureTimes1 = [];
+            departureTimes2 = [];
+
+            // Clear vehicles and queues
+            vehicles1.forEach(function(v) { v.element.remove(); });
+            vehicles2.forEach(function(v) { v.element.remove(); });
+            vehicles1 = [];
+            vehicles2 = [];
+            queue1 = [];
+            queue2 = [];
+
+            // Reset stats
+            document.getElementById('queue1-1').textContent = '0';
+            document.getElementById('queue1-2').textContent = '0';
+            document.getElementById('total1').textContent = '0';
+            document.getElementById('cumulative1').textContent = '0';
+            document.getElementById('queue2-1').textContent = '0';
+            document.getElementById('queue2-2').textContent = '0';
+            document.getElementById('total2').textContent = '0';
+            document.getElementById('cumulative2').textContent = '0';
+            document.getElementById('simTime').textContent = '0.0s';
+            
+            // Reset histograms
+            updateHistogram([], 'histogram1', 0);
+            updateHistogram([], 'histogram2', 0);
+
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+        });
+    </script>
+</body>
+</html>
