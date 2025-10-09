@@ -417,7 +417,7 @@
                 </div>
                 
                 <div class="histogram">
-                    <div class="histogram-title">Cumulative Arrivals at Signal 2</div>
+                    <div class="histogram-title">Arrival Headway Distribution at Signal 2</div>
                     <div class="histogram-bars" id="histogram1">
                         <div class="histogram-bar" data-count="0"></div>
                         <div class="histogram-bar" data-count="0"></div>
@@ -431,16 +431,16 @@
                         <div class="histogram-bar" data-count="0"></div>
                     </div>
                     <div class="histogram-labels">
-                        <span>0-10s</span>
-                        <span>10-20s</span>
-                        <span>20-30s</span>
-                        <span>30-40s</span>
-                        <span>40-50s</span>
-                        <span>50-60s</span>
-                        <span>60-70s</span>
-                        <span>70-80s</span>
-                        <span>80-90s</span>
-                        <span>90-100s</span>
+                        <span>0-1s</span>
+                        <span>1-2s</span>
+                        <span>2-3s</span>
+                        <span>3-4s</span>
+                        <span>4-5s</span>
+                        <span>5-6s</span>
+                        <span>6-7s</span>
+                        <span>7-8s</span>
+                        <span>8-9s</span>
+                        <span>9-10s</span>
                     </div>
                 </div>
             </div>
@@ -479,7 +479,7 @@
                 </div>
                 
                 <div class="histogram">
-                    <div class="histogram-title">Cumulative Arrivals at Signal 2</div>
+                    <div class="histogram-title">Arrival Headway Distribution at Signal 2</div>
                     <div class="histogram-bars" id="histogram2">
                         <div class="histogram-bar" data-count="0"></div>
                         <div class="histogram-bar" data-count="0"></div>
@@ -493,16 +493,16 @@
                         <div class="histogram-bar" data-count="0"></div>
                     </div>
                     <div class="histogram-labels">
-                        <span>0-10s</span>
-                        <span>10-20s</span>
-                        <span>20-30s</span>
-                        <span>30-40s</span>
-                        <span>40-50s</span>
-                        <span>50-60s</span>
-                        <span>60-70s</span>
-                        <span>70-80s</span>
-                        <span>80-90s</span>
-                        <span>90-100s</span>
+                        <span>0-1s</span>
+                        <span>1-2s</span>
+                        <span>2-3s</span>
+                        <span>3-4s</span>
+                        <span>4-5s</span>
+                        <span>5-6s</span>
+                        <span>6-7s</span>
+                        <span>7-8s</span>
+                        <span>8-9s</span>
+                        <span>9-10s</span>
                     </div>
                 </div>
             </div>
@@ -512,7 +512,7 @@
             <h3>Release Functions (TransModeler Departure Headway Distributions)</h3>
             <p><strong>Random Uniform (Top):</strong> Headway uniformly distributed between 0 and 2T. At T=2s: headways range from 0-4s evenly. Formula: <code>h = U × 2T</code> where U ~ Uniform[0,1]. Headways are NOT independent - bounded variability.</p>
             <p><strong>Random Negative Exponential (Bottom):</strong> Headways follow exponential distribution (Poisson process). At T=2s: mean=2s but high variance - can have very short (0.1s) or very long (8s+) headways. Formula: <code>h = -T × ln(1-U)</code> where U ~ Uniform[0,1]. Headways are independent - unbounded variability.</p>
-            <p><strong>Vehicle Colors:</strong> Darker colors = slower speeds (stopped/decelerating), lighter colors = faster speeds (free flow). Each vehicle has individual speed (±15%) and deceleration (±20%) characteristics.</p>
+            <p><strong>Arrival Headway Distribution:</strong> Shows the time gaps between consecutive vehicle arrivals at Signal 2. This reveals how the initial departure headway distributions (uniform vs exponential) are transformed by traffic dynamics. Uniform departures should show more even headways, while exponential departures may show more variation.</p>
             <p><strong>Corridor Design:</strong> Signal 1 at 55%, Signal 2 at 92% of corridor width. Only 37% distance between signals but 55% of corridor available for vehicle spawning and acceleration before first signal. This ensures vehicles can spawn even when first signal is red.</p>
             <p><strong>Performance:</strong> Maximum deceleration scaled to 120 px/s² with 2.5× safety multiplier and 400px detection range. Emergency braking at 180 px/s² when very close to signals. At 345 px/s (max with variation), stopping distance is ~496px.</p>
             <p><strong>Why arrivals look similar:</strong> Car following behavior and signal queuing dominate downstream patterns. Initial departure variability gets smoothed by: (1) Vehicle interactions, (2) Signal timing and queue discharge, (3) Platoon formation/dispersion. This convergence is realistic - random arrivals become more regular after bottlenecks.</p>
@@ -724,19 +724,26 @@
             return div;
         }
 
-        // Update histogram with cumulative arrivals
+        // Update histogram with arrival headway distribution
         function updateHistogram(arrivalTimes, histogramId, currentTime) {
             var bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-            var binSize = 10; // 10 second bins for 0-100s
+            var binSize = 1; // 1 second bins for headways 0-10s
             
-            // Count ALL arrivals in each bin (cumulative from start)
-            for (var i = 0; i < arrivalTimes.length; i++) {
-                var t = arrivalTimes[i];
-                var binIndex = Math.floor(t / binSize);
+            // Calculate headways (time between consecutive arrivals)
+            var headways = [];
+            for (var i = 1; i < arrivalTimes.length; i++) {
+                var headway = arrivalTimes[i] - arrivalTimes[i-1];
+                headways.push(headway);
+            }
+            
+            // Count headways in each bin
+            for (var i = 0; i < headways.length; i++) {
+                var h = headways[i];
+                var binIndex = Math.floor(h / binSize);
                 if (binIndex >= 0 && binIndex < 10) {
                     bins[binIndex]++;
                 } else if (binIndex >= 10) {
-                    // If beyond 100s, add to last bin
+                    // If headway > 10s, add to last bin
                     bins[9]++;
                 }
             }
