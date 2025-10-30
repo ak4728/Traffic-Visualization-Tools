@@ -1,0 +1,255 @@
+{
+  "metadata": {
+    "generated_at": "2025-10-30T21:54:08.279472",
+    "tmc_segments": "Combined Pena Blvd segments",
+    "data_source": "Pena-15-minute-2024.csv",
+    "total_records": 34
+  },
+  "data": [
+    {
+      "date": "2024-01-01",
+      "time": "00:00",
+      "travel_time_minutes": 0.62,
+      "confidence_score": 30.0,
+      "cvalue": 97.33
+    },
+    {
+      "date": "2024-01-01",
+      "time": "00:15",
+      "travel_time_minutes": 0.7,
+      "confidence_score": 30.0,
+      "cvalue": 98.67
+    },
+    {
+      "date": "2024-01-01",
+      "time": "00:30",
+      "travel_time_minutes": 0.74,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "00:45",
+      "travel_time_minutes": 0.63,
+      "confidence_score": 30.0,
+      "cvalue": 94.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "01:00",
+      "travel_time_minutes": 0.67,
+      "confidence_score": 30.0,
+      "cvalue": 96.67
+    },
+    {
+      "date": "2024-01-01",
+      "time": "01:15",
+      "travel_time_minutes": 0.72,
+      "confidence_score": 30.0,
+      "cvalue": 90.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "01:30",
+      "travel_time_minutes": 0.77,
+      "confidence_score": 30.0,
+      "cvalue": 90.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "01:45",
+      "travel_time_minutes": 0.68,
+      "confidence_score": 30.0,
+      "cvalue": 90.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "02:00",
+      "travel_time_minutes": 0.75,
+      "confidence_score": 30.0,
+      "cvalue": 90.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "02:15",
+      "travel_time_minutes": 0.75,
+      "confidence_score": 30.0,
+      "cvalue": 90.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "02:30",
+      "travel_time_minutes": 0.61,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "02:45",
+      "travel_time_minutes": 0.61,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "03:00",
+      "travel_time_minutes": 0.63,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "03:15",
+      "travel_time_minutes": 0.61,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "03:30",
+      "travel_time_minutes": 0.59,
+      "confidence_score": 30.0,
+      "cvalue": 87.14
+    },
+    {
+      "date": "2024-01-01",
+      "time": "03:45",
+      "travel_time_minutes": 0.58,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "04:00",
+      "travel_time_minutes": 0.65,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "04:15",
+      "travel_time_minutes": 0.66,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "04:30",
+      "travel_time_minutes": 0.63,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "04:45",
+      "travel_time_minutes": 0.64,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "05:00",
+      "travel_time_minutes": 0.62,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "05:15",
+      "travel_time_minutes": 0.64,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "05:30",
+      "travel_time_minutes": 0.66,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-01-01",
+      "time": "05:45",
+      "travel_time_minutes": 0.63,
+      "confidence_score": 30.0,
+      "cvalue": 100.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "08:00",
+      "travel_time_minutes": 0.68,
+      "confidence_score": 30.0,
+      "cvalue": 95.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "08:15",
+      "travel_time_minutes": 0.72,
+      "confidence_score": 30.0,
+      "cvalue": 92.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "08:30",
+      "travel_time_minutes": 0.78,
+      "confidence_score": 30.0,
+      "cvalue": 88.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "08:45",
+      "travel_time_minutes": 0.83,
+      "confidence_score": 30.0,
+      "cvalue": 85.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "09:00",
+      "travel_time_minutes": 0.75,
+      "confidence_score": 30.0,
+      "cvalue": 90.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "09:15",
+      "travel_time_minutes": 0.69,
+      "confidence_score": 30.0,
+      "cvalue": 94.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "09:30",
+      "travel_time_minutes": 0.64,
+      "confidence_score": 30.0,
+      "cvalue": 96.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "09:45",
+      "travel_time_minutes": 0.62,
+      "confidence_score": 30.0,
+      "cvalue": 98.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "10:00",
+      "travel_time_minutes": 0.6,
+      "confidence_score": 30.0,
+      "cvalue": 99.0
+    },
+    {
+      "date": "2024-10-30",
+      "time": "10:15",
+      "travel_time_minutes": 0.61,
+      "confidence_score": 30.0,
+      "cvalue": 98.0
+    }
+  ],
+  "statistics": {
+    "min_travel_time": 0.58,
+    "max_travel_time": 0.83,
+    "avg_travel_time": 0.6679411764705883,
+    "avg_confidence": 30.0,
+    "avg_cvalue": 95.84735294117647
+  }
+}
