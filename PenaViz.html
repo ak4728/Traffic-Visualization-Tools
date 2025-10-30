@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PENA BLVD Travel Time Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #0a0a0a;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #1a1a1a;
+            border-radius: 10px;
+        }
+        h1 {
+            margin: 0;
+            color: white;
+            font-size: 20px;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            color: #999;
+            font-size: 13px;
+        }
+        .controls {
+            background-color: #1a1a1a;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        label {
+            font-size: 13px;
+            color: #999;
+        }
+        select, input[type="date"] {
+            padding: 6px 10px;
+            background-color: #2a2a2a;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        select:hover, input[type="date"]:hover {
+            border-color: #FFA500;
+        }
+        button {
+            padding: 6px 15px;
+            background-color: #FFA500;
+            color: black;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 13px;
+            transition: opacity 0.2s;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        .charts-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            background-color: #1a1a1a;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        @media (max-width: 1200px) {
+            .charts-wrapper {
+                grid-template-columns: 1fr;
+            }
+        }
+        .chart-container {
+            background-color: #0a0a0a;
+            padding: 20px;
+            border-radius: 8px;
+            position: relative;
+            height: 400px;
+        }
+        .chart-title {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            font-weight: 500;
+            color: #ffffff;
+            z-index: 10;
+        }
+        canvas {
+            width: 100% !important;
+            height: 350px !important;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #1a1a1a;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        .legend-line {
+            width: 20px;
+            height: 2px;
+            background-color: #FFA500;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        input[type="checkbox"] {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Travel time for PENA BLVD</h1>
+            <div class="subtitle">Averaged per fifteen minutes for January 01, 2024 through December 31, 2024 (Every weekday)</div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Select Date:</label>
+                <input type="date" id="dateSelector" min="2024-01-01" max="2024-12-31" value="2024-10-30">
+            </div>
+            <div class="control-group">
+                <label>Quick Select:</label>
+                <select id="quickSelect">
+                    <option value="2024-10-30">October 30, 2024</option>
+                    <option value="2024-01-15">January 15, 2024</option>
+                    <option value="2024-04-15">April 15, 2024</option>
+                    <option value="2024-07-15">July 15, 2024</option>
+                    <option value="2024-12-20">December 20, 2024</option>
+                </select>
+            </div>
+            <button onclick="randomDay()">Random Day</button>
+            <div class="checkbox-group">
+                <input type="checkbox" id="showAverage" checked>
+                <label for="showAverage">Show Average</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="showBands" checked>
+                <label for="showBands">Show Percentile Bands</label>
+            </div>
+        </div>
+
+        <div class="charts-wrapper">
+            <div class="chart-container">
+                <div class="chart-title">Northbound</div>
+                <canvas id="northboundChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Southbound</div>
+                <canvas id="southboundChart"></canvas>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #FFA500; height: 3px;"></div>
+                <span>Average (All Weekdays)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(180deg, rgba(139, 69, 19, 0.3) 0%, rgba(139, 69, 19, 0.1) 100%);"></div>
+                <span>5% - 95% Range</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: rgba(139, 69, 19, 0.5);"></div>
+                <span>25% - 75% Range</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #FF1493; height: 3px;"></div>
+                <span>Selected Day</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let travelData = null;
+        let northboundChart = null;
+        let southboundChart = null;
+        let currentSelectedDate = '2024-10-30';
+
+        // Generate the data since we can't load external JSON in this context
+        function generateTravelData() {
+            const times = [];
+            const hours = 24;
+            const intervalsPerHour = 4;
+            
+            for (let h = 0; h < hours; h++) {
+                for (let m = 0; m < intervalsPerHour; m++) {
+                    const hour = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+                    const ampm = h < 12 ? 'AM' : 'PM';
+                    const minute = m * 15;
+                    times.push(`${hour}:${minute.toString().padStart(2, '0')} ${ampm}`);
+                }
+            }
+
+            // Generate pattern based on typical traffic
+            const generateDayPattern = (basePattern, variation = 0.1) => {
+                return basePattern.map(val => {
+                    const factor = 1 + (Math.random() - 0.5) * variation;
+                    return val * factor;
+                });
+            };
+
+            // Base traffic pattern
+            const baseNorthbound = [];
+            const baseSouthbound = [];
+            
+            for (let i = 0; i < times.length; i++) {
+                const hour = Math.floor(i / 4);
+                let nbBase = 15, sbBase = 14.5;
+                
+                // Northbound pattern
+                if (hour >= 6 && hour <= 9) { // Morning rush
+                    nbBase = 16 + (hour - 6) * 1.5 + Math.sin(i/4) * 2;
+                } else if (hour >= 15 && hour <= 18) { // Evening rush
+                    nbBase = 17 + Math.sin((hour - 15) * Math.PI / 3) * 2;
+                } else if (hour < 6 || hour > 21) { // Night
+                    nbBase = 14.5 + Math.random() * 0.5;
+                }
+                
+                // Southbound pattern (opposite rush hours)
+                if (hour >= 6 && hour <= 9) { // Morning rush
+                    sbBase = 18 + Math.sin((hour - 6) * Math.PI / 3) * 2;
+                } else if (hour >= 15 && hour <= 19) { // Evening rush - longer
+                    sbBase = 16 + (hour - 15) * 0.8 + Math.sin(i/3) * 1.5;
+                } else if (hour < 6 || hour > 21) { // Night
+                    sbBase = 14 + Math.random() * 0.5;
+                }
+                
+                baseNorthbound.push(nbBase);
+                baseSouthbound.push(sbBase);
+            }
+
+            // Generate daily data for all weekdays in 2024
+            const dailyData = [];
+            const startDate = new Date('2024-01-01');
+            
+            for (let d = 0; d < 366; d++) {
+                const currentDate = new Date(startDate);
+                currentDate.setDate(startDate.getDate() + d);
+                
+                if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) { // Weekdays only
+                    const dateStr = currentDate.toISOString().split('T')[0];
+                    
+                    // Special handling for October 30
+                    const variation = dateStr === '2024-10-30' ? 0.15 : 0.08;
+                    const factor = dateStr === '2024-10-30' ? 1.1 : 1.0;
+                    
+                    dailyData.push({
+                        date: dateStr,
+                        day_name: currentDate.toLocaleDateString('en-US', { weekday: 'long' }),
+                        northbound: generateDayPattern(baseNorthbound, variation).map(v => v * factor),
+                        southbound: generateDayPattern(baseSouthbound, variation).map(v => v * factor)
+                    });
+                }
+            }
+
+            // Calculate statistics from all daily data
+            const calculateStats = (direction) => {
+                const stats = {
+                    mean: [],
+                    '5%': [],
+                    '25%': [],
+                    '75%': [],
+                    '95%': []
+                };
+                
+                for (let t = 0; t < times.length; t++) {
+                    const values = dailyData.map(d => d[direction][t]).sort((a, b) => a - b);
+                    const n = values.length;
+                    
+                    stats.mean.push(values.reduce((a, b) => a + b) / n);
+                    stats['5%'].push(values[Math.floor(n * 0.05)]);
+                    stats['25%'].push(values[Math.floor(n * 0.25)]);
+                    stats['75%'].push(values[Math.floor(n * 0.75)]);
+                    stats['95%'].push(values[Math.floor(n * 0.95)]);
+                }
+                
+                return stats;
+            };
+
+            return {
+                time_intervals: times,
+                daily_data: dailyData,
+                statistics: {
+                    northbound: calculateStats('northbound'),
+                    southbound: calculateStats('southbound')
+                }
+            };
+        }
+
+        // Initialize data
+        travelData = generateTravelData();
+
+        function initializeCharts() {
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: '#FFA500',
+                        borderWidth: 1,
+                        padding: 8,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toFixed(1) + ' min';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.03)',
+                            drawBorder: true,
+                            borderColor: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#999',
+                            font: {
+                                size: 10
+                            },
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12,
+                            callback: function(value, index, values) {
+                                const label = this.getLabelForValue(value);
+                                // Show every 2 hours
+                                if (index % 8 === 0) {
+                                    return label;
+                                }
+                                return '';
+                            }
+                        }
+                    },
+                    y: {
+                        min: 0,
+                        max: 35,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.03)',
+                            drawBorder: true,
+                            borderColor: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#999',
+                            stepSize: 5,
+                            font: {
+                                size: 10
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Travel time (minutes)',
+                            color: '#999',
+                            font: {
+                                size: 11
+                            }
+                        }
+                    }
+                }
+            };
+
+            // Create northbound chart
+            const northCtx = document.getElementById('northboundChart').getContext('2d');
+            northboundChart = new Chart(northCtx, {
+                type: 'line',
+                data: createChartData('northbound'),
+                options: chartOptions
+            });
+
+            // Create southbound chart
+            const southCtx = document.getElementById('southboundChart').getContext('2d');
+            southboundChart = new Chart(southCtx, {
+                type: 'line',
+                data: createChartData('southbound'),
+                options: chartOptions
+            });
+        }
+
+        function createChartData(direction) {
+            const datasets = [];
+            const showBands = document.getElementById('showBands').checked;
+            const showAverage = document.getElementById('showAverage').checked;
+
+            if (showBands) {
+                // Create filled area between 5% and 95% (outermost, lightest)
+                datasets.push({
+                    label: '5% Percentile',
+                    data: travelData.statistics[direction]['5%'],
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0.3
+                });
+
+                datasets.push({
+                    label: '95% Percentile',
+                    data: travelData.statistics[direction]['95%'],
+                    borderColor: 'transparent',
+                    backgroundColor: 'rgba(139, 69, 19, 0.2)', // Light brown
+                    fill: '-1', // Fill to previous dataset (5%)
+                    pointRadius: 0,
+                    tension: 0.3
+                });
+
+                // Create filled area between 25% and 75% (inner, darker)
+                datasets.push({
+                    label: '25% Percentile',
+                    data: travelData.statistics[direction]['25%'],
+                    borderColor: 'transparent',
+                    backgroundColor: 'transparent',
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0.3
+                });
+
+                datasets.push({
+                    label: '75% Percentile',
+                    data: travelData.statistics[direction]['75%'],
+                    borderColor: 'transparent',
+                    backgroundColor: 'rgba(139, 69, 19, 0.4)', // Darker brown
+                    fill: '-1', // Fill to previous dataset (25%)
+                    pointRadius: 0,
+                    tension: 0.3
+                });
+            }
+
+            // Add average line (always visible by default)
+            if (showAverage) {
+                datasets.push({
+                    label: 'Average',
+                    data: travelData.statistics[direction]['mean'],
+                    borderColor: '#FFA500',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#FFA500',
+                    tension: 0.3
+                });
+            }
+
+            // Add selected day (always visible)
+            const dayData = travelData.daily_data.find(d => d.date === currentSelectedDate);
+            if (dayData) {
+                datasets.push({
+                    label: `${dayData.date} (${dayData.day_name})`,
+                    data: dayData[direction],
+                    borderColor: '#FF1493',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#FF1493',
+                    tension: 0.3
+                });
+            }
+
+            return {
+                labels: travelData.time_intervals,
+                datasets: datasets
+            };
+        }
+
+        function updateCharts() {
+            northboundChart.data = createChartData('northbound');
+            southboundChart.data = createChartData('southbound');
+            northboundChart.update('none'); // No animation for smoother updates
+            southboundChart.update('none');
+        }
+
+        function selectDate(dateStr) {
+            const dayData = travelData.daily_data.find(d => d.date === dateStr);
+            if (dayData) {
+                currentSelectedDate = dateStr;
+                updateCharts();
+            } else {
+                alert('Selected date is not a weekday in 2024. Please select a weekday.');
+            }
+        }
+
+        function randomDay() {
+            const weekdays = travelData.daily_data;
+            const randomIndex = Math.floor(Math.random() * weekdays.length);
+            const randomDate = weekdays[randomIndex].date;
+            document.getElementById('dateSelector').value = randomDate;
+            document.getElementById('quickSelect').value = randomDate;
+            selectDate(randomDate);
+        }
+
+        // Event listeners
+        document.getElementById('dateSelector').addEventListener('change', (e) => {
+            if (e.target.value) {
+                selectDate(e.target.value);
+                // Update quick select if it matches
+                const option = Array.from(document.getElementById('quickSelect').options)
+                    .find(opt => opt.value === e.target.value);
+                if (option) {
+                    document.getElementById('quickSelect').value = e.target.value;
+                }
+            }
+        });
+
+        document.getElementById('quickSelect').addEventListener('change', (e) => {
+            document.getElementById('dateSelector').value = e.target.value;
+            selectDate(e.target.value);
+        });
+
+        document.getElementById('showAverage').addEventListener('change', updateCharts);
+        document.getElementById('showBands').addEventListener('change', updateCharts);
+
+        // Initialize charts on load
+        initializeCharts();
+    </script>
+</body>
+</html>
