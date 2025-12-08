@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.2.0 - Automatic corridor width calculation
+// Version 2.3.0 - History charts with improved scaling and labeling
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 // Grid cell types
 const CELL_TYPES = {
@@ -640,9 +640,41 @@ class Renderer {
         try {
             // Set chart canvas to match container size with high DPI
             this.resizeChart();
-            window.addEventListener('resize', () => this.resizeChart());
+            this.resizeHistoryCharts();
+            window.addEventListener('resize', () => {
+                this.resizeChart();
+                this.resizeHistoryCharts();
+            });
         } catch (error) {
             console.error('Canvas setup error:', error);
+        }
+    }
+
+    resizeHistoryCharts() {
+        try {
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Resize seated count chart
+            if (this.seatedCountChart && this.seatedCountCtx) {
+                const container = this.seatedCountChart.parentElement;
+                this.seatedCountChart.width = 400 * dpr;
+                this.seatedCountChart.height = 200 * dpr;
+                this.seatedCountChart.style.width = '400px';
+                this.seatedCountChart.style.height = '200px';
+                this.seatedCountCtx.scale(dpr, dpr);
+            }
+            
+            // Resize percent distribution chart
+            if (this.percentDistChart && this.percentDistCtx) {
+                const container = this.percentDistChart.parentElement;
+                this.percentDistChart.width = 400 * dpr;
+                this.percentDistChart.height = 200 * dpr;
+                this.percentDistChart.style.width = '400px';
+                this.percentDistChart.style.height = '200px';
+                this.percentDistCtx.scale(dpr, dpr);
+            }
+        } catch (error) {
+            console.error('History chart resize error:', error);
         }
     }
 
@@ -868,23 +900,27 @@ class Renderer {
     drawSeatedCountChart(runHistory) {
         const canvas = this.seatedCountChart;
         const ctx = this.seatedCountCtx;
-        const width = canvas.width;
-        const height = canvas.height;
+        const displayWidth = 400;
+        const displayHeight = 200;
         
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, displayWidth, displayHeight);
         
         const padding = 40;
-        const chartWidth = width - 2 * padding;
-        const chartHeight = height - 2 * padding;
+        const chartWidth = displayWidth - 2 * padding;
+        const chartHeight = displayHeight - 2 * padding;
         
         const seatedCounts = runHistory.map(run => run.seated);
         const maxSeated = Math.max(...seatedCounts, 100);
         const minSeated = Math.min(...seatedCounts, 0);
-        const range = maxSeated - minSeated || 1;
+        
+        // Round to nearest 5-person increment
+        const maxRounded = Math.ceil(maxSeated / 5) * 5;
+        const minRounded = Math.floor(minSeated / 5) * 5;
+        const range = maxRounded - minRounded || 5;
         
         // Background
         ctx.fillStyle = '#f9f9f9';
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
         
         // Grid lines
         ctx.strokeStyle = '#e0e0e0';
@@ -900,7 +936,7 @@ class Renderer {
         // Draw bars
         const barWidth = chartWidth / runHistory.length;
         runHistory.forEach((run, index) => {
-            const barHeight = ((run.seated - minSeated) / range) * chartHeight;
+            const barHeight = ((run.seated - minRounded) / range) * chartHeight;
             const x = padding + index * barWidth + barWidth * 0.1;
             const y = padding + chartHeight - barHeight;
             
@@ -923,12 +959,12 @@ class Renderer {
         ctx.lineTo(padding + chartWidth, padding + chartHeight);
         ctx.stroke();
         
-        // Y-axis labels
+        // Y-axis labels with 5-person increments
         ctx.fillStyle = '#666';
         ctx.font = '10px Arial';
         ctx.textAlign = 'right';
         for (let i = 0; i <= 5; i++) {
-            const value = Math.round(minSeated + (range / 5) * (5 - i));
+            const value = minRounded + (range / 5) * (5 - i);
             const y = padding + (i * chartHeight) / 5;
             ctx.fillText(value.toString(), padding - 5, y + 3);
         }
@@ -937,21 +973,21 @@ class Renderer {
     drawPercentDistributionChart(runHistory) {
         const canvas = this.percentDistChart;
         const ctx = this.percentDistCtx;
-        const width = canvas.width;
-        const height = canvas.height;
+        const displayWidth = 400;
+        const displayHeight = 200;
         
-        ctx.clearRect(0, 0, width, height);
+        ctx.clearRect(0, 0, displayWidth, displayHeight);
         
         const padding = 40;
-        const chartWidth = width - 2 * padding;
-        const chartHeight = height - 2 * padding;
+        const chartWidth = displayWidth - 2 * padding;
+        const chartHeight = displayHeight - 2 * padding;
         
         const percentages = runHistory.map(run => parseFloat(run.seatedPercent));
         
-        // Create distribution bins (0-10%, 10-20%, ..., 90-100%)
-        const bins = Array(10).fill(0);
+        // Create distribution bins with 5% increments (0-5%, 5-10%, ..., 95-100%)
+        const bins = Array(20).fill(0);
         percentages.forEach(percent => {
-            const binIndex = Math.min(9, Math.floor(percent / 10));
+            const binIndex = Math.min(19, Math.floor(percent / 5));
             bins[binIndex]++;
         });
         
@@ -959,7 +995,7 @@ class Renderer {
         
         // Background
         ctx.fillStyle = '#f9f9f9';
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
         
         // Grid lines
         ctx.strokeStyle = '#e0e0e0';
@@ -973,7 +1009,7 @@ class Renderer {
         }
         
         // Draw distribution bars
-        const barWidth = chartWidth / 10;
+        const barWidth = chartWidth / 20;
         bins.forEach((count, index) => {
             const barHeight = (count / maxCount) * chartHeight;
             const x = padding + index * barWidth + barWidth * 0.1;
@@ -982,12 +1018,18 @@ class Renderer {
             ctx.fillStyle = '#2196F3';
             ctx.fillRect(x, y, barWidth * 0.8, barHeight);
             
-            // Labels
-            ctx.fillStyle = '#333';
-            ctx.font = '8px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`${index * 10}-${(index + 1) * 10}%`, x + barWidth * 0.4, padding + chartHeight + 15);
+            // Labels - only show every 4th label to avoid crowding
+            if (index % 4 === 0) {
+                ctx.fillStyle = '#333';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${index * 5}%`, x + barWidth * 0.4, padding + chartHeight + 15);
+            }
+            
             if (count > 0) {
+                ctx.fillStyle = '#333';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'center';
                 ctx.fillText(count.toString(), x + barWidth * 0.4, y - 5);
             }
         });
