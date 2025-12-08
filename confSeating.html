@@ -8,7 +8,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎤 Conference Seating Simulation <span class="version">v2.5.3</span></h1>
+        <h1>🎤 Conference Seating Simulation <span class="version">v2.5.4</span></h1>
         
         <div class="controls">
             <div class="controls-primary">
@@ -46,18 +46,26 @@
             <div class="controls-secondary">
                 <div class="control-group">
                     <label>
-                        Social Distance Preference: <span class="value-display" id="socialValue">8</span>
-                        <span class="info-icon" title="Higher values make people prefer seats with fewer neighbors. 0 = no preference, 15 = maximum avoidance of occupied adjacent seats">ℹ️</span>
+                        Social Distance Preference: <span class="value-display" id="socialValue">3</span>
+                        <span class="info-icon" title="Higher values make people prefer seats with fewer neighbors. 0 = no preference, 5 = maximum avoidance of occupied adjacent seats">ℹ️</span>
                     </label>
-                    <input type="range" id="socialDistance" min="0" max="15" value="8">
+                    <input type="range" id="socialDistance" min="0" max="5" value="3">
                 </div>
 
                 <div class="control-group">
                     <label>
-                        Back Row Preference: <span class="value-display" id="backValue">8</span>
-                        <span class="info-icon" title="Higher values make people prefer seats further from the front/stage. 0 = no preference, 10 = strongly prefer back rows">ℹ️</span>
+                        Back Row Preference: <span class="value-display" id="backValue">3</span>
+                        <span class="info-icon" title="Higher values make people prefer seats further from the front/stage. 0 = no preference, 5 = strongly prefer back rows">ℹ️</span>
                     </label>
-                    <input type="range" id="backPref" min="0" max="10" value="8">
+                    <input type="range" id="backPref" min="0" max="5" value="3">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Aisle Preference: <span class="value-display" id="aisleValue">2</span>
+                        <span class="info-icon" title="Higher values make people prefer seats near block edges (aisle access). 0 = no preference, 5 = strongly prefer aisle seats">ℹ️</span>
+                    </label>
+                    <input type="range" id="aislePref" min="0" max="5" value="2">
                 </div>
 
                 <div class="control-group checkbox-group">

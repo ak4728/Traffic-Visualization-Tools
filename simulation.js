@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.5.3 - Fixed back row preference zero weight issue
+// Version 2.5.4 - Added aisle preference slider and standardized all preferences to 0-5 scale
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.5.3';
+const VERSION = '2.5.4';
 
 // Grid cell types
 const CELL_TYPES = {
@@ -51,8 +51,9 @@ class ConfigManager {
             NUM_AGENTS: 384,
             SPEED: 20,
             MAX_TIME: 500,
-            SOCIAL_DISTANCE: 8,
-            BACK_PREF: 8
+            SOCIAL_DISTANCE: 3,
+            BACK_PREF: 3,
+            AISLE_PREF: 2
         };
         this.listeners = new Set();
         // Calculate initial corridor width
@@ -117,8 +118,9 @@ class ConfigManager {
             SPEED: v => v >= 10 && v <= 500,
             MAX_TIME: v => v >= 200 && v <= 1000,
             NUM_BLOCKS: v => v >= 2 && v <= 6,
-            SOCIAL_DISTANCE: v => v >= 0 && v <= 15,
-            BACK_PREF: v => v >= 0 && v <= 10
+            SOCIAL_DISTANCE: v => v >= 0 && v <= 5,
+            BACK_PREF: v => v >= 0 && v <= 5,
+            AISLE_PREF: v => v >= 0 && v <= 5
         };
 
         const validator = validations[key];
@@ -448,7 +450,8 @@ class SeatSelectionEngine {
                         let backRowWeight = 0;
                         if (config.BACK_PREF > 0) {
                             // Give higher weight to seats FURTHER from front (higher row numbers)
-                            backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
+                            // Scale up the preference to maintain similar behavior with 0-5 range
+                            backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF * 2;
                         }
                         // When BACK_PREF is 0, backRowWeight stays 0 (no row preference)
                         w += backRowWeight;
@@ -457,21 +460,21 @@ class SeatSelectionEngine {
                         if (config.BACK_PREF === 0 && Math.random() < 0.02) {
                             console.log(`BACK_PREF=0: Row ${r}, backWeight=${backRowWeight}, base total: ${w}`);
                         }
-                        if (config.BACK_PREF > 8) {
+                        if (config.BACK_PREF > 3) {
                             const screenPos = r <= 9 ? '🔝TOP' : '🔽BOTTOM';
                             const yPos = r * VISUAL_CONFIG.CELL_SIZE;
                             console.log(`Row ${r} (Y=${yPos}) ${screenPos} screen → back weight: ${backRowWeight.toFixed(0)}, total: ${w.toFixed(1)}`);
                         }
                         
                         // Aisle preference
-                        const aisleWeight = Math.min(c - c0, c1 - c) <= 1 ? 5 : 0;
+                        const aisleWeight = Math.min(c - c0, c1 - c) <= 1 ? config.AISLE_PREF * 2 : 0;
                         w += aisleWeight;
                         
                         // Social distance preference (fewer neighbors = higher weight)
-                        // If adjacentCount = 0 (no neighbors), weight += 8 * socialDistance
+                        // If adjacentCount = 0 (no neighbors), weight += max * socialDistance
                         // If adjacentCount = 8 (max neighbors), weight += 0 * socialDistance
                         const adjacentCount = this.countAdjacentSeated(grid, [r, c]);
-                        const socialWeight = (8 - adjacentCount) * config.SOCIAL_DISTANCE;
+                        const socialWeight = (8 - adjacentCount) * config.SOCIAL_DISTANCE * 2;
                         w += socialWeight;
                         
                         // Debug logging for weight issues
@@ -917,10 +920,10 @@ class Renderer {
         const maxSeated = Math.max(...seatedCounts, 100);
         const minSeated = Math.min(...seatedCounts, 0);
         
-        // Round to nearest 5-person increment
-        const maxRounded = Math.ceil(maxSeated / 5) * 5;
-        const minRounded = Math.floor(minSeated / 5) * 5;
-        const range = maxRounded - minRounded || 5;
+        // Round to nearest 20-person increment
+        const maxRounded = Math.ceil(maxSeated / 20) * 20;
+        const minRounded = Math.floor(minSeated / 20) * 20;
+        const range = maxRounded - minRounded || 20;
         
         // Background
         ctx.fillStyle = '#f9f9f9';
@@ -963,7 +966,7 @@ class Renderer {
         ctx.lineTo(padding + chartWidth, padding + chartHeight);
         ctx.stroke();
         
-        // Y-axis labels with 5-person increments
+        // Y-axis labels with 20-person increments
         ctx.fillStyle = '#666';
         ctx.font = '10px Arial';
         ctx.textAlign = 'right';
@@ -1286,6 +1289,7 @@ class UIController {
         this.setupSliderControl('numBlocks', 'blocksValue', 'NUM_BLOCKS');
         this.setupSliderControl('socialDistance', 'socialValue', 'SOCIAL_DISTANCE');
         this.setupSliderControl('backPref', 'backValue', 'BACK_PREF');
+        this.setupSliderControl('aislePref', 'aisleValue', 'AISLE_PREF');
         
         // Checkbox controls
         this.setupCheckboxControl('assignedSeats', 'FEATURE_ASSIGNED_SEATS');
