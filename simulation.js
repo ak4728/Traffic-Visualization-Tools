@@ -623,11 +623,15 @@ class Agent {
 // ===== RENDERER CLASS ===== //
 
 class Renderer {
-    constructor(canvas, chartCanvas) {
+    constructor(canvas, chartCanvas, seatedCountChart, percentDistChart) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.chartCanvas = chartCanvas;
         this.chartCtx = chartCanvas.getContext('2d');
+        this.seatedCountChart = seatedCountChart;
+        this.seatedCountCtx = seatedCountChart ? seatedCountChart.getContext('2d') : null;
+        this.percentDistChart = percentDistChart;
+        this.percentDistCtx = percentDistChart ? percentDistChart.getContext('2d') : null;
         
         this.setupCanvases();
     }
@@ -853,6 +857,160 @@ class Renderer {
         this.chartCtx.fillStyle = '#333';
         this.chartCtx.fillText('Standing', displayWidth - 85, 45);
     }
+
+    drawHistoryCharts(runHistory) {
+        if (!runHistory || runHistory.length === 0 || !this.seatedCountCtx || !this.percentDistCtx) return;
+        
+        this.drawSeatedCountChart(runHistory);
+        this.drawPercentDistributionChart(runHistory);
+    }
+
+    drawSeatedCountChart(runHistory) {
+        const canvas = this.seatedCountChart;
+        const ctx = this.seatedCountCtx;
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        ctx.clearRect(0, 0, width, height);
+        
+        const padding = 40;
+        const chartWidth = width - 2 * padding;
+        const chartHeight = height - 2 * padding;
+        
+        const seatedCounts = runHistory.map(run => run.seated);
+        const maxSeated = Math.max(...seatedCounts, 100);
+        const minSeated = Math.min(...seatedCounts, 0);
+        const range = maxSeated - minSeated || 1;
+        
+        // Background
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (i * chartHeight) / 5;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(padding + chartWidth, y);
+            ctx.stroke();
+        }
+        
+        // Draw bars
+        const barWidth = chartWidth / runHistory.length;
+        runHistory.forEach((run, index) => {
+            const barHeight = ((run.seated - minSeated) / range) * chartHeight;
+            const x = padding + index * barWidth + barWidth * 0.1;
+            const y = padding + chartHeight - barHeight;
+            
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(x, y, barWidth * 0.8, barHeight);
+            
+            // Labels
+            ctx.fillStyle = '#333';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(run.seated.toString(), x + barWidth * 0.4, y - 5);
+        });
+        
+        // Axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + chartHeight);
+        ctx.lineTo(padding + chartWidth, padding + chartHeight);
+        ctx.stroke();
+        
+        // Y-axis labels
+        ctx.fillStyle = '#666';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = Math.round(minSeated + (range / 5) * (5 - i));
+            const y = padding + (i * chartHeight) / 5;
+            ctx.fillText(value.toString(), padding - 5, y + 3);
+        }
+    }
+
+    drawPercentDistributionChart(runHistory) {
+        const canvas = this.percentDistChart;
+        const ctx = this.percentDistCtx;
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        ctx.clearRect(0, 0, width, height);
+        
+        const padding = 40;
+        const chartWidth = width - 2 * padding;
+        const chartHeight = height - 2 * padding;
+        
+        const percentages = runHistory.map(run => parseFloat(run.seatedPercent));
+        
+        // Create distribution bins (0-10%, 10-20%, ..., 90-100%)
+        const bins = Array(10).fill(0);
+        percentages.forEach(percent => {
+            const binIndex = Math.min(9, Math.floor(percent / 10));
+            bins[binIndex]++;
+        });
+        
+        const maxCount = Math.max(...bins, 1);
+        
+        // Background
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (i * chartHeight) / 5;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(padding + chartWidth, y);
+            ctx.stroke();
+        }
+        
+        // Draw distribution bars
+        const barWidth = chartWidth / 10;
+        bins.forEach((count, index) => {
+            const barHeight = (count / maxCount) * chartHeight;
+            const x = padding + index * barWidth + barWidth * 0.1;
+            const y = padding + chartHeight - barHeight;
+            
+            ctx.fillStyle = '#2196F3';
+            ctx.fillRect(x, y, barWidth * 0.8, barHeight);
+            
+            // Labels
+            ctx.fillStyle = '#333';
+            ctx.font = '8px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${index * 10}-${(index + 1) * 10}%`, x + barWidth * 0.4, padding + chartHeight + 15);
+            if (count > 0) {
+                ctx.fillText(count.toString(), x + barWidth * 0.4, y - 5);
+            }
+        });
+        
+        // Axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + chartHeight);
+        ctx.lineTo(padding + chartWidth, padding + chartHeight);
+        ctx.stroke();
+        
+        // Y-axis labels
+        ctx.fillStyle = '#666';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = Math.round((maxCount / 5) * (5 - i));
+            const y = padding + (i * chartHeight) / 5;
+            ctx.fillText(value.toString(), padding - 5, y + 3);
+        }
+    }
 }
 
 // ===== SIMULATION ENGINE ===== //
@@ -1038,6 +1196,8 @@ class UIController {
         this.elements = {
             canvas: document.getElementById('simCanvas'),
             chartCanvas: document.getElementById('seatingChart'),
+            seatedCountChart: document.getElementById('seatedCountChart'),
+            percentDistChart: document.getElementById('percentDistChart'),
             buildBtn: document.getElementById('buildBtn'),
             startBtn: document.getElementById('startBtn'),
             pauseBtn: document.getElementById('pauseBtn'),
@@ -1051,7 +1211,12 @@ class UIController {
         
         // Initialize renderer
         if (this.elements.canvas && this.elements.chartCanvas) {
-            this.renderer = new Renderer(this.elements.canvas, this.elements.chartCanvas);
+            this.renderer = new Renderer(
+                this.elements.canvas, 
+                this.elements.chartCanvas,
+                this.elements.seatedCountChart,
+                this.elements.percentDistChart
+            );
             this.updateCanvasSize();
         }
     }
@@ -1333,6 +1498,11 @@ class UIController {
         }
         
         this.updateRunHistoryDisplay();
+        
+        // Update history charts
+        if (this.renderer) {
+            this.renderer.drawHistoryCharts(this.runHistory);
+        }
     }
 
     updateRunHistoryDisplay() {
