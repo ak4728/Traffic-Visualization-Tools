@@ -441,14 +441,24 @@ class SeatSelectionEngine {
                     if (grid[r][c] === CELL_TYPES.SEAT && !assigned.has(key)) {
                         let w = 0;
                         
-                        // FIXED: Back row preference - INVERT the logic since we observed wrong behavior
+                        // Back row preference calculation
                         const rowFromFront = r - SIM_CONSTANTS.SEAT_ROWS.START; // 0 = row 6, 7 = row 13
                         const maxRowFromFront = SIM_CONSTANTS.SEAT_ROWS.END - SIM_CONSTANTS.SEAT_ROWS.START - 1;
-                        // INVERTED: Give higher weight to seats FURTHER from front (higher row numbers)
-                        const backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
+                        
+                        let backRowWeight = 0;
+                        if (config.BACK_PREF > 0) {
+                            // Give higher weight to seats FURTHER from front (higher row numbers)
+                            backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
+                        } else {
+                            // When BACK_PREF is 0, provide neutral weight (no preference)
+                            backRowWeight = 1;
+                        }
                         w += backRowWeight;
                         
-                        // Enhanced debug logging - show ALL seat evaluations when back pref is high
+                        // Debug logging for back preference issues
+                        if (config.BACK_PREF === 0 && Math.random() < 0.02) {
+                            console.log(`BACK_PREF=0: Row ${r}, backWeight=${backRowWeight}, base total: ${w}`);
+                        }
                         if (config.BACK_PREF > 8) {
                             const screenPos = r <= 9 ? '🔝TOP' : '🔽BOTTOM';
                             const yPos = r * VISUAL_CONFIG.CELL_SIZE;
@@ -466,12 +476,16 @@ class SeatSelectionEngine {
                         const socialWeight = (8 - adjacentCount) * config.SOCIAL_DISTANCE;
                         w += socialWeight;
                         
-                        // Optional: Log seat selection details for debugging
-                        if (Math.random() < 0.01) { // Log 1% of seat evaluations
+                        // Debug logging for weight issues
+                        if (config.BACK_PREF === 0 && Math.random() < 0.02) {
+                            console.log(`Seat [${r},${c}]: back=${backRowWeight}, aisle=${aisleWeight}, social=${socialWeight}, final=${w}`);
+                        }
+                        if (Math.random() < 0.01 && config.BACK_PREF > 0) { // Log 1% of seat evaluations
                             console.log(`Seat [${r},${c}]: back=${backRowWeight}, aisle=${aisleWeight}, social=${socialWeight}, total=${w}`);
                         }
                         
-                        valid.push([[r, c], Math.max(w, 1)]);
+                        // Ensure minimum weight for valid seat selection
+                        valid.push([[r, c], Math.max(w, 0.1)]);
                     }
                 }
             }
@@ -726,14 +740,6 @@ class Renderer {
                     this.ctx.fillStyle = VISUAL_CONFIG.COLORS[cellValue];
                     this.ctx.fillRect(c * VISUAL_CONFIG.CELL_SIZE, r * VISUAL_CONFIG.CELL_SIZE, 
                                     VISUAL_CONFIG.CELL_SIZE, VISUAL_CONFIG.CELL_SIZE);
-                    
-                    // Add row numbers on the left edge for debugging
-                    if (c === 0) {
-                        this.ctx.fillStyle = 'black';
-                        this.ctx.font = 'bold 12px Arial';
-                        this.ctx.fillText(r.toString(), 2, r * VISUAL_CONFIG.CELL_SIZE + 15);
-                        this.ctx.fillStyle = VISUAL_CONFIG.COLORS[cellValue]; // Reset color
-                    }
                     
                     // Add borders for special cells
                     if (cellValue === CELL_TYPES.GATE) {
