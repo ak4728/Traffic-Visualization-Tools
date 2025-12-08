@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.5.2 - History charts with improved scaling and labeling
+// Version 2.5.3 - Fixed back row preference zero weight issue
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.5.2';
+const VERSION = '2.5.3';
 
 // Grid cell types
 const CELL_TYPES = {
@@ -449,10 +449,8 @@ class SeatSelectionEngine {
                         if (config.BACK_PREF > 0) {
                             // Give higher weight to seats FURTHER from front (higher row numbers)
                             backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
-                        } else {
-                            // When BACK_PREF is 0, provide neutral weight (no preference)
-                            backRowWeight = 1;
                         }
+                        // When BACK_PREF is 0, backRowWeight stays 0 (no row preference)
                         w += backRowWeight;
                         
                         // Debug logging for back preference issues
@@ -484,8 +482,8 @@ class SeatSelectionEngine {
                             console.log(`Seat [${r},${c}]: back=${backRowWeight}, aisle=${aisleWeight}, social=${socialWeight}, total=${w}`);
                         }
                         
-                        // Ensure minimum weight for valid seat selection
-                        valid.push([[r, c], Math.max(w, 0.1)]);
+                        // Ensure minimum weight for valid seat selection, but preserve natural differences
+                        valid.push([[r, c], Math.max(w, 0.01)]);
                     }
                 }
             }
