@@ -149,10 +149,16 @@ class GridBuilder {
         const blockWidth = Math.floor(totalSeat / numBlocks);
         const blocks = {};
         
+        console.log(`Seat calculation: ${cols} cols - ${numBlocks + 1} corridors * ${corridorWidth} width = ${totalSeat} seats total`);
+        console.log(`Block width: ${blockWidth} seats per block`);
+        
         for (let i = 0; i < numBlocks; i++) {
             const start = corridorWidth + i * (blockWidth + corridorWidth);
-            blocks[i] = [start, start + blockWidth - 1];
+            const end = start + blockWidth - 1;
+            blocks[i] = [start, end];
+            console.log(`Block ${i}: cols ${start}-${end} (width: ${end - start + 1})`);
         }
+        
         return blocks;
     }
 
@@ -161,11 +167,18 @@ class GridBuilder {
         const leftMargin = Array.from({length: corridorWidth}, (_, i) => i);
         segments.push(leftMargin);
         
-        for (let i = 0; i < Object.keys(seatBlocks).length; i++) {
+        const numBlocks = Object.keys(seatBlocks).length;
+        for (let i = 0; i < numBlocks; i++) {
             const end = seatBlocks[i][1];
             const seg = Array.from({length: corridorWidth}, (_, j) => end + 1 + j);
-            segments.push(seg);
+            // Make sure we don't exceed column bounds
+            const validSeg = seg.filter(col => col < cols);
+            if (validSeg.length > 0) {
+                segments.push(validSeg);
+            }
         }
+        
+        console.log(`Generated ${segments.length} corridor segments for ${numBlocks} blocks:`, segments.map(seg => `[${seg.join(',')}]`).join(', '));
         return segments;
     }
 
@@ -724,10 +737,30 @@ class SimulationEngine {
             this.seatBlocks = GridBuilder.generateSeatBlocks(this.config.COLS, this.config.NUM_BLOCKS, this.config.CORRIDOR_WIDTH);
             this.corridorSegs = GridBuilder.generateCorridorSegments(this.config.COLS, this.seatBlocks, this.config.CORRIDOR_WIDTH);
             
+            // Debug: Log seat blocks and corridors
+            console.log(`Blocks: ${this.config.NUM_BLOCKS}, SeatBlocks:`, this.seatBlocks);
+            console.log(`CorridorSegs (${this.corridorSegs.length}):`, this.corridorSegs);
+            
             this.blockToCorridorCells = {};
             for (let i = 0; i < this.config.NUM_BLOCKS; i++) {
-                this.blockToCorridorCells[i] = [this.corridorSegs[i], this.corridorSegs[i + 1]];
+                // Fix: Handle case where we don't have enough corridor segments
+                const leftCorridor = this.corridorSegs[i];
+                const rightCorridor = this.corridorSegs[i + 1];
+                
+                if (leftCorridor && rightCorridor) {
+                    this.blockToCorridorCells[i] = [leftCorridor, rightCorridor];
+                } else if (leftCorridor) {
+                    // If we're missing the right corridor, use just the left one
+                    this.blockToCorridorCells[i] = [leftCorridor];
+                    console.warn(`Block ${i} missing right corridor, using only left corridor`);
+                } else {
+                    // Fallback: use a default corridor
+                    this.blockToCorridorCells[i] = [[this.config.CORRIDOR_WIDTH]];
+                    console.warn(`Block ${i} missing corridors, using fallback`);
+                }
             }
+            
+            console.log('BlockToCorridorCells mapping:', this.blockToCorridorCells);
             
             this.chartData = { time: [], seated: [], standing: [] };
             return true;
