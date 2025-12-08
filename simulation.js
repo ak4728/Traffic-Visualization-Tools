@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.1.0 - Dynamic corridor scaling and 5-block fix
+// Version 2.1.1 - Fixed HTML quote escaping issue
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.1.0';
+const VERSION = '2.1.1';
 
 // Grid cell types
 const CELL_TYPES = {
