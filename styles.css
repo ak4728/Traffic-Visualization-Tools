@@ -75,6 +75,19 @@ h1 {
     font-weight: bold;
 }
 
+.info-icon {
+    display: inline-block;
+    margin-left: 5px;
+    cursor: help;
+    font-size: 14px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.info-icon:hover {
+    opacity: 1;
+}
+
 /* ===== BUTTONS ===== */
 .buttons {
     display: flex;

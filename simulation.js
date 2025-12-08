@@ -325,15 +325,25 @@ class SeatSelectionEngine {
                     if (grid[r][c] === CELL_TYPES.SEAT && !assigned.has(key)) {
                         let w = 0;
                         
-                        // Back row preference
-                        w += (SIM_CONSTANTS.SEAT_ROWS.END - 1 - r) * config.BACK_PREF;
+                        // Back row preference (higher row numbers = further back)
+                        const backRowWeight = (r - SIM_CONSTANTS.SEAT_ROWS.START) * config.BACK_PREF;
+                        w += backRowWeight;
                         
                         // Aisle preference
-                        if (Math.min(c - c0, c1 - c) <= 1) w += 5;
+                        const aisleWeight = Math.min(c - c0, c1 - c) <= 1 ? 5 : 0;
+                        w += aisleWeight;
                         
-                        // Social distance preference
+                        // Social distance preference (fewer neighbors = higher weight)
+                        // If adjacentCount = 0 (no neighbors), weight += 8 * socialDistance
+                        // If adjacentCount = 8 (max neighbors), weight += 0 * socialDistance
                         const adjacentCount = this.countAdjacentSeated(grid, [r, c]);
-                        w += (8 - adjacentCount) * config.SOCIAL_DISTANCE;
+                        const socialWeight = (8 - adjacentCount) * config.SOCIAL_DISTANCE;
+                        w += socialWeight;
+                        
+                        // Optional: Log seat selection details for debugging
+                        if (Math.random() < 0.01) { // Log 1% of seat evaluations
+                            console.log(`Seat [${r},${c}]: back=${backRowWeight}, aisle=${aisleWeight}, social=${socialWeight}, total=${w}`);
+                        }
                         
                         valid.push([[r, c], Math.max(w, 1)]);
                     }

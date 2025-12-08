@@ -42,6 +42,7 @@
             <div class="control-group">
                 <label>
                     Corridor Width: <span class="value-display" id="corridorValue">4</span>
+                    <span class="info-icon" title="Width of the aisles between seating blocks. Wider corridors allow better crowd flow but reduce total seats">ℹ️</span>
                 </label>
                 <input type="range" id="corridorWidth" min="2" max="6" value="4">
             </div>
@@ -49,6 +50,7 @@
             <div class="control-group">
                 <label>
                     Social Distance Preference: <span class="value-display" id="socialValue">8</span>
+                    <span class="info-icon" title="Higher values make people prefer seats with fewer neighbors. 0 = no preference, 15 = maximum avoidance of occupied adjacent seats">ℹ️</span>
                 </label>
                 <input type="range" id="socialDistance" min="0" max="15" value="8">
             </div>
@@ -56,6 +58,7 @@
             <div class="control-group">
                 <label>
                     Back Row Preference: <span class="value-display" id="backValue">3</span>
+                    <span class="info-icon" title="Higher values make people prefer seats further from the front/stage. 0 = no preference, 10 = strongly prefer back rows">ℹ️</span>
                 </label>
                 <input type="range" id="backPref" min="0" max="10" value="3">
             </div>
@@ -64,6 +67,7 @@
                 <label style="display: flex; align-items: center; gap: 10px;">
                     <input type="checkbox" id="assignedSeats" checked="">
                     Reserve Assigned Seats
+                    <span class="info-icon" title="When enabled, once someone chooses a seat, others cannot take it. When disabled, people can compete for the same seat">ℹ️</span>
                 </label>
             </div>
 
@@ -71,6 +75,7 @@
                 <label style="display: flex; align-items: center; gap: 10px;">
                     <input type="checkbox" id="colorByBlock" checked="">
                     Color Agents by Block
+                    <span class="info-icon" title="Show different colors for people heading to different seating blocks. Helps visualize crowd flow patterns">ℹ️</span>
                 </label>
             </div>
         </div>
