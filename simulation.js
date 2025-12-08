@@ -1,6 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
+// Version 2.1.0 - Dynamic corridor scaling and 5-block fix
 
 // ===== CONSTANTS & CONFIGURATION ===== //
+
+const VERSION = '2.1.0';
 
 // Grid cell types
 const CELL_TYPES = {
@@ -58,7 +61,45 @@ class ConfigManager {
     set(key, value) {
         if (this.validate(key, value)) {
             this.config[key] = value;
+            
+            // Auto-adjust corridor width based on number of blocks
+            if (key === 'NUM_BLOCKS') {
+                this.autoAdjustCorridorWidth();
+            }
+            
             this.notifyListeners(key, value);
+        }
+    }
+    
+    autoAdjustCorridorWidth() {
+        // Calculate optimal corridor width based on blocks and canvas size
+        const totalCols = this.config.COLS;
+        const numBlocks = this.config.NUM_BLOCKS;
+        const numCorridors = numBlocks + 1;
+        
+        // Reserve some space for seats (minimum 8 seats per block)
+        const minSeatsPerBlock = 8;
+        const totalMinSeats = numBlocks * minSeatsPerBlock;
+        const availableForCorridors = totalCols - totalMinSeats;
+        
+        // Calculate optimal corridor width
+        let optimalWidth = Math.floor(availableForCorridors / numCorridors);
+        
+        // Ensure minimum width of 2 and maximum of 6
+        optimalWidth = Math.max(2, Math.min(6, optimalWidth));
+        
+        // Only update if different from current value
+        if (this.config.CORRIDOR_WIDTH !== optimalWidth) {
+            console.log(`Auto-adjusting corridor width from ${this.config.CORRIDOR_WIDTH} to ${optimalWidth} for ${numBlocks} blocks`);
+            this.config.CORRIDOR_WIDTH = optimalWidth;
+            
+            // Update the UI slider
+            const slider = document.getElementById('corridorWidth');
+            const display = document.getElementById('corridorValue');
+            if (slider && display) {
+                slider.value = optimalWidth;
+                display.textContent = optimalWidth;
+            }
         }
     }
 
@@ -1141,10 +1182,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // Initialize UI controller
         const uiController = new UIController(configManager);
         
+        // Auto-adjust corridor width for initial block count
+        configManager.autoAdjustCorridorWidth();
+        
         // Initial reset to set up UI state
         uiController.reset();
         
-        console.log('Conference Seating Simulation initialized successfully');
+        // Set build timestamp for cache busting
+        const buildTimeElement = document.getElementById('buildTime');
+        if (buildTimeElement) {
+            buildTimeElement.textContent = new Date().toLocaleString();
+        }
+        
+        console.log(`Conference Seating Simulation v${VERSION} initialized successfully`);
     } catch (error) {
         console.error('Initialization error:', error);
         document.body.innerHTML = '<div style="text-align: center; padding: 50px; color: red;">Error initializing simulation. Please refresh the page.</div>';

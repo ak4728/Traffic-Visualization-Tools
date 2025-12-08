@@ -32,6 +32,13 @@ h1 {
     font-size: 2em;
 }
 
+.version {
+    font-size: 0.4em;
+    color: #667eea;
+    font-weight: normal;
+    opacity: 0.8;
+}
+
 /* ===== CONTROLS SECTION ===== */
 .controls {
     display: grid;
@@ -238,6 +245,15 @@ canvas {
     height: 20px;
     border: 1px solid #333;
     border-radius: 3px;
+}
+
+/* ===== FOOTER ===== */
+.footer {
+    text-align: center;
+    margin-top: 20px;
+    padding: 10px;
+    color: #666;
+    border-top: 1px solid #eee;
 }
 
 /* ===== RESPONSIVE DESIGN ===== */
