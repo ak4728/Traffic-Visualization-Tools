@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.1.1 - Fixed HTML quote escaping issue
+// Version 2.2.0 - Automatic corridor width calculation
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.1.1';
+const VERSION = '2.2.0';
 
 // Grid cell types
 const CELL_TYPES = {
@@ -46,7 +46,6 @@ class ConfigManager {
             ROWS: 20,
             COLS: 68,
             NUM_BLOCKS: 4,
-            CORRIDOR_WIDTH: 4,
             FEATURE_ASSIGNED_SEATS: true,
             FEATURE_COLOR_BY_BLOCK: true,
             NUM_AGENTS: 384,
@@ -56,50 +55,55 @@ class ConfigManager {
             BACK_PREF: 3
         };
         this.listeners = new Set();
+        // Calculate initial corridor width
+        this.calculateCorridorWidth();
     }
 
     set(key, value) {
         if (this.validate(key, value)) {
             this.config[key] = value;
             
-            // Auto-adjust corridor width based on number of blocks
+            // Recalculate corridor width when blocks change
             if (key === 'NUM_BLOCKS') {
-                this.autoAdjustCorridorWidth();
+                this.calculateCorridorWidth();
             }
             
             this.notifyListeners(key, value);
         }
     }
     
-    autoAdjustCorridorWidth() {
-        // Calculate optimal corridor width based on blocks and canvas size
+    calculateCorridorWidth() {
         const totalCols = this.config.COLS;
         const numBlocks = this.config.NUM_BLOCKS;
         const numCorridors = numBlocks + 1;
         
-        // Reserve some space for seats (minimum 8 seats per block)
-        const minSeatsPerBlock = 8;
-        const totalMinSeats = numBlocks * minSeatsPerBlock;
-        const availableForCorridors = totalCols - totalMinSeats;
+        // Calculate width so that seats + corridors = total columns
+        // Let's aim for equal distribution: seats per block should be similar
+        // Formula: totalCols = (numBlocks * seatsPerBlock) + (numCorridors * corridorWidth)
         
-        // Calculate optimal corridor width
-        let optimalWidth = Math.floor(availableForCorridors / numCorridors);
+        // Try different corridor widths to find the best fit
+        let bestCorridorWidth = 2;
+        let bestSeatsPerBlock = 0;
         
-        // Ensure minimum width of 2 and maximum of 6
-        optimalWidth = Math.max(2, Math.min(6, optimalWidth));
-        
-        // Only update if different from current value
-        if (this.config.CORRIDOR_WIDTH !== optimalWidth) {
-            console.log(`Auto-adjusting corridor width from ${this.config.CORRIDOR_WIDTH} to ${optimalWidth} for ${numBlocks} blocks`);
-            this.config.CORRIDOR_WIDTH = optimalWidth;
+        for (let corridorWidth = 2; corridorWidth <= 6; corridorWidth++) {
+            const totalCorridorSpace = numCorridors * corridorWidth;
+            const remainingForSeats = totalCols - totalCorridorSpace;
+            const seatsPerBlock = Math.floor(remainingForSeats / numBlocks);
             
-            // Update the UI slider
-            const slider = document.getElementById('corridorWidth');
-            const display = document.getElementById('corridorValue');
-            if (slider && display) {
-                slider.value = optimalWidth;
-                display.textContent = optimalWidth;
+            // Prefer configurations that give more seats per block while keeping corridor width reasonable
+            if (seatsPerBlock > bestSeatsPerBlock && remainingForSeats >= 0) {
+                bestCorridorWidth = corridorWidth;
+                bestSeatsPerBlock = seatsPerBlock;
             }
+        }
+        
+        this.config.CORRIDOR_WIDTH = bestCorridorWidth;
+        console.log(`Calculated corridor width: ${bestCorridorWidth} for ${numBlocks} blocks (${bestSeatsPerBlock} seats per block)`);
+        
+        // Update UI display
+        const display = document.getElementById('calculatedCorridorWidth');
+        if (display) {
+            display.textContent = bestCorridorWidth;
         }
     }
 
@@ -113,7 +117,6 @@ class ConfigManager {
             SPEED: v => v >= 10 && v <= 500,
             MAX_TIME: v => v >= 200 && v <= 1000,
             NUM_BLOCKS: v => v >= 2 && v <= 6,
-            CORRIDOR_WIDTH: v => v >= 2 && v <= 6,
             SOCIAL_DISTANCE: v => v >= 0 && v <= 15,
             BACK_PREF: v => v >= 0 && v <= 10
         };
@@ -1001,7 +1004,6 @@ class UIController {
         this.setupSliderControl('speed', 'speedValue', 'SPEED', v => v + 'ms');
         this.setupSliderControl('maxTime', 'maxTimeValue', 'MAX_TIME');
         this.setupSliderControl('numBlocks', 'blocksValue', 'NUM_BLOCKS');
-        this.setupSliderControl('corridorWidth', 'corridorValue', 'CORRIDOR_WIDTH');
         this.setupSliderControl('socialDistance', 'socialValue', 'SOCIAL_DISTANCE');
         this.setupSliderControl('backPref', 'backValue', 'BACK_PREF');
         
@@ -1182,8 +1184,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Initialize UI controller
         const uiController = new UIController(configManager);
         
-        // Auto-adjust corridor width for initial block count
-        configManager.autoAdjustCorridorWidth();
+
         
         // Initial reset to set up UI state
         uiController.reset();

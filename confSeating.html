@@ -8,7 +8,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎤 Conference Seating Simulation <span class="version">v2.1.1</span></h1>
+        <h1>🎤 Conference Seating Simulation <span class="version">v2.2.0</span></h1>
         
         <div class="controls">
             <div class="control-group">
@@ -35,17 +35,12 @@
             <div class="control-group">
                 <label>
                     Number of Blocks: <span class="value-display" id="blocksValue">4</span>
+                    <small style="display: block; margin-top: 5px; color: #666;">Corridor Width: <span id="calculatedCorridorWidth">4</span> (auto-calculated)</small>
                 </label>
                 <input type="range" id="numBlocks" min="2" max="6" value="4">
             </div>
 
-            <div class="control-group">
-                <label>
-                    Corridor Width: <span class="value-display" id="corridorValue">4</span>
-                    <span class="info-icon" title="Width of the aisles between seating blocks. Auto-adjusts when block count changes. Wider corridors allow better crowd flow but reduce total seats">ℹ️</span>
-                </label>
-                <input type="range" id="corridorWidth" min="2" max="6" value="4">
-            </div>
+
 
             <div class="control-group">
                 <label>
