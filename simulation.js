@@ -267,14 +267,73 @@ class PathfindingEngine {
         }
     }
 
-    static pickBlockBasedOnGate(gateCol) {
-        if (gateCol <= 10) {
-            return Utils.weightedChoice([0, 1], [0.75, 0.25]);
-        } else if (gateCol <= 34) {
-            return Utils.weightedChoice([1, 2], [0.25, 0.75]);
-        } else {
-            return Utils.weightedChoice([2, 3], [0.25, 0.75]);
+    static pickBlockBasedOnGate(gateCol, numBlocks, gates) {
+        // Dynamic block selection based on gate position and number of blocks
+        if (!gates || gates.length === 0 || numBlocks <= 0) {
+            return 0; // fallback
         }
+        
+        // Find which gate this column is closest to
+        const gateIndex = gates.findIndex(gate => gate[1] === gateCol);
+        
+        if (gateIndex === -1) {
+            // If not an exact gate match, find closest gate
+            const closestGateIndex = gates.reduce((closest, gate, index) => {
+                const currentDistance = Math.abs(gate[1] - gateCol);
+                const closestDistance = Math.abs(gates[closest][1] - gateCol);
+                return currentDistance < closestDistance ? index : closest;
+            }, 0);
+            
+            // Assign blocks around the closest gate
+            const blockSpan = Math.max(1, Math.floor(numBlocks / gates.length));
+            const baseBlock = Math.min(closestGateIndex * blockSpan, numBlocks - 1);
+            const possibleBlocks = [];
+            const weights = [];
+            
+            // Add the primary block
+            possibleBlocks.push(baseBlock);
+            weights.push(0.6);
+            
+            // Add adjacent blocks with lower weights
+            if (baseBlock > 0) {
+                possibleBlocks.push(baseBlock - 1);
+                weights.push(0.2);
+            }
+            if (baseBlock < numBlocks - 1) {
+                possibleBlocks.push(baseBlock + 1);
+                weights.push(0.2);
+            }
+            
+            return Utils.weightedChoice(possibleBlocks, weights);
+        }
+        
+        // Original logic adapted for dynamic blocks
+        const blockSpan = numBlocks / gates.length;
+        const baseBlock = Math.floor(gateIndex * blockSpan);
+        
+        // Create weighted choices around the base block
+        const possibleBlocks = [];
+        const weights = [];
+        
+        // Primary block gets highest weight
+        if (baseBlock < numBlocks) {
+            possibleBlocks.push(baseBlock);
+            weights.push(0.6);
+        }
+        
+        // Adjacent blocks get lower weights
+        if (baseBlock + 1 < numBlocks) {
+            possibleBlocks.push(baseBlock + 1);
+            weights.push(0.3);
+        }
+        
+        if (baseBlock > 0 && possibleBlocks.length < 2) {
+            possibleBlocks.push(baseBlock - 1);
+            weights.push(0.1);
+        }
+        
+        console.log(`Gate ${gateCol} -> blocks [${possibleBlocks.join(',')}] with weights [${weights.map(w => w.toFixed(1)).join(',')}]`);
+        return Utils.weightedChoice(possibleBlocks, weights);
     }
 
     static pickPreferredCorridorCell(block, seatCol, blockToCorridorCells) {
@@ -419,7 +478,7 @@ class SeatSelectionEngine {
 // ===== AGENT CLASS ===== //
 
 class Agent {
-    constructor(grid, spawn, assigned, seatBlocks, blockToCorridorCells, config) {
+    constructor(grid, spawn, assigned, seatBlocks, blockToCorridorCells, config, gates = null) {
         try {
             this.pos = spawn;
             this.seated = false;
@@ -427,7 +486,8 @@ class Agent {
             this.willStand = false;
             
             const gateC = spawn[1];
-            this.block = PathfindingEngine.pickBlockBasedOnGate(gateC);
+            const numBlocks = Object.keys(seatBlocks).length;
+            this.block = PathfindingEngine.pickBlockBasedOnGate(gateC, numBlocks, gates);
             
             if (this.block >= Object.keys(seatBlocks).length) {
                 this.block = Object.keys(seatBlocks).length - 1;
@@ -743,21 +803,29 @@ class SimulationEngine {
             
             this.blockToCorridorCells = {};
             for (let i = 0; i < this.config.NUM_BLOCKS; i++) {
-                // Fix: Handle case where we don't have enough corridor segments
-                const leftCorridor = this.corridorSegs[i];
-                const rightCorridor = this.corridorSegs[i + 1];
+                const availableCorridors = [];
                 
-                if (leftCorridor && rightCorridor) {
-                    this.blockToCorridorCells[i] = [leftCorridor, rightCorridor];
-                } else if (leftCorridor) {
-                    // If we're missing the right corridor, use just the left one
-                    this.blockToCorridorCells[i] = [leftCorridor];
-                    console.warn(`Block ${i} missing right corridor, using only left corridor`);
-                } else {
-                    // Fallback: use a default corridor
-                    this.blockToCorridorCells[i] = [[this.config.CORRIDOR_WIDTH]];
-                    console.warn(`Block ${i} missing corridors, using fallback`);
+                // Add left corridor (always available for block i)
+                if (this.corridorSegs[i]) {
+                    availableCorridors.push(this.corridorSegs[i]);
                 }
+                
+                // Add right corridor (available if it exists)
+                if (this.corridorSegs[i + 1]) {
+                    availableCorridors.push(this.corridorSegs[i + 1]);
+                }
+                
+                // For the rightmost block, if it's missing its right corridor,
+                // let it also use the corridor from the previous block
+                if (availableCorridors.length === 1 && i === this.config.NUM_BLOCKS - 1) {
+                    // Allow rightmost block to use the previous corridor too
+                    if (this.corridorSegs[i - 1]) {
+                        availableCorridors.unshift(this.corridorSegs[i - 1]);
+                    }
+                }
+                
+                this.blockToCorridorCells[i] = availableCorridors;
+                console.log(`Block ${i}: ${availableCorridors.length} corridor(s) available`);
             }
             
             console.log('BlockToCorridorCells mapping:', this.blockToCorridorCells);
@@ -786,7 +854,7 @@ class SimulationEngine {
             for (const gate of this.gates) {
                 const key = `${gate[0]},${gate[1]}`;
                 if (this.spawned < this.config.NUM_AGENTS && !occupied.has(key)) {
-                    const agent = new Agent(this.grid, gate, this.assigned, this.seatBlocks, this.blockToCorridorCells, this.config);
+                    const agent = new Agent(this.grid, gate, this.assigned, this.seatBlocks, this.blockToCorridorCells, this.config, this.gates);
                     this.agents.push(agent);
                     this.spawned++;
                     occupied.add(key);
