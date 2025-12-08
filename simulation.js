@@ -49,10 +49,10 @@ class ConfigManager {
             FEATURE_ASSIGNED_SEATS: true,
             FEATURE_COLOR_BY_BLOCK: true,
             NUM_AGENTS: 384,
-            SPEED: 100,
+            SPEED: 20,
             MAX_TIME: 500,
             SOCIAL_DISTANCE: 8,
-            BACK_PREF: 3
+            BACK_PREF: 8
         };
         this.listeners = new Set();
         // Calculate initial corridor width
@@ -441,9 +441,19 @@ class SeatSelectionEngine {
                     if (grid[r][c] === CELL_TYPES.SEAT && !assigned.has(key)) {
                         let w = 0;
                         
-                        // Back row preference (higher row numbers = further back)
-                        const backRowWeight = (r - SIM_CONSTANTS.SEAT_ROWS.START) * config.BACK_PREF;
+                        // FIXED: Back row preference - INVERT the logic since we observed wrong behavior
+                        const rowFromFront = r - SIM_CONSTANTS.SEAT_ROWS.START; // 0 = row 6, 7 = row 13
+                        const maxRowFromFront = SIM_CONSTANTS.SEAT_ROWS.END - SIM_CONSTANTS.SEAT_ROWS.START - 1;
+                        // INVERTED: Give higher weight to seats FURTHER from front (higher row numbers)
+                        const backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
                         w += backRowWeight;
+                        
+                        // Enhanced debug logging - show ALL seat evaluations when back pref is high
+                        if (config.BACK_PREF > 8) {
+                            const screenPos = r <= 9 ? '🔝TOP' : '🔽BOTTOM';
+                            const yPos = r * VISUAL_CONFIG.CELL_SIZE;
+                            console.log(`Row ${r} (Y=${yPos}) ${screenPos} screen → back weight: ${backRowWeight.toFixed(0)}, total: ${w.toFixed(1)}`);
+                        }
                         
                         // Aisle preference
                         const aisleWeight = Math.min(c - c0, c1 - c) <= 1 ? 5 : 0;
@@ -469,7 +479,17 @@ class SeatSelectionEngine {
             if (valid.length === 0) return null;
             const seats = valid.map(v => v[0]);
             const weights = valid.map(v => v[1]);
-            return Utils.weightedChoice(seats, weights);
+            const chosenSeat = Utils.weightedChoice(seats, weights);
+            
+            // Log seat choice when back preference is high
+            if (config.BACK_PREF > 8 && chosenSeat && Math.random() < 0.3) {
+                const [chosenRow, chosenCol] = chosenSeat;
+                const chosenWeight = weights[seats.findIndex(([r,c]) => r === chosenRow && c === chosenCol)];
+                const screenPos = chosenRow <= 9 ? '🔝TOP' : '🔽BOTTOM';
+                console.log(`✅ CHOSEN: Row ${chosenRow} ${screenPos} with weight ${chosenWeight.toFixed(0)}`);
+            }
+            
+            return chosenSeat;
         } catch (error) {
             console.error('Seat selection error:', error);
             return null;
@@ -636,6 +656,29 @@ class Renderer {
         }
     }
 
+    drawStage() {
+        // Draw stage at the very TOP - rows 0-2
+        const stageHeight = VISUAL_CONFIG.CELL_SIZE * 3;
+        
+        // Bright red stage
+        this.ctx.fillStyle = '#FF0000';
+        this.ctx.fillRect(0, 0, this.canvas.width, stageHeight);
+        
+        // Black border for visibility
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.lineWidth = 4;
+        this.ctx.strokeRect(0, 0, this.canvas.width, stageHeight);
+        
+        // White text
+        this.ctx.fillStyle = 'white';
+        this.ctx.font = 'bold 18px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('🎭 CONFERENCE STAGE 🎭', this.canvas.width / 2, stageHeight / 2 + 6);
+        this.ctx.textAlign = 'start';
+        
+        console.log('🎭 Stage drawn at (0,0) with height', stageHeight);
+    }
+
     drawGrid(grid, agents, config) {
         try {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -647,6 +690,14 @@ class Renderer {
                     this.ctx.fillStyle = VISUAL_CONFIG.COLORS[cellValue];
                     this.ctx.fillRect(c * VISUAL_CONFIG.CELL_SIZE, r * VISUAL_CONFIG.CELL_SIZE, 
                                     VISUAL_CONFIG.CELL_SIZE, VISUAL_CONFIG.CELL_SIZE);
+                    
+                    // Add row numbers on the left edge for debugging
+                    if (c === 0) {
+                        this.ctx.fillStyle = 'black';
+                        this.ctx.font = 'bold 12px Arial';
+                        this.ctx.fillText(r.toString(), 2, r * VISUAL_CONFIG.CELL_SIZE + 15);
+                        this.ctx.fillStyle = VISUAL_CONFIG.COLORS[cellValue]; // Reset color
+                    }
                     
                     // Add borders for special cells
                     if (cellValue === CELL_TYPES.GATE) {
@@ -894,11 +945,20 @@ class SimulationEngine {
                 }
             });
             
-            // Spawn new agents
+            // Spawn new agents with realistic arrival patterns
             for (const gate of this.gates) {
                 const key = `${gate[0]},${gate[1]}`;
                 if (this.spawned < this.config.NUM_AGENTS && !occupied.has(key)) {
-                    const agent = new Agent(this.grid, gate, this.assigned, this.seatBlocks, this.blockToCorridorCells, this.config, this.gates);
+                    // Early arrivals prefer back seats (more back preference)
+                    const arrivalRatio = this.spawned / this.config.NUM_AGENTS;
+                    const backPrefMultiplier = arrivalRatio < 0.3 ? 1.5 : // Early arrivals
+                                              arrivalRatio < 0.7 ? 1.0 : // Mid arrivals
+                                              0.5; // Late arrivals prefer front
+                    
+                    const modifiedConfig = {...this.config};
+                    modifiedConfig.BACK_PREF = Math.max(0, this.config.BACK_PREF * backPrefMultiplier);
+                    
+                    const agent = new Agent(this.grid, gate, this.assigned, this.seatBlocks, this.blockToCorridorCells, modifiedConfig, this.gates);
                     this.agents.push(agent);
                     this.spawned++;
                     occupied.add(key);
@@ -968,6 +1028,7 @@ class UIController {
         this.animationId = null;
         this.isRunning = false;
         this.isBuilt = false;
+        this.runHistory = [];
         
         this.initializeElements();
         this.setupEventListeners();
@@ -980,9 +1041,12 @@ class UIController {
             buildBtn: document.getElementById('buildBtn'),
             startBtn: document.getElementById('startBtn'),
             pauseBtn: document.getElementById('pauseBtn'),
+            restartBtn: document.getElementById('restartBtn'),
             resetBtn: document.getElementById('resetBtn'),
             completionMsg: document.getElementById('completionMsg'),
-            stats: document.getElementById('stats')
+            stats: document.getElementById('stats'),
+            runHistory: document.getElementById('runHistory'),
+            historyList: document.getElementById('historyList')
         };
         
         // Initialize renderer
@@ -994,8 +1058,13 @@ class UIController {
 
     updateCanvasSize() {
         const config = this.configManager.config;
-        this.elements.canvas.width = config.COLS * VISUAL_CONFIG.CELL_SIZE;
-        this.elements.canvas.height = config.ROWS * VISUAL_CONFIG.CELL_SIZE;
+        // Use larger cell size for better visibility
+        const cellSize = 12;
+        this.elements.canvas.width = config.COLS * cellSize;
+        this.elements.canvas.height = config.ROWS * cellSize;
+        
+        // Update visual config to match
+        VISUAL_CONFIG.CELL_SIZE = cellSize;
     }
 
     setupEventListeners() {
@@ -1015,6 +1084,14 @@ class UIController {
         this.elements.buildBtn.addEventListener('click', () => this.build());
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.pauseBtn.addEventListener('click', () => this.pause());
+        if (this.elements.restartBtn) {
+            this.elements.restartBtn.addEventListener('click', () => {
+                console.log('Restart button clicked');
+                this.restart();
+            });
+        } else {
+            console.error('Restart button not found');
+        }
         this.elements.resetBtn.addEventListener('click', () => this.reset());
     }
 
@@ -1103,12 +1180,61 @@ class UIController {
         
         // Reset UI
         this.elements.completionMsg.style.display = 'none';
+        this.elements.restartBtn.style.display = 'none';
         this.elements.startBtn.disabled = true;
         this.elements.pauseBtn.disabled = true;
         this.elements.buildBtn.disabled = false;
         this.elements.stats.textContent = 'Click "Build Conference Room" to start';
         
         console.log('Reset complete');
+    }
+
+    restart() {
+        if (!this.isBuilt) {
+            console.log('Cannot restart: simulation not built');
+            return;
+        }
+        
+        console.log('Restarting simulation...');
+        
+        // Pause current simulation
+        this.pause();
+        
+        try {
+            // Rebuild simulation with current config
+            this.simulation = new SimulationEngine(this.configManager.config);
+            if (!this.simulation.initialize()) {
+                this.showError('Failed to restart simulation');
+                return;
+            }
+            
+            // Update canvas size for new configuration
+            this.updateCanvasSize();
+            
+            // Clear displays
+            if (this.renderer) {
+                this.renderer.ctx.clearRect(0, 0, this.elements.canvas.width, this.elements.canvas.height);
+                const container = this.elements.chartCanvas.parentElement;
+                this.renderer.chartCtx.clearRect(0, 0, container.clientWidth, 400);
+            }
+            
+            // Reset UI state
+            this.elements.completionMsg.style.display = 'none';
+            this.elements.restartBtn.style.display = 'none';
+            this.elements.startBtn.disabled = false;
+            this.elements.buildBtn.disabled = true;
+            
+            // Draw initial state
+            this.draw();
+            
+            // Auto-start the new simulation
+            this.start();
+            
+            console.log('Restart complete - new simulation started');
+        } catch (error) {
+            console.error('Restart error:', error);
+            this.showError('Error restarting simulation');
+        }
     }
 
     animate() {
@@ -1165,12 +1291,76 @@ class UIController {
             this.elements.completionMsg.style.background = '#48bb78';
         }
         this.elements.completionMsg.style.display = 'block';
+        this.elements.restartBtn.style.display = 'inline-block';
+        this.elements.restartBtn.disabled = false;
+        console.log('Restart button enabled:', !this.elements.restartBtn.disabled);
+        
+        // Add to run history if successful
+        if (!result.error) {
+            this.addToRunHistory(result);
+        }
     }
 
     showError(message) {
         this.elements.completionMsg.textContent = `❌ ${message}`;
         this.elements.completionMsg.style.background = '#fc8181';
         this.elements.completionMsg.style.display = 'block';
+    }
+
+    addToRunHistory(result) {
+        const config = this.configManager.config;
+        const seatedPercent = this.simulation.spawned > 0 ? 
+            ((result.seated / this.simulation.spawned) * 100).toFixed(1) : 0;
+        
+        const historyEntry = {
+            timestamp: new Date(),
+            time: this.simulation.time,
+            seated: result.seated,
+            standing: result.standing,
+            seatedPercent: seatedPercent,
+            config: {
+                agents: config.NUM_AGENTS,
+                blocks: config.NUM_BLOCKS,
+                socialDistance: config.SOCIAL_DISTANCE,
+                backPref: config.BACK_PREF,
+                speed: config.SPEED
+            }
+        };
+        
+        this.runHistory.unshift(historyEntry); // Add to beginning
+        if (this.runHistory.length > 10) { // Keep only last 10 runs
+            this.runHistory.pop();
+        }
+        
+        this.updateRunHistoryDisplay();
+    }
+
+    updateRunHistoryDisplay() {
+        if (this.runHistory.length === 0) {
+            this.elements.runHistory.style.display = 'none';
+            return;
+        }
+        
+        this.elements.runHistory.style.display = 'block';
+        this.elements.historyList.innerHTML = '';
+        
+        this.runHistory.forEach((entry, index) => {
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            
+            const timeStr = entry.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            item.innerHTML = `
+                <div>
+                    <strong>Run ${this.runHistory.length - index}:</strong> 
+                    ${entry.seated} seated (${entry.seatedPercent}%), ${entry.standing} standing
+                    <br><small>Agents: ${entry.config.agents}, Blocks: ${entry.config.blocks}, Social: ${entry.config.socialDistance}, Back: ${entry.config.backPref}</small>
+                </div>
+                <div class="history-time">${timeStr}</div>
+            `;
+            
+            this.elements.historyList.appendChild(item);
+        });
     }
 }
 

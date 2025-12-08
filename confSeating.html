@@ -8,70 +8,74 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎤 Conference Seating Simulation <span class="version">v2.2.0</span></h1>
+        <h1>🎤 Conference Seating Simulation <span class="version">v2.5.1</span></h1>
         
         <div class="controls">
-            <div class="control-group">
-                <label>
-                    Total Attendees: <span class="value-display" id="agentsValue">384</span>
-                </label>
-                <input type="range" id="numAgents" min="50" max="500" value="384" step="10">
+            <div class="controls-primary">
+                <div class="control-group">
+                    <label>
+                        Total Attendees: <span class="value-display" id="agentsValue">384</span>
+                    </label>
+                    <input type="range" id="numAgents" min="50" max="500" value="384" step="10">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Simulation Speed: <span class="value-display" id="speedValue">20ms</span>
+                    </label>
+                    <input type="range" id="speed" min="10" max="500" value="20" step="10">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Max Simulation Time: <span class="value-display" id="maxTimeValue">500</span>
+                    </label>
+                    <input type="range" id="maxTime" min="200" max="1000" value="500" step="50">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Number of Blocks: <span class="value-display" id="blocksValue">4</span>
+                        <small style="display: block; margin-top: 5px; color: #666;">Corridor Width: <span id="calculatedCorridorWidth">4</span> (auto-calculated)</small>
+                    </label>
+                    <input type="range" id="numBlocks" min="2" max="6" value="4">
+                </div>
             </div>
 
-            <div class="control-group">
-                <label>
-                    Simulation Speed: <span class="value-display" id="speedValue">100ms</span>
-                </label>
-                <input type="range" id="speed" min="10" max="500" value="100" step="10">
-            </div>
-
-            <div class="control-group">
-                <label>
-                    Max Simulation Time: <span class="value-display" id="maxTimeValue">500</span>
-                </label>
-                <input type="range" id="maxTime" min="200" max="1000" value="500" step="50">
-            </div>
-
-            <div class="control-group">
-                <label>
-                    Number of Blocks: <span class="value-display" id="blocksValue">4</span>
-                    <small style="display: block; margin-top: 5px; color: #666;">Corridor Width: <span id="calculatedCorridorWidth">4</span> (auto-calculated)</small>
-                </label>
-                <input type="range" id="numBlocks" min="2" max="6" value="4">
-            </div>
 
 
+            <div class="controls-secondary">
+                <div class="control-group">
+                    <label>
+                        Social Distance Preference: <span class="value-display" id="socialValue">8</span>
+                        <span class="info-icon" title="Higher values make people prefer seats with fewer neighbors. 0 = no preference, 15 = maximum avoidance of occupied adjacent seats">ℹ️</span>
+                    </label>
+                    <input type="range" id="socialDistance" min="0" max="15" value="8">
+                </div>
 
-            <div class="control-group">
-                <label>
-                    Social Distance Preference: <span class="value-display" id="socialValue">8</span>
-                    <span class="info-icon" title="Higher values make people prefer seats with fewer neighbors. 0 = no preference, 15 = maximum avoidance of occupied adjacent seats">ℹ️</span>
-                </label>
-                <input type="range" id="socialDistance" min="0" max="15" value="8">
-            </div>
+                <div class="control-group">
+                    <label>
+                        Back Row Preference: <span class="value-display" id="backValue">8</span>
+                        <span class="info-icon" title="Higher values make people prefer seats further from the front/stage. 0 = no preference, 10 = strongly prefer back rows">ℹ️</span>
+                    </label>
+                    <input type="range" id="backPref" min="0" max="10" value="8">
+                </div>
 
-            <div class="control-group">
-                <label>
-                    Back Row Preference: <span class="value-display" id="backValue">3</span>
-                    <span class="info-icon" title="Higher values make people prefer seats further from the front/stage. 0 = no preference, 10 = strongly prefer back rows">ℹ️</span>
-                </label>
-                <input type="range" id="backPref" min="0" max="10" value="3">
-            </div>
+                <div class="control-group checkbox-group">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="assignedSeats" checked="">
+                        Reserve Assigned Seats
+                        <span class="info-icon" title="When enabled, once someone chooses a seat, others cannot take it. When disabled, people can compete for the same seat">ℹ️</span>
+                    </label>
+                </div>
 
-            <div class="control-group">
-                <label style="display: flex; align-items: center; gap: 10px;">
-                    <input type="checkbox" id="assignedSeats" checked="">
-                    Reserve Assigned Seats
-                    <span class="info-icon" title="When enabled, once someone chooses a seat, others cannot take it. When disabled, people can compete for the same seat">ℹ️</span>
-                </label>
-            </div>
-
-            <div class="control-group">
-                <label style="display: flex; align-items: center; gap: 10px;">
-                    <input type="checkbox" id="colorByBlock" checked="">
-                    Color Agents by Block
-                    <span class="info-icon" title="Show different colors for people heading to different seating blocks. Helps visualize crowd flow patterns">ℹ️</span>
-                </label>
+                <div class="control-group checkbox-group">
+                    <label style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="colorByBlock" checked="">
+                        Color Agents by Block
+                        <span class="info-icon" title="Show different colors for people heading to different seating blocks. Helps visualize crowd flow patterns">ℹ️</span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -79,6 +83,7 @@
             <button class="build" id="buildBtn">Build Conference Room</button>
             <button class="start" id="startBtn" disabled="">Start</button>
             <button class="pause" id="pauseBtn" disabled="">Pause</button>
+            <button class="restart" id="restartBtn" disabled="" style="display: none;">Restart</button>
             <button class="reset" id="resetBtn">Reset</button>
         </div>
 
@@ -86,7 +91,7 @@
 
         <div class="main-content">
             <div class="canvas-container">
-                <canvas id="simCanvas" width="680" height="200"></canvas>
+                <canvas id="simCanvas" width="680" height="240"></canvas>
             </div>
             <div class="chart-container">
                 <h3>Seating Progress Over Time</h3>
@@ -95,6 +100,15 @@
         </div>
 
         <div class="stats" id="stats">Click "Build Conference Room" to start</div>
+
+        <div class="run-history" id="runHistory" style="display: none;">
+            <h4>📊 Run History</h4>
+            <div id="historyList"></div>
+            <div class="history-charts">
+                <canvas id="efficiencyChart" width="400" height="200"></canvas>
+                <canvas id="timeChart" width="400" height="200"></canvas>
+            </div>
+        </div>
 
         <div class="legend">
             <div class="legend-item">
@@ -125,5 +139,6 @@
     </div>
 
     <script src="simulation.js"></script>
+
 </body>
 </html>
