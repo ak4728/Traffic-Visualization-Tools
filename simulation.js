@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.3.0 - History charts with improved scaling and labeling
+// Version 2.5.2 - History charts with improved scaling and labeling
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.3.0';
+const VERSION = '2.5.2';
 
 // Grid cell types
 const CELL_TYPES = {
