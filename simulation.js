@@ -1,9 +1,9 @@
 // ===== CONFERENCE SEATING SIMULATION ===== //
-// Version 2.5.4 - Added aisle preference slider and standardized all preferences to 0-5 scale
+// Version 2.5.5 - Added seating speed tracking and reporting
 
 // ===== CONSTANTS & CONFIGURATION ===== //
 
-const VERSION = '2.5.4';
+const VERSION = '2.5.5';
 
 // Grid cell types
 const CELL_TYPES = {
@@ -63,6 +63,11 @@ class ConfigManager {
     set(key, value) {
         if (this.validate(key, value)) {
             this.config[key] = value;
+            
+            // Debug: Log aisle preference changes
+            if (key === 'AISLE_PREF') {
+                console.log(`🎛️ AISLE_PREF updated to: ${value}`);
+            }
             
             // Recalculate corridor width when blocks change
             if (key === 'NUM_BLOCKS') {
@@ -433,75 +438,83 @@ class SeatSelectionEngine {
     static pickSeatInBlock(grid, block, assigned, seatBlocks, config, rowThr = SIM_CONSTANTS.DEFAULT_ROW_THRESHOLD) {
         try {
             const [c0, c1] = seatBlocks[block];
-            const valid = [];
             
+            // STEP 1: First select preferred rows based on back preference
+            const availableRows = [];
             for (let r = SIM_CONSTANTS.SEAT_ROWS.START; r < SIM_CONSTANTS.SEAT_ROWS.END; r++) {
                 if (this.rowOccupancy(grid, r, c0, c1) >= rowThr) continue;
                 
+                // Check if row has any available seats
+                let hasSeats = false;
                 for (let c = c0; c <= c1; c++) {
                     const key = `${r},${c}`;
                     if (grid[r][c] === CELL_TYPES.SEAT && !assigned.has(key)) {
-                        let w = 0;
-                        
-                        // Back row preference calculation
-                        const rowFromFront = r - SIM_CONSTANTS.SEAT_ROWS.START; // 0 = row 6, 7 = row 13
-                        const maxRowFromFront = SIM_CONSTANTS.SEAT_ROWS.END - SIM_CONSTANTS.SEAT_ROWS.START - 1;
-                        
-                        let backRowWeight = 0;
-                        if (config.BACK_PREF > 0) {
-                            // Give higher weight to seats FURTHER from front (higher row numbers)
-                            // Scale up the preference to maintain similar behavior with 0-5 range
-                            backRowWeight = Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF * 2;
-                        }
-                        // When BACK_PREF is 0, backRowWeight stays 0 (no row preference)
-                        w += backRowWeight;
-                        
-                        // Debug logging for back preference issues
-                        if (config.BACK_PREF === 0 && Math.random() < 0.02) {
-                            console.log(`BACK_PREF=0: Row ${r}, backWeight=${backRowWeight}, base total: ${w}`);
-                        }
-                        if (config.BACK_PREF > 3) {
-                            const screenPos = r <= 9 ? '🔝TOP' : '🔽BOTTOM';
-                            const yPos = r * VISUAL_CONFIG.CELL_SIZE;
-                            console.log(`Row ${r} (Y=${yPos}) ${screenPos} screen → back weight: ${backRowWeight.toFixed(0)}, total: ${w.toFixed(1)}`);
-                        }
-                        
-                        // Aisle preference
-                        const aisleWeight = Math.min(c - c0, c1 - c) <= 1 ? config.AISLE_PREF * 2 : 0;
-                        w += aisleWeight;
-                        
-                        // Social distance preference (fewer neighbors = higher weight)
-                        // If adjacentCount = 0 (no neighbors), weight += max * socialDistance
-                        // If adjacentCount = 8 (max neighbors), weight += 0 * socialDistance
-                        const adjacentCount = this.countAdjacentSeated(grid, [r, c]);
-                        const socialWeight = (8 - adjacentCount) * config.SOCIAL_DISTANCE * 2;
-                        w += socialWeight;
-                        
-                        // Debug logging for weight issues
-                        if (config.BACK_PREF === 0 && Math.random() < 0.02) {
-                            console.log(`Seat [${r},${c}]: back=${backRowWeight}, aisle=${aisleWeight}, social=${socialWeight}, final=${w}`);
-                        }
-                        if (Math.random() < 0.01 && config.BACK_PREF > 0) { // Log 1% of seat evaluations
-                            console.log(`Seat [${r},${c}]: back=${backRowWeight}, aisle=${aisleWeight}, social=${socialWeight}, total=${w}`);
-                        }
-                        
-                        // Ensure minimum weight for valid seat selection, but preserve natural differences
-                        valid.push([[r, c], Math.max(w, 0.01)]);
+                        hasSeats = true;
+                        break;
                     }
+                }
+                if (hasSeats) {
+                    availableRows.push(r);
                 }
             }
             
-            if (valid.length === 0) return null;
-            const seats = valid.map(v => v[0]);
-            const weights = valid.map(v => v[1]);
+            if (availableRows.length === 0) return null;
+            
+            // Apply back row preference to select which row to focus on
+            let chosenRow;
+            if (config.BACK_PREF > 0) {
+                const rowWeights = availableRows.map(r => {
+                    const rowFromFront = r - SIM_CONSTANTS.SEAT_ROWS.START;
+                    const maxRowFromFront = SIM_CONSTANTS.SEAT_ROWS.END - SIM_CONSTANTS.SEAT_ROWS.START - 1;
+                    return Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
+                });
+                chosenRow = Utils.weightedChoice(availableRows, rowWeights);
+                
+                if (config.BACK_PREF > 3 && Math.random() < 0.1) {
+                    console.log(`🎯 ROW SELECTION: Available rows [${availableRows.join(',')}], chose row ${chosenRow} (back pref: ${config.BACK_PREF})`);
+                }
+            } else {
+                // No back preference - choose randomly
+                chosenRow = availableRows[Math.floor(Math.random() * availableRows.length)];
+            }
+            
+            // STEP 2: Within chosen row, find seats and apply aisle + social distance preferences
+            const validSeats = [];
+            for (let c = c0; c <= c1; c++) {
+                const key = `${chosenRow},${c}`;
+                if (grid[chosenRow][c] === CELL_TYPES.SEAT && !assigned.has(key)) {
+                    let seatWeight = 1; // Base weight
+                    
+                    // Apply aisle preference (edge seats get bonus)
+                    const distFromEdge = Math.min(c - c0, c1 - c);
+                    if (distFromEdge <= 1 && config.AISLE_PREF > 0) {
+                        seatWeight += config.AISLE_PREF * 3; // Aisle bonus
+                    }
+                    
+                    // Apply social distancing (avoid crowded seats)
+                    const adjacentCount = this.countAdjacentSeated(grid, [chosenRow, c]);
+                    const socialBonus = (8 - adjacentCount) * config.SOCIAL_DISTANCE;
+                    seatWeight += socialBonus;
+                    
+                    // Debug logging
+                    if (Math.random() < 0.05) {
+                        const aisleBonus = distFromEdge <= 1 ? config.AISLE_PREF * 3 : 0;
+                        console.log(`💺 SEAT [${chosenRow},${c}]: aisle=${aisleBonus}, social=${socialBonus}, total=${seatWeight}`);
+                    }
+                    
+                    validSeats.push([[chosenRow, c], Math.max(seatWeight, 0.01)]);
+                }
+            }
+            
+            if (validSeats.length === 0) return null;
+            
+            // STEP 3: Choose final seat within the chosen row
+            const seats = validSeats.map(v => v[0]);
+            const weights = validSeats.map(v => v[1]);
             const chosenSeat = Utils.weightedChoice(seats, weights);
             
-            // Log seat choice when back preference is high
-            if (config.BACK_PREF > 8 && chosenSeat && Math.random() < 0.3) {
-                const [chosenRow, chosenCol] = chosenSeat;
-                const chosenWeight = weights[seats.findIndex(([r,c]) => r === chosenRow && c === chosenCol)];
-                const screenPos = chosenRow <= 9 ? '🔝TOP' : '🔽BOTTOM';
-                console.log(`✅ CHOSEN: Row ${chosenRow} ${screenPos} with weight ${chosenWeight.toFixed(0)}`);
+            if (config.BACK_PREF > 3 && Math.random() < 0.1) {
+                console.log(`✅ FINAL CHOICE: Row ${chosenRow}, Seat [${chosenSeat[0]},${chosenSeat[1]}]`);
             }
             
             return chosenSeat;
@@ -638,7 +651,7 @@ class Agent {
 // ===== RENDERER CLASS ===== //
 
 class Renderer {
-    constructor(canvas, chartCanvas, seatedCountChart, percentDistChart) {
+    constructor(canvas, chartCanvas, seatedCountChart, percentDistChart, speedChart) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.chartCanvas = chartCanvas;
@@ -647,6 +660,8 @@ class Renderer {
         this.seatedCountCtx = seatedCountChart ? seatedCountChart.getContext('2d') : null;
         this.percentDistChart = percentDistChart;
         this.percentDistCtx = percentDistChart ? percentDistChart.getContext('2d') : null;
+        this.speedChart = speedChart;
+        this.speedCtx = speedChart ? speedChart.getContext('2d') : null;
         
         this.setupCanvases();
     }
@@ -687,6 +702,16 @@ class Renderer {
                 this.percentDistChart.style.width = '400px';
                 this.percentDistChart.style.height = '200px';
                 this.percentDistCtx.scale(dpr, dpr);
+            }
+            
+            // Resize speed chart
+            if (this.speedChart && this.speedCtx) {
+                const container = this.speedChart.parentElement;
+                this.speedChart.width = 400 * dpr;
+                this.speedChart.height = 200 * dpr;
+                this.speedChart.style.width = '400px';
+                this.speedChart.style.height = '200px';
+                this.speedCtx.scale(dpr, dpr);
             }
         } catch (error) {
             console.error('History chart resize error:', error);
@@ -902,6 +927,10 @@ class Renderer {
         
         this.drawSeatedCountChart(runHistory);
         this.drawPercentDistributionChart(runHistory);
+        
+        if (this.speedCtx) {
+            this.drawSpeedChart(runHistory);
+        }
     }
 
     drawSeatedCountChart(runHistory) {
@@ -1060,6 +1089,80 @@ class Renderer {
             ctx.fillText(value.toString(), padding - 5, y + 3);
         }
     }
+
+    drawSpeedChart(runHistory) {
+        const canvas = this.speedChart;
+        const ctx = this.speedCtx;
+        const displayWidth = 400;
+        const displayHeight = 200;
+        
+        ctx.clearRect(0, 0, displayWidth, displayHeight);
+        
+        const padding = 40;
+        const chartWidth = displayWidth - 2 * padding;
+        const chartHeight = displayHeight - 2 * padding;
+        
+        const speeds = runHistory.map(run => parseFloat(run.seatingSpeed));
+        const maxSpeed = Math.max(...speeds, 1);
+        const minSpeed = Math.min(...speeds, 0);
+        
+        // Round to reasonable increments for speed (0.5 people/tick increments)
+        const maxRounded = Math.ceil(maxSpeed * 2) / 2;
+        const minRounded = Math.floor(minSpeed * 2) / 2;
+        const range = maxRounded - minRounded || 0.5;
+        
+        // Background
+        ctx.fillStyle = '#f9f9f9';
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
+        
+        // Grid lines
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = padding + (i * chartHeight) / 5;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(padding + chartWidth, y);
+            ctx.stroke();
+        }
+        
+        // Draw bars
+        const barWidth = chartWidth / runHistory.length;
+        runHistory.forEach((run, index) => {
+            const speed = parseFloat(run.seatingSpeed);
+            const barHeight = ((speed - minRounded) / range) * chartHeight;
+            const x = padding + index * barWidth + barWidth * 0.1;
+            const y = padding + chartHeight - barHeight;
+            
+            ctx.fillStyle = '#FF9800';
+            ctx.fillRect(x, y, barWidth * 0.8, barHeight);
+            
+            // Labels
+            ctx.fillStyle = '#333';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(run.seatingSpeed, x + barWidth * 0.4, y - 5);
+        });
+        
+        // Axes
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + chartHeight);
+        ctx.lineTo(padding + chartWidth, padding + chartHeight);
+        ctx.stroke();
+        
+        // Y-axis labels
+        ctx.fillStyle = '#666';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'right';
+        for (let i = 0; i <= 5; i++) {
+            const value = (minRounded + (range / 5) * (5 - i)).toFixed(1);
+            const y = padding + (i * chartHeight) / 5;
+            ctx.fillText(value, padding - 5, y + 3);
+        }
+    }
 }
 
 // ===== SIMULATION ENGINE ===== //
@@ -1214,13 +1317,20 @@ class SimulationEngine {
         const moving = this.agents.filter(a => !a.seated && !a.standing).length;
         const seatedPercent = this.spawned > 0 ? ((seated / this.spawned) * 100).toFixed(1) : 0;
         
+        // Calculate seating speed (people per tick)
+        const seatingSpeed = this.time > 0 ? (seated / this.time).toFixed(2) : '0.00';
+        const totalSettled = seated + standing;
+        const overallSpeed = this.time > 0 ? (totalSettled / this.time).toFixed(2) : '0.00';
+        
         return {
             time: this.time,
             spawned: this.spawned,
             seated,
             standing,
             moving,
-            seatedPercent
+            seatedPercent,
+            seatingSpeed,
+            overallSpeed
         };
     }
 }
@@ -1247,6 +1357,7 @@ class UIController {
             chartCanvas: document.getElementById('seatingChart'),
             seatedCountChart: document.getElementById('seatedCountChart'),
             percentDistChart: document.getElementById('percentDistChart'),
+            speedChart: document.getElementById('speedChart'),
             buildBtn: document.getElementById('buildBtn'),
             startBtn: document.getElementById('startBtn'),
             pauseBtn: document.getElementById('pauseBtn'),
@@ -1264,7 +1375,8 @@ class UIController {
                 this.elements.canvas, 
                 this.elements.chartCanvas,
                 this.elements.seatedCountChart,
-                this.elements.percentDistChart
+                this.elements.percentDistChart,
+                this.elements.speedChart
             );
             this.updateCanvasSize();
         }
@@ -1490,7 +1602,8 @@ class UIController {
         const stats = this.simulation.getStats();
         this.elements.stats.textContent = 
             `Time: ${stats.time} | Arrived: ${stats.spawned} | Moving: ${stats.moving} | ` +
-            `Seated: ${stats.seated} (${stats.seatedPercent}%) | Standing: ${stats.standing}`;
+            `Seated: ${stats.seated} (${stats.seatedPercent}%) | Standing: ${stats.standing} | ` +
+            `Speed: ${stats.seatingSpeed} people/tick`;
     }
 
     showCompletionMessage(result) {
@@ -1500,9 +1613,11 @@ class UIController {
         } else {
             const seatedPercent = this.simulation.spawned > 0 ? 
                 ((result.seated / this.simulation.spawned) * 100).toFixed(1) : 0;
+            const avgSpeed = this.simulation.time > 0 ? (result.seated / this.simulation.time).toFixed(2) : '0.00';
             this.elements.completionMsg.textContent = 
                 `✅ Simulation Complete! Time: ${this.simulation.time} ticks | ` +
-                `${result.seated} seated (${seatedPercent}%), ${result.standing} standing`;
+                `${result.seated} seated (${seatedPercent}%), ${result.standing} standing | ` +
+                `Avg Speed: ${avgSpeed} people/tick`;
             this.elements.completionMsg.style.background = '#48bb78';
         }
         this.elements.completionMsg.style.display = 'block';
@@ -1527,12 +1642,15 @@ class UIController {
         const seatedPercent = this.simulation.spawned > 0 ? 
             ((result.seated / this.simulation.spawned) * 100).toFixed(1) : 0;
         
+        const avgSpeed = this.simulation.time > 0 ? (result.seated / this.simulation.time).toFixed(2) : '0.00';
+        
         const historyEntry = {
             timestamp: new Date(),
             time: this.simulation.time,
             seated: result.seated,
             standing: result.standing,
             seatedPercent: seatedPercent,
+            seatingSpeed: avgSpeed,
             config: {
                 agents: config.NUM_AGENTS,
                 blocks: config.NUM_BLOCKS,
@@ -1574,7 +1692,7 @@ class UIController {
                 <div>
                     <strong>Run ${this.runHistory.length - index}:</strong> 
                     ${entry.seated} seated (${entry.seatedPercent}%), ${entry.standing} standing
-                    <br><small>Agents: ${entry.config.agents}, Blocks: ${entry.config.blocks}, Social: ${entry.config.socialDistance}, Back: ${entry.config.backPref}</small>
+                    <br><small>Speed: ${entry.seatingSpeed} people/tick | Agents: ${entry.config.agents}, Blocks: ${entry.config.blocks}</small>
                 </div>
                 <div class="history-time">${timeStr}</div>
             `;

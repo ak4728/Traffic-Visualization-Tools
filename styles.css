@@ -286,6 +286,10 @@ canvas {
     margin-top: 15px;
 }
 
+.history-charts:has(.chart-container:nth-child(3)) {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
 .chart-container {
     text-align: center;
 }
