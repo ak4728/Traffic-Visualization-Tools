@@ -1341,6 +1341,20 @@ class SimulationEngine {
             this.chartData.time.push(this.time);
             this.chartData.seated.push(seated);
             this.chartData.standing.push(standing);
+
+            // Debug: periodic per-block seating distribution to verify block usage
+            if (this.time % 50 === 0) { // roughly every 50 ticks
+                const perBlock = {};
+                this.agents.forEach(a => {
+                    if (a.seated) {
+                        perBlock[a.block] = (perBlock[a.block] || 0) + 1;
+                    }
+                });
+                const summary = Object.keys(this.seatBlocks)
+                    .map(k => `${k}:${perBlock[k] || 0}`)
+                    .join(', ');
+                console.log(`🧩 Per-block seated counts @t=${this.time}: ${summary}`);
+            }
             
             // Check completion
             const allSettled = this.agents.every(a => a.seated || a.standing);
