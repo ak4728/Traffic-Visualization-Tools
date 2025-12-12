@@ -459,23 +459,44 @@ class SeatSelectionEngine {
             }
             
             if (availableRows.length === 0) return null;
+
+            // Optional hard exclusion of front rows based on back preference
+            // Goal: when BACK_PREF is moderate/high, many agents simply won't sit in the very front rows
+            let candidateRows = availableRows;
+            if (config.BACK_PREF > 0) {
+                const startRow = SIM_CONSTANTS.SEAT_ROWS.START;
+                // Map BACK_PREF (0-5) to how many front rows to avoid when possible
+                // 0 → 0, 1 → 0, 2-3 → 1 row, 4-5 → 2 rows
+                const banFrontRows = config.BACK_PREF >= 4 ? 2 : (config.BACK_PREF >= 2 ? 1 : 0);
+                if (banFrontRows > 0) {
+                    const filtered = availableRows.filter(r => (r - startRow) >= banFrontRows);
+                    if (filtered.length > 0) {
+                        candidateRows = filtered;
+                        if (Math.random() < 0.2) {
+                            console.log(`🚫 Front rows banned=${banFrontRows}; candidates=[${candidateRows.join(',')}] from available=[${availableRows.join(',')}]`);
+                        }
+                    }
+                }
+            }
             
             // Apply back row preference to select which row to focus on
             let chosenRow;
             if (config.BACK_PREF > 0) {
-                const rowWeights = availableRows.map(r => {
-                    const rowFromFront = r - SIM_CONSTANTS.SEAT_ROWS.START;
-                    const maxRowFromFront = SIM_CONSTANTS.SEAT_ROWS.END - SIM_CONSTANTS.SEAT_ROWS.START - 1;
-                    return Math.pow(2.0, maxRowFromFront - rowFromFront) * config.BACK_PREF;
+                const rowWeights = candidateRows.map(r => {
+                    const rowFromFront = r - SIM_CONSTANTS.SEAT_ROWS.START; // 0 at front, increases toward back
+                    // Ensure no preference when BACK_PREF=0, and strong bias when high
+                    // Back rows (larger rowFromFront) receive higher weights
+                    return 1 + config.BACK_PREF * Math.pow(2.0, rowFromFront);
                 });
-                chosenRow = Utils.weightedChoice(availableRows, rowWeights);
+                chosenRow = Utils.weightedChoice(candidateRows, rowWeights);
                 
-                if (config.BACK_PREF > 3 && Math.random() < 0.1) {
-                    console.log(`🎯 ROW SELECTION: Available rows [${availableRows.join(',')}], chose row ${chosenRow} (back pref: ${config.BACK_PREF})`);
+                if (config.BACK_PREF > 3 && Math.random() < 0.25) {
+                    const dbg = candidateRows.map((r,i)=>`${r}:${rowWeights[i].toFixed(1)}`).join(', ');
+                    console.log(`🎯 ROW SELECTION: rows[w]=${dbg} ⇒ chose ${chosenRow} (BACK_PREF=${config.BACK_PREF})`);
                 }
             } else {
                 // No back preference - choose randomly
-                chosenRow = availableRows[Math.floor(Math.random() * availableRows.length)];
+                chosenRow = candidateRows[Math.floor(Math.random() * candidateRows.length)];
             }
             
             // STEP 2: Within chosen row, find seats and apply aisle + social distance preferences
