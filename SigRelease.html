@@ -173,9 +173,7 @@
             border-radius: 2px;
         }
         
-        .signal-2 .arrival-detection {
-            /* Override - already positioned via left calc */
-        }
+        /* Removed empty override for .signal-2 .arrival-detection (no-op) */
 
         .vehicle {
             position: absolute;
@@ -521,6 +519,8 @@
     </div>
 
     <script>
+        // Debug toggle for console noise control
+        var DEBUG = false;
         // State variables
         var isRunning = false;
         var time = 0;
@@ -636,9 +636,14 @@
         function generateHeadway(type, mean) {
             if (type == 'deterministic') {
                 return mean;
+            } else if (type == 'uniform') {
+                // Uniform in [0, 2T], mean headway = T
+                return Math.random() * 2 * mean;
             } else if (type == 'exponential') {
+                // Negative exponential with mean = T
                 return -mean * Math.log(1 - Math.random());
             }
+            // Fallback: deterministic
             return mean;
         }
 
@@ -832,7 +837,7 @@
                     if (!v.arrivedAtSignal2 && v.position >= arrivalDetectionPos) {
                         v.arrivedAtSignal2 = true;
                         arrivalTimes.push(time);
-                        console.log('Vehicle arrived at signal 2 at time:', time.toFixed(2), 'position:', v.position.toFixed(0));
+                        if (DEBUG) console.log('Vehicle arrived at signal 2 at time:', time.toFixed(2), 'position:', v.position.toFixed(0));
                     }
                 } else {
                     // After second signal - count as released
