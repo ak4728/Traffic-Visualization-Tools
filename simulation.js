@@ -477,6 +477,31 @@ class SeatSelectionEngine {
                         }
                     }
                 }
+                // Backend-only probabilistic front aversion: some agents simply won't sit in absolute front rows
+                // Compute a probability from BACK_PREF; higher back pref => more likely to avoid front row entirely
+                if (candidateRows.length > 0) {
+                    const sorted = [...candidateRows].sort((a,b)=>a-b);
+                    const frontMost = sorted[0];
+                    const secondFront = sorted[1];
+                    const pAvoidFront = Math.min(0.15 + 0.15 * config.BACK_PREF, 0.85); // 0.15..0.85
+                    const pAvoidSecond = config.BACK_PREF >= 4 ? 0.35 : (config.BACK_PREF >= 3 ? 0.2 : 0.0);
+                    let probFiltered = candidateRows;
+                    if (Math.random() < pAvoidFront) {
+                        const tmp = probFiltered.filter(r => r !== frontMost);
+                        if (tmp.length > 0) probFiltered = tmp;
+                    }
+                    if (probFiltered.length > 1 && secondFront !== undefined && Math.random() < pAvoidSecond) {
+                        const tmp2 = probFiltered.filter(r => r !== secondFront);
+                        if (tmp2.length > 0) probFiltered = tmp2;
+                    }
+                    // Only adopt probabilistic filtering if we still have options
+                    if (probFiltered.length > 0 && probFiltered.length !== candidateRows.length) {
+                        if (Math.random() < 0.2) {
+                            console.log(`🙅 Front aversion applied → rows=[${probFiltered.join(',')}] (from ${candidateRows.join(',')})`);
+                        }
+                        candidateRows = probFiltered;
+                    }
+                }
             }
             
             // Apply back row preference to select which row to focus on
