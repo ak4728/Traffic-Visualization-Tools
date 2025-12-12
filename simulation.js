@@ -318,73 +318,75 @@ class PathfindingEngine {
         }
     }
 
-    static pickBlockBasedOnGate(gateCol, numBlocks, gates) {
-        // Dynamic block selection based on gate position and number of blocks
-        if (!gates || gates.length === 0 || numBlocks <= 0) {
+    static pickBlockBasedOnGate(gateCol, seatBlocks, gates, assigned) {
+        // Distance- and availability-weighted block selection
+        const blockIds = Object.keys(seatBlocks).map(Number);
+        if (!gates || gates.length === 0 || blockIds.length === 0) {
             return 0; // fallback
         }
-        
-        // Find which gate this column is closest to
-        const gateIndex = gates.findIndex(gate => gate[1] === gateCol);
-        
-        if (gateIndex === -1) {
-            // If not an exact gate match, find closest gate
-            const closestGateIndex = gates.reduce((closest, gate, index) => {
-                const currentDistance = Math.abs(gate[1] - gateCol);
-                const closestDistance = Math.abs(gates[closest][1] - gateCol);
-                return currentDistance < closestDistance ? index : closest;
-            }, 0);
-            
-            // Assign blocks around the closest gate
-            const blockSpan = Math.max(1, Math.floor(numBlocks / gates.length));
-            const baseBlock = Math.min(closestGateIndex * blockSpan, numBlocks - 1);
-            const possibleBlocks = [];
-            const weights = [];
-            
-            // Add the primary block
-            possibleBlocks.push(baseBlock);
-            weights.push(0.6);
-            
-            // Add adjacent blocks with lower weights
-            if (baseBlock > 0) {
-                possibleBlocks.push(baseBlock - 1);
-                weights.push(0.2);
+
+        // Precompute block centers and capacities
+        const blockCenters = {};
+        const blockCap = {};
+        for (const b of blockIds) {
+            const [c0, c1] = seatBlocks[b];
+            blockCenters[b] = (c0 + c1) / 2;
+            // Capacity = seats per row in block * number of seating rows
+            const seatsPerRow = c1 - c0 + 1;
+            const seatRows = SIM_CONSTANTS.SEAT_ROWS.END - SIM_CONSTANTS.SEAT_ROWS.START;
+            blockCap[b] = Math.max(1, seatsPerRow * seatRows);
+        }
+
+        // Compute per-block assigned counts (approximate occupancy)
+        const assignedCounts = {};
+        if (assigned && assigned.forEach) {
+            assigned.forEach(key => {
+                // key format: "r,c"
+                const parts = key.split(',');
+                if (parts.length !== 2) return;
+                const col = parseInt(parts[1], 10);
+                for (const b of blockIds) {
+                    const [c0, c1] = seatBlocks[b];
+                    if (col >= c0 && col <= c1) {
+                        assignedCounts[b] = (assignedCounts[b] || 0) + 1;
+                        break;
+                    }
+                }
+            });
+        }
+
+        // Build weights: closer to gate center and more availability -> higher weight
+        const centers = blockIds.map(b => blockCenters[b]);
+        const avgBlockWidth = Math.max(1, Math.round(centers.length > 1 ? Math.abs(centers[1] - centers[0]) : (seatBlocks[0][1] - seatBlocks[0][0] + 1)));
+        const scale = Math.max(6, avgBlockWidth); // distance scale to smooth weights
+
+        const weights = blockIds.map(b => {
+            const center = blockCenters[b];
+            const dist = Math.abs(center - gateCol);
+            const distanceWeight = Math.exp(- (dist * dist) / (2 * scale * scale)); // Gaussian
+            const used = assignedCounts[b] || 0;
+            const availRatio = Math.max(0, 1 - used / blockCap[b]); // 0..1
+            const availabilityWeight = 0.5 + 0.5 * availRatio; // keep nonzero
+            return Math.max(1e-6, distanceWeight * availabilityWeight);
+        });
+
+        // Small epsilon to ensure at least some preference near closest block
+        const totalW = weights.reduce((a, b) => a + b, 0);
+        if (totalW === 0) {
+            // Fallback: choose the physically closest block
+            let best = blockIds[0], bestD = Infinity;
+            for (const b of blockIds) {
+                const d = Math.abs(blockCenters[b] - gateCol);
+                if (d < bestD) { bestD = d; best = b; }
             }
-            if (baseBlock < numBlocks - 1) {
-                possibleBlocks.push(baseBlock + 1);
-                weights.push(0.2);
-            }
-            
-            return Utils.weightedChoice(possibleBlocks, weights);
+            return best;
         }
-        
-        // Original logic adapted for dynamic blocks
-        const blockSpan = numBlocks / gates.length;
-        const baseBlock = Math.floor(gateIndex * blockSpan);
-        
-        // Create weighted choices around the base block
-        const possibleBlocks = [];
-        const weights = [];
-        
-        // Primary block gets highest weight
-        if (baseBlock < numBlocks) {
-            possibleBlocks.push(baseBlock);
-            weights.push(0.6);
+
+        if (Math.random() < 0.2) {
+            const dbg = blockIds.map((b,i)=>`${b}:${weights[i].toFixed(3)}`).join(', ');
+            console.log(`Gate ${gateCol} -> blocks[w]=${dbg}`);
         }
-        
-        // Adjacent blocks get lower weights
-        if (baseBlock + 1 < numBlocks) {
-            possibleBlocks.push(baseBlock + 1);
-            weights.push(0.3);
-        }
-        
-        if (baseBlock > 0 && possibleBlocks.length < 2) {
-            possibleBlocks.push(baseBlock - 1);
-            weights.push(0.1);
-        }
-        
-        console.log(`Gate ${gateCol} -> blocks [${possibleBlocks.join(',')}] with weights [${weights.map(w => w.toFixed(1)).join(',')}]`);
-        return Utils.weightedChoice(possibleBlocks, weights);
+        return Utils.weightedChoice(blockIds, weights);
     }
 
     static pickPreferredCorridorCell(block, seatCol, blockToCorridorCells) {
@@ -624,8 +626,7 @@ class Agent {
             this.willStand = false;
             
             const gateC = spawn[1];
-            const numBlocks = Object.keys(seatBlocks).length;
-            this.block = PathfindingEngine.pickBlockBasedOnGate(gateC, numBlocks, gates);
+            this.block = PathfindingEngine.pickBlockBasedOnGate(gateC, seatBlocks, gates, assigned);
             
             if (this.block >= Object.keys(seatBlocks).length) {
                 this.block = Object.keys(seatBlocks).length - 1;
