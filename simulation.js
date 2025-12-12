@@ -1660,10 +1660,22 @@ class UIController {
         if (!this.simulation) return;
         
         const stats = this.simulation.getStats();
+        // Per-block seated summary
+        const perBlock = {};
+        this.simulation.agents.forEach(a => {
+            if (a.seated) {
+                perBlock[a.block] = (perBlock[a.block] || 0) + 1;
+            }
+        });
+        const blockKeys = Object.keys(this.simulation.seatBlocks);
+        const blockSummary = blockKeys
+            .map(k => `${k}:${perBlock[k] || 0}`)
+            .join(', ');
+
         this.elements.stats.textContent = 
             `Time: ${stats.time} | Arrived: ${stats.spawned} | Moving: ${stats.moving} | ` +
             `Seated: ${stats.seated} (${stats.seatedPercent}%) | Standing: ${stats.standing} | ` +
-            `Speed: ${stats.seatingSpeed} people/tick`;
+            `Speed: ${stats.seatingSpeed} people/tick | Blocks: ${blockSummary}`;
     }
 
     showCompletionMessage(result) {
