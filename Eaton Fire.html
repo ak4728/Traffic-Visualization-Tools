@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eaton Fire: Data Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        /* New York Times inspired typography and styling */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&family=Inter:wght@400;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Serif', Georgia, serif;
+            background-color: #ffffff;
+            color: #121212;
+            line-height: 1.6;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        /* Header styling */
+        header {
+            border-bottom: 1px solid #121212;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+        }
+        
+        .kicker {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 42px;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 15px;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 18px;
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        
+        .byline {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 13px;
+            color: #666;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e5e5;
+        }
+        
+        .byline time {
+            color: #999;
+        }
+        
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+            padding: 30px 0;
+            border-top: 1px solid #e5e5e5;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .stat-card {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 36px;
+            font-weight: 700;
+            color: #121212;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            font-weight: 600;
+        }
+        
+        /* Section styling */
+        .section {
+            margin: 60px 0;
+            padding-top: 20px;
+            clear: both;
+        }
+        
+        .section-title {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #121212;
+            padding-bottom: 10px;
+        }
+        
+        .section-description {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.7;
+        }
+        
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 30px 0;
+            background: #fafafa;
+            padding: 30px 20px 20px 20px;
+            border: 1px solid #e5e5e5;
+        }
+        
+        .chart-title {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: #121212;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .chart-note {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 11px;
+            color: #999;
+            margin-top: 15px;
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+            font-style: italic;
+            clear: both;
+            display: block;
+        }
+        
+        /* Legend */
+        .chart-legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        
+        /* Footer */
+        footer {
+            margin-top: 80px;
+            padding-top: 30px;
+            border-top: 1px solid #e5e5e5;
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+        }
+        
+        /* Methodology section */
+        .methodology {
+            background: #fafafa;
+            padding: 30px;
+            margin: 40px 0;
+            border-left: 3px solid #121212;
+        }
+        
+        .methodology h3 {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 15px;
+        }
+        
+        .methodology p {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #666;
+        }
+        
+        /* Timeline section */
+        .timeline-section {
+            margin: 60px 0;
+        }
+        
+        .timeline {
+            position: relative;
+            padding: 40px 0;
+            margin-top: 30px;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #121212;
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-left: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -4px;
+            top: 5px;
+            width: 10px;
+            height: 10px;
+            background: #121212;
+            border-radius: 50%;
+        }
+        
+        .timeline-date {
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+        
+        .timeline-title {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #121212;
+        }
+        
+        .timeline-description {
+            font-family: 'Noto Serif', Georgia, serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #666;
+        }
+        
+        .timeline-metric {
+            display: inline-block;
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 12px;
+            color: #121212;
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 3px;
+            margin-right: 8px;
+            margin-top: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 32px;
+            }
+            
+            .subtitle {
+                font-size: 16px;
+            }
+            
+            .chart-container {
+                height: 300px;
+                padding: 20px 10px 10px 10px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="kicker">California Wildfire Analysis</div>
+            <h1>How the Eaton Fire Spread Through Los Angeles County</h1>
+            <p class="subtitle">A data-driven look at the progression of one of the most destructive wildfires in Southern California history, from ignition to containment.</p>
+            <div class="byline">
+                Data Analysis | <time datetime="2025-01-27">Jan. 27, 2025</time>
+            </div>
+        </header>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-value" id="total-acres">14,021</span>
+                <span class="stat-label">Acres Burned</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="final-containment">95%</span>
+                <span class="stat-label">Containment</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="structures-lost">9,418</span>
+                <span class="stat-label">Structures Destroyed</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="total-casualties">17</span>
+                <span class="stat-label">Fatalities</span>
+            </div>
+        </div>
+        
+        <article>
+            <p class="section-description">
+                The Eaton Fire ignited on January 7, 2025, near Altadena Drive and Midwick Drive in the Altadena/Pasadena area of Los Angeles County. Fueled by extreme Santa Ana winds and dry conditions, the fire rapidly expanded from just 10 acres to over 14,000 acres within days, destroying thousands of homes and forcing mass evacuations across affected communities.
+            </p>
+        </article>
+        
+        <section class="section">
+            <h2 class="section-title">Fire Growth and Containment</h2>
+            <p class="section-description">
+                The fire's explosive growth in the first 48 hours overwhelmed initial response efforts. Containment began slowly on January 11 and steadily increased over the following two weeks.
+            </p>
+            
+            <div class="chart-container">
+                <div class="chart-title">Fire Size and Containment Progress Over Time</div>
+                <canvas id="growthChart"></canvas>
+                <div class="chart-note">Data from CAL FIRE incident reports. Containment percentage shown on right axis.</div>
+            </div>
+        </section>
+        
+        <section class="section">
+            <h2 class="section-title">Structural Impact</h2>
+            <p class="section-description">
+                The Eaton Fire destroyed 9,418 structures and damaged another 1,073, making it one of the most destructive fires in California history. Most damage occurred during the initial spread between January 7-9.
+            </p>
+            
+            <div class="chart-container">
+                <div class="chart-title">Cumulative Structure Damage Assessment</div>
+                <canvas id="structuresChart"></canvas>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #d62728;"></span>
+                        <span>Destroyed</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #ff7f0e;"></span>
+                        <span>Damaged</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #2ca02c;"></span>
+                        <span>Threatened</span>
+                    </div>
+                </div>
+                <div class="chart-note">Structure assessments were updated continuously as damage inspection teams completed surveys.</div>
+            </div>
+        </section>
+        
+        <section class="section">
+            <h2 class="section-title">Human Cost</h2>
+            <p class="section-description">
+                The fire resulted in 17 civilian fatalities and 9 injuries, with additional firefighter injuries reported throughout the incident. The human toll underscores the deadly nature of fast-moving urban-interface fires.
+            </p>
+            
+            <div class="chart-container">
+                <div class="chart-title">Reported Casualties Over Time</div>
+                <canvas id="casualtiesChart"></canvas>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #121212;"></span>
+                        <span>Fatalities</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #ff7f0e;"></span>
+                        <span>Total Injuries</span>
+                    </div>
+                </div>
+                <div class="chart-note">Casualty counts may change as investigations continue. Includes both civilian and firefighter injuries.</div>
+            </div>
+        </section>
+        
+        <section class="section">
+            <h2 class="section-title">Daily Containment Progress</h2>
+            <p class="section-description">
+                After reaching maximum size on January 11, firefighters made steady progress in establishing containment lines. The fire reached 95% containment by January 22.
+            </p>
+            
+            <div class="chart-container">
+                <div class="chart-title">Containment Percentage by Date</div>
+                <canvas id="containmentChart"></canvas>
+                <div class="chart-note">Containment represents the percentage of the fire's perimeter secured by control lines.</div>
+            </div>
+        </section>
+        
+        <section class="timeline-section">
+            <h2 class="section-title">Timeline of Events</h2>
+            <p class="section-description">
+                A chronological account of the Eaton Fire's progression from ignition through containment, marking key milestones in the firefighting effort.
+            </p>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-date">January 7, 2025 — Evening</div>
+                    <div class="timeline-title">Fire Ignites</div>
+                    <div class="timeline-description">
+                        Fire starts near Altadena Drive and Midwick Drive in the Altadena/Pasadena area.
+                        <br>
+                        <span class="timeline-metric">10 acres</span>
+                        <span class="timeline-metric">0% contained</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 7 — Late Evening</div>
+                    <div class="timeline-title">Rapid Expansion</div>
+                    <div class="timeline-description">
+                        Fire grows to 400 acres as Santa Ana winds drive rapid spread. Unified command established with LA County Fire, Pasadena Fire, and US Forest Service.
+                        <br>
+                        <span class="timeline-metric">400 acres</span>
+                        <span class="timeline-metric">Evacuations begin</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 8, 2025</div>
+                    <div class="timeline-title">Fire Explodes Overnight</div>
+                    <div class="timeline-description">
+                        Fire grows to 1,000 acres by morning. Unsafe drinking water notices issued for Pasadena and Foothill areas as debris impacts water systems.
+                        <br>
+                        <span class="timeline-metric">1,000 acres</span>
+                        <span class="timeline-metric">Multiple evacuation zones</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 9, 2025</div>
+                    <div class="timeline-title">Catastrophic Spread</div>
+                    <div class="timeline-description">
+                        Fire reaches 10,600 acres with mass evacuations across Altadena and Pasadena. First structure assessments show approximately 1,000 homes destroyed. First fatalities confirmed.
+                        <br>
+                        <span class="timeline-metric">10,600 acres</span>
+                        <span class="timeline-metric">~1,000 structures destroyed</span>
+                        <span class="timeline-metric">2 fatalities</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 10, 2025</div>
+                    <div class="timeline-title">Near Maximum Size</div>
+                    <div class="timeline-description">
+                        Fire grows to 13,690 acres. Damage assessments show at least 4,000 structures destroyed and 35,000 threatened.
+                        <br>
+                        <span class="timeline-metric">13,690 acres</span>
+                        <span class="timeline-metric">4,000+ structures destroyed</span>
+                        <span class="timeline-metric">5 fatalities</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 11, 2025</div>
+                    <div class="timeline-title">Fire Reaches Peak Size</div>
+                    <div class="timeline-description">
+                        Fire reaches maximum extent of 14,021 acres. First containment achieved at 10%. At least 5,000 structures confirmed destroyed.
+                        <br>
+                        <span class="timeline-metric">14,021 acres</span>
+                        <span class="timeline-metric">10% contained</span>
+                        <span class="timeline-metric">5,000+ structures destroyed</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 12-13, 2025</div>
+                    <div class="timeline-title">Containment Progress Begins</div>
+                    <div class="timeline-description">
+                        Containment increases from 15% to 27%. Damage assessments show 7,000 structures destroyed. Structures threatened decreases to 14,175.
+                        <br>
+                        <span class="timeline-metric">27% contained</span>
+                        <span class="timeline-metric">7,000 structures destroyed</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 15, 2025</div>
+                    <div class="timeline-title">Nearly Halfway Contained</div>
+                    <div class="timeline-description">
+                        Containment reaches 45%. Updated damage assessments confirm 9,000 structures destroyed and 1,000 damaged. Death toll rises to 16.
+                        <br>
+                        <span class="timeline-metric">45% contained</span>
+                        <span class="timeline-metric">9,000 structures destroyed</span>
+                        <span class="timeline-metric">16 fatalities</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 16-17, 2025</div>
+                    <div class="timeline-title">Over Halfway Contained</div>
+                    <div class="timeline-description">
+                        Containment increases from 50% to 65%. Final structure counts updated: 9,418 destroyed, 1,071 damaged. Threatened structures decrease to 8,992.
+                        <br>
+                        <span class="timeline-metric">65% contained</span>
+                        <span class="timeline-metric">9,418 structures destroyed</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 18-19, 2025</div>
+                    <div class="timeline-title">Approaching Full Containment</div>
+                    <div class="timeline-description">
+                        Containment reaches 81% as firefighters secure perimeter lines. Structure assessments finalized.
+                        <br>
+                        <span class="timeline-metric">81% contained</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 20-21, 2025</div>
+                    <div class="timeline-title">Nearing 90% Containment</div>
+                    <div class="timeline-description">
+                        Containment increases to 89%. Final death toll reaches 17. Structures threatened decrease to 6,775.
+                        <br>
+                        <span class="timeline-metric">89% contained</span>
+                        <span class="timeline-metric">17 fatalities (final)</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 22-23, 2025</div>
+                    <div class="timeline-title">95% Containment Achieved</div>
+                    <div class="timeline-description">
+                        Fire reaches 95% containment. CAL FIRE Incident Management Team 3 assumes unified command. Damage inspection teams complete 100% of structure surveys. Only 55 structures remain threatened.
+                        <br>
+                        <span class="timeline-metric">95% contained</span>
+                        <span class="timeline-metric">100% inspections complete</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-date">January 27, 2025</div>
+                    <div class="timeline-title">Command Transition</div>
+                    <div class="timeline-description">
+                        CAL FIRE transitions command back to LA County Fire. Cal OES begins overseeing recovery effort. Disaster Recovery Centers open in Altadena and Pasadena. Fire remains at 95% containment with cause still under investigation.
+                        <br>
+                        <span class="timeline-metric">95% contained</span>
+                        <span class="timeline-metric">Recovery phase begins</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <div class="methodology">
+            <h3>About This Data</h3>
+            <p>
+                All data sourced from California Department of Forestry and Fire Protection (CAL FIRE) incident reports and updates. The fire began on January 7, 2025, and was declared 95% contained as of January 27, 2025. The cause remains under investigation. Updates were issued multiple times daily during active fire spread, then less frequently as containment increased. Structure damage assessments were continuously refined as inspection teams completed surveys of the fire footprint.
+            </p>
+        </div>
+        
+        <footer>
+            <p>Data visualization created from CAL FIRE incident reports · Eaton Fire, Los Angeles County, California · January 2025</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Chart.js configuration for NYT style
+        Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+        Chart.defaults.font.size = 11;
+        Chart.defaults.color = '#666';
+        
+        const chartData = [{"date": "2025-01-07", "size": 400, "containment": 0.0, "structures_destroyed": 0, "structures_damaged": 0, "structures_threatened": 0, "fatalities": 0, "injuries": 0}, {"date": "2025-01-08", "size": 1000, "containment": 0.0, "structures_destroyed": 0, "structures_damaged": 0, "structures_threatened": 0, "fatalities": 0, "injuries": 0}, {"date": "2025-01-09", "size": 10600, "containment": 0.0, "structures_destroyed": 1000, "structures_damaged": 0, "structures_threatened": 0, "fatalities": 2, "injuries": 0}, {"date": "2025-01-10", "size": 13690, "containment": 0.0, "structures_destroyed": 4000, "structures_damaged": 500, "structures_threatened": 35000, "fatalities": 5, "injuries": 2}, {"date": "2025-01-11", "size": 14021, "containment": 10.0, "structures_destroyed": 5000, "structures_damaged": 600, "structures_threatened": 35000, "fatalities": 10, "injuries": 2}, {"date": "2025-01-12", "size": 14021, "containment": 15.0, "structures_destroyed": 7000, "structures_damaged": 800, "structures_threatened": 35000, "fatalities": 11, "injuries": 4}, {"date": "2025-01-13", "size": 14021, "containment": 27.0, "structures_destroyed": 7000, "structures_damaged": 800, "structures_threatened": 14175, "fatalities": 11, "injuries": 4}, {"date": "2025-01-14", "size": 14021, "containment": 33.0, "structures_destroyed": 7000, "structures_damaged": 800, "structures_threatened": 14175, "fatalities": 11, "injuries": 8}, {"date": "2025-01-15", "size": 14021, "containment": 45.0, "structures_destroyed": 9000, "structures_damaged": 1000, "structures_threatened": 14175, "fatalities": 16, "injuries": 8}, {"date": "2025-01-16", "size": 14021, "containment": 50.0, "structures_destroyed": 9000, "structures_damaged": 1000, "structures_threatened": 9850, "fatalities": 16, "injuries": 8}, {"date": "2025-01-17", "size": 14021, "containment": 65.0, "structures_destroyed": 9418, "structures_damaged": 1071, "structures_threatened": 8992, "fatalities": 16, "injuries": 8}, {"date": "2025-01-18", "size": 14021, "containment": 75.0, "structures_destroyed": 9418, "structures_damaged": 1071, "structures_threatened": 8992, "fatalities": 16, "injuries": 8}, {"date": "2025-01-19", "size": 14021, "containment": 81.0, "structures_destroyed": 9418, "structures_damaged": 1071, "structures_threatened": 8992, "fatalities": 16, "injuries": 8}, {"date": "2025-01-20", "size": 14021, "containment": 87.0, "structures_destroyed": 9418, "structures_damaged": 1069, "structures_threatened": 8992, "fatalities": 17, "injuries": 8}, {"date": "2025-01-21", "size": 14021, "containment": 89.0, "structures_destroyed": 9418, "structures_damaged": 1072, "structures_threatened": 6775, "fatalities": 17, "injuries": 9}, {"date": "2025-01-22", "size": 14021, "containment": 91.0, "structures_destroyed": 9418, "structures_damaged": 1073, "structures_threatened": 6775, "fatalities": 17, "injuries": 9}, {"date": "2025-01-23", "size": 14021, "containment": 95.0, "structures_destroyed": 9418, "structures_damaged": 1073, "structures_threatened": 55, "fatalities": 17, "injuries": 9}, {"date": "2025-01-25", "size": 14021, "containment": 95.0, "structures_destroyed": 9418, "structures_damaged": 1073, "structures_threatened": 55, "fatalities": 17, "injuries": 9}, {"date": "2025-01-26", "size": 14021, "containment": 95.0, "structures_destroyed": 9418, "structures_damaged": 1073, "structures_threatened": 55, "fatalities": 17, "injuries": 9}, {"date": "2025-01-27", "size": 14021, "containment": 95.0, "structures_destroyed": 9418, "structures_damaged": 1073, "structures_threatened": 55, "fatalities": 17, "injuries": 9}];
+        
+        const dates = chartData.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        
+        // Chart 1: Growth and Containment
+        const ctx1 = document.getElementById('growthChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Fire Size (acres)',
+                    data: chartData.map(d => d.size),
+                    borderColor: '#d62728',
+                    backgroundColor: 'rgba(214, 39, 40, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.1,
+                    yAxisID: 'y'
+                }, {
+                    label: 'Containment (%)',
+                    data: chartData.map(d => d.containment),
+                    borderColor: '#2ca02c',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.1,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#121212',
+                        bodyColor: '#666',
+                        borderColor: '#e5e5e5',
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    if (context.dataset.yAxisID === 'y1') {
+                                        label += context.parsed.y + '%';
+                                    } else {
+                                        label += context.parsed.y.toLocaleString() + ' acres';
+                                    }
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        max: 16000,
+                        grid: {
+                            color: '#e5e5e5',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString();
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Acres',
+                            font: {
+                                size: 11,
+                                weight: '600'
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        max: 100,
+                        grid: {
+                            drawOnChartArea: false
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Containment',
+                            font: {
+                                size: 11,
+                                weight: '600'
+                            }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Chart 2: Structures
+        const ctx2 = document.getElementById('structuresChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Destroyed',
+                    data: chartData.map(d => d.structures_destroyed),
+                    borderColor: '#d62728',
+                    backgroundColor: 'rgba(214, 39, 40, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.1
+                }, {
+                    label: 'Damaged',
+                    data: chartData.map(d => d.structures_damaged),
+                    borderColor: '#ff7f0e',
+                    backgroundColor: 'rgba(255, 127, 14, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.1
+                }, {
+                    label: 'Threatened',
+                    data: chartData.map(d => d.structures_threatened),
+                    borderColor: '#2ca02c',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#121212',
+                        bodyColor: '#666',
+                        borderColor: '#e5e5e5',
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#e5e5e5',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString();
+                            }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Chart 3: Casualties
+        const ctx3 = document.getElementById('casualtiesChart').getContext('2d');
+        new Chart(ctx3, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Fatalities',
+                    data: chartData.map(d => d.fatalities),
+                    borderColor: '#121212',
+                    backgroundColor: 'rgba(18, 18, 18, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.1
+                }, {
+                    label: 'Injuries',
+                    data: chartData.map(d => d.injuries),
+                    borderColor: '#ff7f0e',
+                    backgroundColor: 'rgba(255, 127, 14, 0.1)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#121212',
+                        bodyColor: '#666',
+                        borderColor: '#e5e5e5',
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: '#e5e5e5',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            stepSize: 5
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Chart 4: Containment Only
+        const ctx4 = document.getElementById('containmentChart').getContext('2d');
+        new Chart(ctx4, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Containment',
+                    data: chartData.map(d => d.containment),
+                    borderColor: '#2ca02c',
+                    backgroundColor: 'rgba(44, 160, 44, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#121212',
+                        bodyColor: '#666',
+                        borderColor: '#e5e5e5',
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(context) {
+                                return 'Containment: ' + context.parsed.y + '%';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: {
+                            color: '#e5e5e5',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            },
+                            stepSize: 20
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
