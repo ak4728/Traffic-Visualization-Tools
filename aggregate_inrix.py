@@ -275,6 +275,101 @@ def aggregate_travel_times(
     return result
 
 
+def _calculate_wcv_bcv_ratio(data: np.ndarray, labels: np.ndarray, feature_col_idx: int = 0) -> float:
+    """Calculate Within Cluster Variance / Between Cluster Variance ratio.
+    
+    Lower values indicate better clustering (compact clusters, well-separated).
+    
+    Parameters:
+    - data: Daily statistics array (n_days × n_features)
+    - labels: Cluster labels for each day
+    - feature_col_idx: Index of feature to use (0=avg_travel_time by default)
+    
+    Returns:
+    - WCV/BCV ratio
+    """
+    feature_values = data[:, feature_col_idx]
+    overall_mean = np.mean(feature_values)
+    
+    unique_labels = np.unique(labels)
+    n_clusters = len(unique_labels)
+    
+    # Within-cluster variance (WCV)
+    wcv = 0.0
+    for label in unique_labels:
+        cluster_data = feature_values[labels == label]
+        cluster_mean = np.mean(cluster_data)
+        wcv += np.sum((cluster_data - cluster_mean) ** 2)
+    
+    # Between-cluster variance (BCV)
+    bcv = 0.0
+    for label in unique_labels:
+        cluster_data = feature_values[labels == label]
+        cluster_mean = np.mean(cluster_data)
+        n_samples = len(cluster_data)
+        bcv += n_samples * (cluster_mean - overall_mean) ** 2
+    
+    # Avoid division by zero
+    if bcv == 0:
+        return float('inf')
+    
+    return wcv / bcv
+
+
+def _calculate_cv_normalized_metric(data: np.ndarray, labels: np.ndarray, k: int, 
+                                     k_min: int, k_max: int, feature_col_idx: int = 0) -> float:
+    """Calculate CV normalized metric (Option 2).
+    
+    Metric = (CV normalized over all clusters) × (# clusters normalized between k_min and k_max)
+    
+    Per traffic analysis literature:
+    - k_min = 3
+    - k_max = 2 × sqrt(n/2) where n is number of days
+    
+    Lower values indicate better clustering.
+    
+    Parameters:
+    - data: Daily statistics array (n_days × n_features)
+    - labels: Cluster labels for each day
+    - k: Current number of clusters
+    - k_min: Minimum cluster size (typically 3)
+    - k_max: Maximum cluster size (typically 2 × sqrt(n/2))
+    - feature_col_idx: Index of feature to use (0=avg_travel_time by default)
+    
+    Returns:
+    - CV normalized metric
+    """
+    feature_values = data[:, feature_col_idx]
+    unique_labels = np.unique(labels)
+    
+    # Calculate coefficient of variation for each cluster
+    cvs = []
+    for label in unique_labels:
+        cluster_data = feature_values[labels == label]
+        cluster_mean = np.mean(cluster_data)
+        cluster_std = np.std(cluster_data, ddof=1) if len(cluster_data) > 1 else 0.0
+        
+        # CV = std / mean (avoid division by zero)
+        if cluster_mean != 0:
+            cv = cluster_std / abs(cluster_mean)
+            cvs.append(cv)
+    
+    # Average CV across all clusters
+    avg_cv = np.mean(cvs) if cvs else 0.0
+    
+    # Normalize CV (assuming typical range 0 to 1)
+    cv_normalized = avg_cv
+    
+    # Normalize number of clusters between k_min and k_max
+    if k_max > k_min:
+        k_normalized = (k - k_min) / (k_max - k_min)
+    else:
+        k_normalized = 1.0
+    
+    # Combined metric
+    return cv_normalized * k_normalized
+
+
 def cluster_daily_patterns(
     cluster_csv: str,
     tmc_csv: Optional[str] = None,
@@ -282,6 +377,7 @@ def cluster_daily_patterns(
     n_clusters: Optional[int] = None,
     travel_time_units: str = 'seconds',
     show_diagnostics: bool = False,
+    stopping_criterion: str = 'silhouette',
     day_of_week: Optional[int] = None,
     start_hour: Optional[int] = None,
     end_hour: Optional[int] = None,
@@ -304,9 +400,13 @@ def cluster_daily_patterns(
     - tmc_csv: optional path to TMC identification CSV
     - direction: optional direction filter ('EB', 'WB', 'NB', 'SB', etc.)
                 If None, processes all directions separately
-    - n_clusters: number of clusters (if None, uses elbow method/silhouette to suggest)
+    - n_clusters: number of clusters (if None, uses stopping criterion to auto-select)
     - travel_time_units: 'seconds' or 'minutes'
-    - show_diagnostics: if True, shows elbow and silhouette plots
+    - show_diagnostics: if True, shows diagnostic plots for all metrics
+    - stopping_criterion: method for auto-selecting k ('silhouette', 'wcv_bcv', 'cv_normalized')
+                         - 'silhouette': maximize silhouette score (general ML approach)
+                         - 'wcv_bcv': minimize WCV/BCV ratio (traffic-specific, Option 1)
+                         - 'cv_normalized': minimize CV × k_norm (traffic-specific, Option 2)
     - day_of_week: filter to specific day (0=Mon, 2=Wed, etc.). None = all days
     - start_hour: start hour (inclusive), 0-23. None = no filter
     - end_hour: end hour (exclusive), 0-24. None = no filter
@@ -412,41 +512,88 @@ def cluster_daily_patterns(
         # Determine optimal number of clusters if not provided
         n_clusters_to_use = n_clusters
         if n_clusters_to_use is None or show_diagnostics:
-            k_range = range(2, min(11, len(daily_stats) // 2))
+            # Calculate k_max using traffic-specific formula: 2 × sqrt(n/2)
+            n_days = len(daily_stats)
+            k_min = 3
+            k_max = int(2 * np.sqrt(n_days / 2))
+            k_range = range(k_min, min(k_max + 1, n_days // 2))
+            
             inertias = []
             silhouette_scores_list = []
+            wcv_bcv_ratios = []
+            cv_normalized_metrics = []
             
             for k in k_range:
                 kmeans_temp = KMeans(n_clusters=k, random_state=42, n_init=10)
                 labels_temp = kmeans_temp.fit_predict(normalized_features)
+                
+                # Traditional ML metrics
                 inertias.append(kmeans_temp.inertia_)
                 silhouette_scores_list.append(silhouette_score(normalized_features, labels_temp))
+                
+                # Traffic-specific metrics (using avg_travel_time as primary feature - index 0)
+                wcv_bcv = _calculate_wcv_bcv_ratio(features.values, labels_temp, feature_col_idx=0)
+                wcv_bcv_ratios.append(wcv_bcv)
+                
+                cv_norm = _calculate_cv_normalized_metric(features.values, labels_temp, k, k_min, k_max, feature_col_idx=0)
+                cv_normalized_metrics.append(cv_norm)
             
             if show_diagnostics:
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-                fig.suptitle(f'Cluster Analysis for {dir_name}', fontsize=14, fontweight='bold')
+                fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+                fig.suptitle(f'Cluster Analysis for {dir_name} (n={n_days} days, k_max={k_max})', 
+                           fontsize=14, fontweight='bold')
                 
-                ax1.plot(k_range, inertias, marker='o', linestyle='-')
-                ax1.set_xlabel('Number of Clusters (k)')
-                ax1.set_ylabel('Inertia (Sum of Squared Distances)')
-                ax1.set_title('Elbow Method for Optimal k')
-                ax1.grid(True)
+                # Elbow plot
+                axes[0, 0].plot(k_range, inertias, marker='o', linestyle='-', color='blue')
+                axes[0, 0].set_xlabel('Number of Clusters (k)')
+                axes[0, 0].set_ylabel('Inertia (Sum of Squared Distances)')
+                axes[0, 0].set_title('Elbow Method for Optimal k')
+                axes[0, 0].grid(True, alpha=0.3)
                 
-                ax2.plot(k_range, silhouette_scores_list, marker='o', linestyle='-', color='green')
-                ax2.set_xlabel('Number of Clusters (k)')
-                ax2.set_ylabel('Silhouette Score')
-                ax2.set_title('Silhouette Score for Optimal k')
-                ax2.grid(True)
+                # Silhouette plot
+                axes[0, 1].plot(k_range, silhouette_scores_list, marker='o', linestyle='-', color='green')
+                axes[0, 1].set_xlabel('Number of Clusters (k)')
+                axes[0, 1].set_ylabel('Silhouette Score')
+                axes[0, 1].set_title('Silhouette Score (higher is better)')
+                axes[0, 1].grid(True, alpha=0.3)
+                best_silhouette_k = list(k_range)[np.argmax(silhouette_scores_list)]
+                axes[0, 1].axvline(best_silhouette_k, color='green', linestyle='--', alpha=0.5)
+                
+                # WCV/BCV ratio plot
+                axes[1, 0].plot(k_range, wcv_bcv_ratios, marker='o', linestyle='-', color='red')
+                axes[1, 0].set_xlabel('Number of Clusters (k)')
+                axes[1, 0].set_ylabel('WCV / BCV Ratio')
+                axes[1, 0].set_title('WCV/BCV Ratio (lower is better) - Option 1')
+                axes[1, 0].grid(True, alpha=0.3)
+                best_wcv_bcv_k = list(k_range)[np.argmin(wcv_bcv_ratios)]
+                axes[1, 0].axvline(best_wcv_bcv_k, color='red', linestyle='--', alpha=0.5)
+                
+                # CV normalized metric plot
+                axes[1, 1].plot(k_range, cv_normalized_metrics, marker='o', linestyle='-', color='purple')
+                axes[1, 1].set_xlabel('Number of Clusters (k)')
+                axes[1, 1].set_ylabel('CV × k_norm')
+                axes[1, 1].set_title('CV Normalized Metric (lower is better) - Option 2')
+                axes[1, 1].grid(True, alpha=0.3)
+                best_cv_norm_k = list(k_range)[np.argmin(cv_normalized_metrics)]
+                axes[1, 1].axvline(best_cv_norm_k, color='purple', linestyle='--', alpha=0.5)
                 
                 plt.tight_layout()
                 plt.show()
                 plt.close()
             
             if n_clusters_to_use is None:
-                # Use silhouette score to suggest best k
-                best_k = list(k_range)[np.argmax(silhouette_scores_list)]
+                # Select optimal k based on stopping criterion
+                if stopping_criterion.lower() == 'wcv_bcv':
+                    best_k = list(k_range)[np.argmin(wcv_bcv_ratios)]
+                    print(f"Suggested optimal clusters for {dir_name}: {best_k} (based on WCV/BCV ratio)")
+                elif stopping_criterion.lower() == 'cv_normalized':
+                    best_k = list(k_range)[np.argmin(cv_normalized_metrics)]
+                    print(f"Suggested optimal clusters for {dir_name}: {best_k} (based on CV normalized metric)")
+                else:  # default: silhouette
+                    best_k = list(k_range)[np.argmax(silhouette_scores_list)]
+                    print(f"Suggested optimal clusters for {dir_name}: {best_k} (based on silhouette score)")
+                
                 n_clusters_to_use = best_k
-                print(f"Suggested optimal clusters for {dir_name}: {n_clusters_to_use} (based on silhouette score)")
         
         # Perform clustering with chosen number of clusters
         kmeans = KMeans(n_clusters=n_clusters_to_use, random_state=42, n_init=10)
@@ -786,8 +933,9 @@ if __name__ == '__main__':
     }
     
     # Analysis settings
-    N_CLUSTERS = 4              # Number of clusters for KMeans. None=auto-detect
-    SHOW_DIAGNOSTICS = True     # Show elbow/silhouette plots
+    N_CLUSTERS = None           # Number of clusters for KMeans. None=auto-detect
+    STOPPING_CRITERION = 'wcv_bcv'  # Auto-selection method: 'silhouette', 'wcv_bcv', or 'cv_normalized'
+    SHOW_DIAGNOSTICS = True     # Show diagnostic plots with all metrics
     RESAMPLE_INTERVAL = '15min' # Resampling interval: '15min', '1h', etc.
     
     # ============================================================
@@ -830,6 +978,7 @@ if __name__ == '__main__':
             print('\n' + '=' * 60)
             print('PART 2: CLUSTERING ANALYSIS (ALL DIRECTIONS)')
             print(f'Using filtered data: {filter_display}')
+            print(f'Stopping criterion: {STOPPING_CRITERION}')
             print('=' * 60)
             print('Analyzing daily patterns for all directions separately...')
             daily_stats, df_with_clusters = cluster_daily_patterns(
@@ -838,6 +987,7 @@ if __name__ == '__main__':
                 direction=None,  # Process all directions
                 n_clusters=N_CLUSTERS,
                 show_diagnostics=SHOW_DIAGNOSTICS,
+                stopping_criterion=STOPPING_CRITERION,
                 **FILTER_CONFIG  # Apply temporal filters
             )
             
