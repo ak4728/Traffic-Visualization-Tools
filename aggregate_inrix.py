@@ -708,7 +708,7 @@ def plot_year_boxplots(
         bp1 = axes[0].boxplot(travel_time_by_year, tick_labels=[str(y) for y in years], 
                              patch_artist=True, widths=0.6)
         for patch, year in zip(bp1['boxes'], years):
-            color = plt.get_cmap('viridis')(year - min(years)) / (max(years) - min(years) + 1) if len(years) > 1 else 0.5
+            color = plt.get_cmap('viridis')((year - min(years)) / (max(years) - min(years) + 1)) if len(years) > 1 else plt.get_cmap('viridis')(0.5)
             patch.set_facecolor(color)
             patch.set_alpha(0.7)
         
@@ -721,7 +721,7 @@ def plot_year_boxplots(
         bp2 = axes[1].boxplot(speed_by_year, tick_labels=[str(y) for y in years], 
                              patch_artist=True, widths=0.6)
         for patch, year in zip(bp2['boxes'], years):
-            color = plt.get_cmap('viridis')((year - min(years)) / (max(years) - min(years) + 1)) if len(years) > 1 else 0.5
+            color = plt.get_cmap('viridis')((year - min(years)) / (max(years) - min(years) + 1)) if len(years) > 1 else plt.get_cmap('viridis')(0.5)
             patch.set_facecolor(color)
             patch.set_alpha(0.7)
         
