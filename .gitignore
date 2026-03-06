@@ -1,0 +1,24 @@
+# INRIX Data Files
+I70-ROD2-Cluster-Travel-Time.csv
+TMC_Identification.csv
+Contents.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
