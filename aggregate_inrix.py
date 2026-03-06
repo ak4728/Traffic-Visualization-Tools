@@ -495,7 +495,7 @@ def cluster_daily_patterns(
         orig_len = len(df)
         df = filter_data(df, day_of_week=day_of_week, start_hour=start_hour, 
                         end_hour=end_hour, start_date=start_date, end_date=end_date)
-        print(f"  - Records: {orig_len:,} → {len(df):,} ({100*len(df)/orig_len:.1f}%)")
+        print(f"  - Records: {orig_len:,} -> {len(df):,} ({100*len(df)/orig_len:.1f}%)")
     
     # STEP 1: Aggregate by timestamp + direction to get corridor-level data
     # This sums travel times and averages speeds across all TMC segments
@@ -507,8 +507,8 @@ def cluster_daily_patterns(
     
     corridor_data.columns = ['datetime', 'direction', 'travel_time_min', 'speed']
     
-    # Add day column to corridor data
-    corridor_data['day'] = corridor_data['datetime'].dt.date
+    # Add day column to corridor data (keep as datetime, normalize to midnight)
+    corridor_data['day'] = corridor_data['datetime'].dt.normalize()
     
     # If no direction specified, determine unique directions
     directions_to_process = [None]
@@ -544,9 +544,7 @@ def cluster_daily_patterns(
         if climate_csv is not None:
             try:
                 climate_df = _read_climate_csv(climate_csv)
-                # Ensure 'day' column is datetime for merging
-                daily_stats['day'] = pd.to_datetime(daily_stats['day'])
-                # Merge on date
+                # Merge on date (both are already datetime64[ns])
                 daily_stats = daily_stats.merge(climate_df, left_on='day', right_on='date', how='left')
                 daily_stats = daily_stats.drop(columns=['date'], errors='ignore')
                 
@@ -684,7 +682,7 @@ def cluster_daily_patterns(
             
             print(f"  Cluster {int(cluster_id) + 1}: {count:3d} days ({pct:5.1f}%{snowy_info})")
         
-        # Merge cluster labels back to corridor data
+        # Merge cluster labels back to corridor data (both 'day' columns are datetime64[ns])
         corridor_dir = corridor_dir.merge(daily_stats[['day', 'cluster_label']], on='day', how='left')
         corridor_dir['direction'] = dir_name
         
@@ -892,7 +890,7 @@ def plot_year_boxplots(
                                 start_hour=start_hour, end_hour=end_hour,
                                 start_date=start_date, end_date=end_date)
     
-    print(f'Total records: {orig_len:,} → {len(filtered_data):,}')
+    print(f'Total records: {orig_len:,} -> {len(filtered_data):,}')
     print(f'Years in data: {sorted(filtered_data["year"].unique())}')
     
     # Build filter description for plot title
@@ -1003,16 +1001,16 @@ if __name__ == '__main__':
     
     # FILTERING SETTINGS - All analyses will use filtered data
     FILTER_CONFIG = {
-        'day_of_week': 2,       # 0=Monday, 1=Tuesday, 2=Wednesday, etc. None=all days
-        'start_hour': 6,        # Start hour (inclusive), 0-23. None=no filter
-        'end_hour': 10,         # End hour (exclusive), 0-24. None=no filter
+        'day_of_week': None,       # 0=Monday, 1=Tuesday, 2=Wednesday, etc. None=all days
+        'start_hour': None,        # Start hour (inclusive), 0-23. None=no filter
+        'end_hour': None,         # End hour (exclusive), 0-24. None=no filter
         'start_date': '2022-01-01',     # Start date 'YYYY-MM-DD'. None=no filter
         'end_date': "2022-12-31"        # End date 'YYYY-MM-DD'. None=no filter
     }
     
     # Analysis settings
     N_CLUSTERS = None           # Number of clusters for KMeans. None=auto-detect
-    STOPPING_CRITERION = 'wcv_bcv'  # Auto-selection method: 'silhouette', 'wcv_bcv', or 'cv_normalized'
+    STOPPING_CRITERION = 'cv_normalized'  # Auto-selection method: 'silhouette', 'wcv_bcv', or 'cv_normalized'
     SHOW_DIAGNOSTICS = True     # Show diagnostic plots with all metrics
     RESAMPLE_INTERVAL = '15min' # Resampling interval: '15min', '1h', etc.
     
