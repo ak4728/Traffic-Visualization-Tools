@@ -211,6 +211,43 @@ def _read_climate_csv(path: str) -> pd.DataFrame:
     return climate_df
 
 
+def _read_crash_csv(path: str) -> pd.DataFrame:
+    """Read crash data CSV and prepare for merging with traffic data.
+    
+    Parameters:
+    - path: Path to crash CSV file with date, time, datetime, and optional direction columns
+    
+    Returns:
+    - DataFrame with crash counts by date (and direction if available)
+    """
+    df = pd.read_csv(path)
+    
+    # Ensure datetime column exists and convert to datetime
+    if 'datetime' not in df.columns:
+        raise ValueError('Crash CSV must have a "datetime" column')
+    
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    
+    # Extract date only for daily matching
+    df['date'] = df['datetime'].dt.normalize()
+    
+    # Check if direction column exists and normalize it
+    has_direction = 'direction' in df.columns
+    if has_direction:
+        # Normalize direction to uppercase to match traffic data (EASTBOUND, WESTBOUND, etc.)
+        df['direction'] = df['direction'].str.upper()
+        # Group by date AND direction
+        group_cols = ['date', 'direction']
+    else:
+        # Group by date only
+        group_cols = ['date']
+    
+    # Get unique crash dates (and directions) and count crashes per group
+    crash_summary = df.groupby(group_cols).size().reset_index(name='crash_count')
+    
+    return crash_summary
+
+
 def aggregate_travel_times(
     cluster_csv: str,
     tmc_csv: Optional[str] = None,
@@ -408,6 +445,7 @@ def cluster_daily_patterns(
     cluster_csv: str,
     tmc_csv: Optional[str] = None,
     climate_csv: Optional[str] = None,
+    crash_csv: Optional[str] = None,
     direction: Optional[str] = None,
     n_clusters: Optional[int] = None,
     travel_time_units: str = 'seconds',
@@ -436,6 +474,7 @@ def cluster_daily_patterns(
     - cluster_csv: path to INRIX cluster travel-time CSV
     - tmc_csv: optional path to TMC identification CSV
     - climate_csv: optional path to climate data CSV (PRCP, SNOW, SNWD by date)
+    - crash_csv: optional path to crash data CSV (datetime column with crash times)
     - direction: optional direction filter ('EB', 'WB', 'NB', 'SB', etc.)
                 If None, processes all directions separately
     - n_clusters: number of clusters (if None, uses stopping criterion to auto-select)
@@ -562,6 +601,47 @@ def cluster_daily_patterns(
                 print(f"  Warning: Could not load climate data: {e}")
                 climate_csv = None  # Disable climate features
         
+        # Merge with crash data if provided
+        if crash_csv is not None:
+            try:
+                crash_df = _read_crash_csv(crash_csv)
+                
+                # Check if crash data has direction column
+                if 'direction' in crash_df.columns:
+                    # Merge on both date and direction
+                    daily_stats = daily_stats.merge(
+                        crash_df, 
+                        left_on=['day'], 
+                        right_on=['date'], 
+                        how='left',
+                        suffixes=('', '_crash')
+                    )
+                    # Filter to only crashes matching this direction
+                    mask = (daily_stats['direction_crash'] == dir_name) | daily_stats['direction_crash'].isna()
+                    daily_stats.loc[~mask, 'crash_count'] = 0
+                    daily_stats = daily_stats.drop(columns=['date', 'direction_crash'], errors='ignore')
+                else:
+                    # Merge on date only (no direction in crash data)
+                    daily_stats = daily_stats.merge(crash_df, left_on='day', right_on='date', how='left')
+                    daily_stats = daily_stats.drop(columns=['date'], errors='ignore')
+                
+                # Fill missing crash counts with 0
+                daily_stats['crash_count'] = daily_stats['crash_count'].fillna(0).astype(int)
+                
+                # Add crash day indicator
+                daily_stats['is_crash_day'] = (daily_stats['crash_count'] > 0).astype(int)
+                
+                # Count total crash events (for reporting)
+                if 'direction' in crash_df.columns:
+                    dir_crashes = crash_df[crash_df['direction'] == dir_name] if dir_name != 'ALL' else crash_df
+                    n_crash_events = len(dir_crashes)
+                    print(f"  Crash data merged: {n_crash_events} crash event(s) for {dir_name}")
+                else:
+                    print(f"  Crash data merged: {len(crash_df)} crash day(s) total")
+            except Exception as e:
+                print(f"  Warning: Could not load crash data: {e}")
+                crash_csv = None  # Disable crash features
+        
         # Define feature columns (traffic + weather if available)
         feature_cols = ['avg_travel_time', 'travel_time_std', 'peak_travel_time', 'avg_speed', 'speed_std', 'min_speed']
         
@@ -674,13 +754,25 @@ def cluster_daily_patterns(
             pct = (count / len(daily_stats)) * 100
             cluster_days = daily_stats[daily_stats['cluster_label'] == cluster_id]
             
-            # Count snowy days if climate data available
+            # Count snowy days and average snow depth if climate data available
             snowy_info = ""
             if 'is_snowy_day' in daily_stats.columns:
                 n_snowy = cluster_days['is_snowy_day'].sum()
                 snowy_info = f", {int(n_snowy)} snowy"
+                
+                # Add average snow depth if available
+                if 'SNWD' in daily_stats.columns:
+                    avg_snwd = cluster_days['SNWD'].mean()
+                    snowy_info += f", avg depth: {avg_snwd:.1f}in"
             
-            print(f"  Cluster {int(cluster_id) + 1}: {count:3d} days ({pct:5.1f}%{snowy_info})")
+            # Count crash days if crash data available
+            crash_info = ""
+            if 'is_crash_day' in daily_stats.columns:
+                n_crash = cluster_days['is_crash_day'].sum()
+                if n_crash > 0:
+                    crash_info = f", {int(n_crash)} crash"
+            
+            print(f"  Cluster {int(cluster_id) + 1}: {count:3d} days ({pct:5.1f}%{snowy_info}{crash_info})")
         
         # Merge cluster labels back to corridor data (both 'day' columns are datetime64[ns])
         corridor_dir = corridor_dir.merge(daily_stats[['day', 'cluster_label']], on='day', how='left')
@@ -765,59 +857,87 @@ def plot_cluster_statistics(daily_stats: pd.DataFrame):
             color = plt.get_cmap('tab10')(label)
             n_days = len(cluster_data)
             
+            # Create label with snow day count, avg depth, and crash count if available
+            label_parts = [f'C{label+1}']
+            info_parts = [f'{n_days}d']
+            
+            if 'is_snowy_day' in cluster_data.columns:
+                n_snowy = int(cluster_data['is_snowy_day'].sum())
+                info_parts.append(f'{n_snowy}s')
+                if 'SNWD' in cluster_data.columns:
+                    avg_depth = cluster_data['SNWD'].mean()
+                    info_parts.append(f'{avg_depth:.1f}in')
+            
+            if 'is_crash_day' in cluster_data.columns:
+                n_crash = int(cluster_data['is_crash_day'].sum())
+                if n_crash > 0:
+                    info_parts.append(f'{n_crash}c')
+            
+            cluster_label = f'{label_parts[0]}\n({"  ".join(info_parts)})'
+            
             axes[0, 0].boxplot([cluster_data['avg_travel_time']], positions=[label], 
                                widths=0.6, patch_artist=True,
                                boxprops=dict(facecolor=color, alpha=0.7),
-                               tick_labels=[f'C{label+1}\n({n_days})'])
+                               tick_labels=[cluster_label])
             axes[0, 1].boxplot([cluster_data['travel_time_std']], positions=[label],
                                widths=0.6, patch_artist=True,
                                boxprops=dict(facecolor=color, alpha=0.7),
-                               tick_labels=[f'C{label+1}\n({n_days})'])
+                               tick_labels=[cluster_label])
             axes[0, 2].boxplot([cluster_data['peak_travel_time']], positions=[label],
                                widths=0.6, patch_artist=True,
                                boxprops=dict(facecolor=color, alpha=0.7),
-                               tick_labels=[f'C{label+1}\n({n_days})'])
+                               tick_labels=[cluster_label])
             axes[1, 0].boxplot([cluster_data['avg_speed']], positions=[label],
                                widths=0.6, patch_artist=True,
                                boxprops=dict(facecolor=color, alpha=0.7),
-                               tick_labels=[f'C{label+1}\n({n_days})'])
+                               tick_labels=[cluster_label])
             if 'speed_std' in cluster_data.columns:
                 axes[1, 1].boxplot([cluster_data['speed_std']], positions=[label],
                                    widths=0.6, patch_artist=True,
                                    boxprops=dict(facecolor=color, alpha=0.7),
-                                   tick_labels=[f'C{label+1}\n({n_days})'])
+                                   tick_labels=[cluster_label])
             if 'min_speed' in cluster_data.columns:
                 axes[1, 2].boxplot([cluster_data['min_speed']], positions=[label],
                                    widths=0.6, patch_artist=True,
                                    boxprops=dict(facecolor=color, alpha=0.7),
-                                   tick_labels=[f'C{label+1}\n({n_days})'])
+                                   tick_labels=[cluster_label])
+        
+        # Set xlabel based on available data
+        xlabel_parts = ['Cluster (days']
+        if 'is_snowy_day' in daily_dir.columns:
+            xlabel_parts.append('snowy')
+            if 'SNWD' in daily_dir.columns:
+                xlabel_parts.append('avg depth')
+        if 'is_crash_day' in daily_dir.columns:
+            xlabel_parts.append('crash')
+        xlabel = ', '.join(xlabel_parts) + ')'
         
         axes[0, 0].set_title('Average Travel Time by Cluster')
-        axes[0, 0].set_xlabel('Cluster (# days)')
+        axes[0, 0].set_xlabel(xlabel)
         axes[0, 0].set_ylabel('Average Travel Time (minutes)')
         
         axes[0, 1].set_title('Travel Time Std Dev by Cluster')
-        axes[0, 1].set_xlabel('Cluster (# days)')
+        axes[0, 1].set_xlabel(xlabel)
         axes[0, 1].set_ylabel('Std Dev (minutes)')
         
         axes[0, 2].set_title('Peak Travel Time by Cluster')
-        axes[0, 2].set_xlabel('Cluster (# days)')
+        axes[0, 2].set_xlabel(xlabel)
         axes[0, 2].set_ylabel('Peak Travel Time (minutes)')
         
         axes[1, 0].set_title('Average Speed by Cluster')
-        axes[1, 0].set_xlabel('Cluster (# days)')
+        axes[1, 0].set_xlabel(xlabel)
         axes[1, 0].set_ylabel('Speed (mph)')
         
         if 'speed_std' in daily_dir.columns:
             axes[1, 1].set_title('Speed Std Dev by Cluster')
-            axes[1, 1].set_xlabel('Cluster (# days)')
+            axes[1, 1].set_xlabel(xlabel)
             axes[1, 1].set_ylabel('Std Dev (mph)')
         else:
             axes[1, 1].axis('off')
             
         if 'min_speed' in daily_dir.columns:
             axes[1, 2].set_title('Minimum Speed by Cluster')
-            axes[1, 2].set_xlabel('Cluster (# days)')
+            axes[1, 2].set_xlabel(xlabel)
             axes[1, 2].set_ylabel('Min Speed (mph)')
         else:
             axes[1, 2].axis('off')
@@ -998,6 +1118,7 @@ if __name__ == '__main__':
     cluster = 'I70-ROD2-Cluster-Travel-Time.csv'
     tmc = 'TMC_Identification.csv'
     climate = 'climate_data_2022.csv'  # Climate data (PRCP, SNOW, SNWD) for clustering
+    crashes = 'crash_data_2022.csv'    # Crash data (datetime of crashes nearby)
     
     # FILTERING SETTINGS - All analyses will use filtered data
     FILTER_CONFIG = {
@@ -1012,6 +1133,7 @@ if __name__ == '__main__':
     N_CLUSTERS = None           # Number of clusters for KMeans. None=auto-detect
     STOPPING_CRITERION = 'cv_normalized'  # Auto-selection method: 'silhouette', 'wcv_bcv', or 'cv_normalized'
     SHOW_DIAGNOSTICS = True     # Show diagnostic plots with all metrics
+    SHOW_YEAR_COMPARISON = True # Show Part 5 year comparison box plots
     RESAMPLE_INTERVAL = '15min' # Resampling interval: '15min', '1h', etc.
     
     # ============================================================
@@ -1061,6 +1183,7 @@ if __name__ == '__main__':
                 cluster, 
                 tmc_csv=tmc,
                 climate_csv=climate if os.path.exists(climate) else None,
+                crash_csv=crashes if os.path.exists(crashes) else None,
                 direction=None,  # Process all directions
                 n_clusters=N_CLUSTERS,
                 show_diagnostics=SHOW_DIAGNOSTICS,
@@ -1130,17 +1253,18 @@ if __name__ == '__main__':
                 plt.close()
             
             # ===== PART 5: Year Comparison (same filters as clustering) =====
-            print('\n' + '=' * 60)
-            print('PART 5: YEAR COMPARISON ANALYSIS')
-            print(f'Using filtered data: {filter_display}')
-            print('=' * 60)
-            
-            filtered_data = plot_year_boxplots(
-                cluster, 
-                tmc_csv=tmc,
-                direction=None,  # Analyze all directions
-                **FILTER_CONFIG  # Use same filters as clustering
-            )
+            if SHOW_YEAR_COMPARISON:
+                print('\n' + '=' * 60)
+                print('PART 5: YEAR COMPARISON ANALYSIS')
+                print(f'Using filtered data: {filter_display}')
+                print('=' * 60)
+                
+                filtered_data = plot_year_boxplots(
+                    cluster, 
+                    tmc_csv=tmc,
+                    direction=None,  # Analyze all directions
+                    **FILTER_CONFIG  # Use same filters as clustering
+                )
             
             print('\n' + '=' * 60)
             print('Analysis complete!')
