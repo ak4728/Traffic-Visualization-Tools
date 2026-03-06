@@ -177,6 +177,40 @@ def _merge_with_tmc_dates(data_df: pd.DataFrame, tmc_df: pd.DataFrame) -> pd.Dat
     return merged
 
 
+def _read_climate_csv(path: str) -> pd.DataFrame:
+    """Read climate data CSV and prepare for merging with traffic data.
+    
+    Parameters:
+    - path: Path to climate CSV file
+    
+    Returns:
+    - DataFrame with date, PRCP, SNOW, SNWD columns
+    """
+    df = pd.read_csv(path)
+    
+    # Ensure date column exists and convert to datetime
+    if 'date' not in df.columns:
+        raise ValueError('Climate CSV must have a "date" column')
+    
+    df['date'] = pd.to_datetime(df['date'])
+    
+    # Select only the weather columns we need
+    weather_cols = ['date', 'PRCP', 'SNOW', 'SNWD']
+    available_cols = [col for col in weather_cols if col in df.columns]
+    
+    if len(available_cols) <= 1:  # Only 'date'
+        raise ValueError('Climate CSV must contain at least one of: PRCP, SNOW, SNWD')
+    
+    climate_df = df[available_cols].copy()
+    
+    # Fill missing values with 0 (assuming no precipitation/snow when missing)
+    for col in ['PRCP', 'SNOW', 'SNWD']:
+        if col in climate_df.columns:
+            climate_df[col] = climate_df[col].fillna(0.0)
+    
+    return climate_df
+
+
 def aggregate_travel_times(
     cluster_csv: str,
     tmc_csv: Optional[str] = None,
@@ -373,6 +407,7 @@ def _calculate_cv_normalized_metric(data: np.ndarray, labels: np.ndarray, k: int
 def cluster_daily_patterns(
     cluster_csv: str,
     tmc_csv: Optional[str] = None,
+    climate_csv: Optional[str] = None,
     direction: Optional[str] = None,
     n_clusters: Optional[int] = None,
     travel_time_units: str = 'seconds',
@@ -389,8 +424,10 @@ def cluster_daily_patterns(
     First aggregates all TMC segments by direction to get corridor-level data:
     - SUMs travel times across all segments
     - AVERAGEs speeds across all segments
-    Then clusters days based on average corridor travel time, peak travel time, 
-    travel time variability, average speed, speed variability, and minimum speed.
+    Then clusters days based on traffic and weather features:
+    - Average travel time, peak travel time, travel time std dev
+    - Average speed, speed std dev, minimum speed
+    - Average precipitation, snowfall, snow depth (if climate data provided)
     
     IMPORTANT: Clustering is performed separately for each direction.
     If direction is not specified, clusters both directions independently.
@@ -398,6 +435,7 @@ def cluster_daily_patterns(
     Parameters:
     - cluster_csv: path to INRIX cluster travel-time CSV
     - tmc_csv: optional path to TMC identification CSV
+    - climate_csv: optional path to climate data CSV (PRCP, SNOW, SNWD by date)
     - direction: optional direction filter ('EB', 'WB', 'NB', 'SB', etc.)
                 If None, processes all directions separately
     - n_clusters: number of clusters (if None, uses stopping criterion to auto-select)
@@ -502,7 +540,38 @@ def cluster_daily_patterns(
         daily_stats.columns = ['day', 'avg_travel_time', 'travel_time_std', 'peak_travel_time', 
                               'avg_speed', 'speed_std', 'min_speed']
         
+        # Merge with climate data if provided
+        if climate_csv is not None:
+            try:
+                climate_df = _read_climate_csv(climate_csv)
+                # Ensure 'day' column is datetime for merging
+                daily_stats['day'] = pd.to_datetime(daily_stats['day'])
+                # Merge on date
+                daily_stats = daily_stats.merge(climate_df, left_on='day', right_on='date', how='left')
+                daily_stats = daily_stats.drop(columns=['date'], errors='ignore')
+                
+                # Fill any missing climate values with 0
+                for col in ['PRCP', 'SNOW', 'SNWD']:
+                    if col in daily_stats.columns:
+                        daily_stats[col] = daily_stats[col].fillna(0.0)
+                
+                # Add snowy day indicator (snow depth > 0)
+                if 'SNWD' in daily_stats.columns:
+                    daily_stats['is_snowy_day'] = (daily_stats['SNWD'] > 0).astype(int)
+                
+                print(f"  Climate data merged: {len(climate_df)} days")
+            except Exception as e:
+                print(f"  Warning: Could not load climate data: {e}")
+                climate_csv = None  # Disable climate features
+        
+        # Define feature columns (traffic + weather if available)
         feature_cols = ['avg_travel_time', 'travel_time_std', 'peak_travel_time', 'avg_speed', 'speed_std', 'min_speed']
+        
+        # Add climate features if available
+        if climate_csv is not None:
+            for col in ['PRCP', 'SNOW', 'SNWD']:
+                if col in daily_stats.columns:
+                    feature_cols.append(col)
     
         # Normalize features
         features = daily_stats[feature_cols]
@@ -605,7 +674,15 @@ def cluster_daily_patterns(
         print(f"\nCluster distribution for {dir_name}:")
         for cluster_id, count in cluster_counts.items():
             pct = (count / len(daily_stats)) * 100
-            print(f"  Cluster {int(cluster_id) + 1}: {count:3d} days ({pct:5.1f}%)")
+            cluster_days = daily_stats[daily_stats['cluster_label'] == cluster_id]
+            
+            # Count snowy days if climate data available
+            snowy_info = ""
+            if 'is_snowy_day' in daily_stats.columns:
+                n_snowy = cluster_days['is_snowy_day'].sum()
+                snowy_info = f", {int(n_snowy)} snowy"
+            
+            print(f"  Cluster {int(cluster_id) + 1}: {count:3d} days ({pct:5.1f}%{snowy_info})")
         
         # Merge cluster labels back to corridor data
         corridor_dir = corridor_dir.merge(daily_stats[['day', 'cluster_label']], on='day', how='left')
@@ -922,6 +999,7 @@ if __name__ == '__main__':
     # Data files
     cluster = 'I70-ROD2-Cluster-Travel-Time.csv'
     tmc = 'TMC_Identification.csv'
+    climate = 'climate_data_2022.csv'  # Climate data (PRCP, SNOW, SNWD) for clustering
     
     # FILTERING SETTINGS - All analyses will use filtered data
     FILTER_CONFIG = {
@@ -983,7 +1061,8 @@ if __name__ == '__main__':
             print('Analyzing daily patterns for all directions separately...')
             daily_stats, df_with_clusters = cluster_daily_patterns(
                 cluster, 
-                tmc_csv=tmc, 
+                tmc_csv=tmc,
+                climate_csv=climate if os.path.exists(climate) else None,
                 direction=None,  # Process all directions
                 n_clusters=N_CLUSTERS,
                 show_diagnostics=SHOW_DIAGNOSTICS,
