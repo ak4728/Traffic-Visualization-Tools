@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Copilot Awareness Survey</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css">
+  <style>
+    :root {
+      --font: 'Plus Jakarta Sans', system-ui, sans-serif;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --bg: #f3f4f6;
+      --white: #ffffff;
+      --radius: 14px;
+      --radius-sm: 9px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem 5rem;
+    }
+    .shell {
+      background: var(--white);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 700px;
+      padding: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 10px 40px rgba(0,0,0,.08);
+    }
+    .survey-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .survey-logo { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .7px; text-transform: uppercase; }
+    .step-pill {
+      font-size: 12px; color: var(--muted);
+      background: #f3f4f6; padding: 4px 12px;
+      border-radius: 20px; font-weight: 500;
+    }
+    .progress-track { height: 4px; background: #f3f4f6; border-radius: 2px; margin-bottom: 2rem; }
+    .progress-fill { height: 100%; border-radius: 2px; transition: width .45s cubic-bezier(.4,0,.2,1); }
+    /* Banner */
+    .banner {
+      border-radius: var(--radius); height: 160px; position: relative;
+      overflow: hidden; margin-bottom: 1.75rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .b-circle { position: absolute; border-radius: 50%; }
+    .banner-icon { font-size: 64px; position: relative; z-index: 1; }
+    .banner-badge {
+      position: absolute; top: 14px; left: 14px;
+      font-size: 11px; font-weight: 600; padding: 4px 11px;
+      border-radius: 20px; z-index: 2; letter-spacing: .3px;
+    }
+    /* Question */
+    .q-title { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1.45; margin-bottom: 5px; }
+    .q-hint  { font-size: 13px; color: var(--muted); margin-bottom: .75rem; }
+    .limit-msg { font-size: 12px; color: var(--muted); margin-bottom: 1rem; min-height: 20px; }
+    /* Options */
+    .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(265px, 1fr)); gap: 9px; margin-bottom: 1.25rem; }
+    .opt {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 13px 14px; border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); cursor: pointer;
+      background: var(--white); transition: border-color .15s, background .15s, transform .12s;
+      text-align: left; width: 100%; font-family: var(--font);
+    }
+    .opt:hover { border-color: #d1d5db; background: #f9fafb; transform: translateY(-1px); }
+    .opt:active { transform: translateY(0); }
+    .opt.sel { border-width: 2px; }
+    .opt-ico { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; }
+    .opt-txt { font-size: 13.5px; line-height: 1.5; color: var(--text); padding-top: 2px; }
+    /* Nav */
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: .75rem; }
+    .btn {
+      padding: 10px 22px; border-radius: var(--radius-sm);
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      border: 1.5px solid var(--border); background: var(--white);
+      color: var(--text); transition: background .15s, border-color .15s;
+      font-family: var(--font);
+    }
+    .btn:hover { background: #f9fafb; border-color: #d1d5db; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { color: var(--white) !important; }
+    .btn-primary:hover { filter: brightness(.92); }
+    /* Fade/slide */
+    .fade { animation: fadeUp .26s cubic-bezier(.4,0,.2,1); }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    /* Other textarea */
+    textarea.other-inp {
+      width: 100%; padding: 11px 13px; border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); font-size: 13.5px; font-family: var(--font);
+      color: var(--text); background: var(--white); resize: vertical; min-height: 80px;
+      margin-bottom: 1rem; outline: none; transition: border-color .15s;
+    }
+    textarea.other-inp:focus { border-color: #6366f1; }
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 20px; height: 20px;
+      border: 2.5px solid #e5e7eb; border-top-color: #6366f1;
+      border-radius: 50%; animation: spin .6s linear infinite;
+      vertical-align: middle; margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── ANALYSIS SCREEN ────────────────────────────────────────────────── */
+    .analysis-wrap { text-align: center; padding: 3rem 1rem; }
+    .analysis-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: .4rem; }
+    .analysis-sub   { font-size: 13px; color: var(--muted); margin-bottom: 2rem; }
+    .analysis-bar-track {
+      height: 8px; background: #f3f4f6; border-radius: 4px;
+      max-width: 320px; margin: 0 auto 1.5rem; overflow: hidden;
+    }
+    .analysis-bar-fill {
+      height: 100%; border-radius: 4px; width: 0;
+      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+    }
+    .analysis-steps { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 0 auto; }
+    .a-step {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--muted);
+      padding: 10px 14px; border-radius: 8px; background: #f9fafb;
+      border: 1px solid #f3f4f6; opacity: 0; transform: translateY(6px);
+      transition: opacity .3s, transform .3s, color .3s, background .3s;
+    }
+    .a-step.visible  { opacity: 1; transform: translateY(0); }
+    .a-step.done     { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
+    .a-step.active   { color: var(--text); background: var(--white); border-color: #e5e7eb; }
+    .a-step-ico      { font-size: 16px; flex-shrink: 0; }
+
+    /* ── PERSONA REVEAL ─────────────────────────────────────────────────── */
+    .reveal-wrap { animation: revealPop .5s cubic-bezier(.34,1.56,.64,1); }
+    @keyframes revealPop { from { opacity: 0; transform: scale(.92) translateY(12px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+    .persona-header {
+      border-radius: var(--radius); padding: 2.5rem 2rem 2rem;
+      text-align: center; position: relative; overflow: hidden; margin-bottom: 1.5rem;
+    }
+    .persona-eyebrow {
+      font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 1.25rem; opacity: .75;
+    }
+    .persona-icon-wrap {
+      width: 88px; height: 88px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; margin: 0 auto 1.25rem; position: relative; z-index: 1;
+    }
+    .persona-name {
+      font-size: 26px; font-weight: 700; margin-bottom: .5rem;
+      position: relative; z-index: 1; line-height: 1.2;
+    }
+    .persona-tagline {
+      font-size: 14px; font-style: italic; opacity: .8;
+      position: relative; z-index: 1; line-height: 1.5; max-width: 400px; margin: 0 auto;
+    }
+    .persona-deco { position: absolute; border-radius: 50%; }
+
+    .persona-body { margin-bottom: 1.5rem; }
+    .persona-desc {
+      font-size: 14.5px; color: var(--muted); line-height: 1.7;
+      padding: 1.25rem 1.25rem; background: #f9fafb; border-radius: var(--radius-sm);
+      border: 1px solid #f3f4f6; margin-bottom: 1.25rem;
+    }
+    .persona-tips-title {
+      font-size: 12px; font-weight: 700; letter-spacing: .7px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: .75rem;
+    }
+    .persona-tips { display: flex; flex-direction: column; gap: 9px; }
+    .persona-tip {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 14px; border-radius: var(--radius-sm);
+      border: 1px solid; font-size: 13.5px; line-height: 1.5;
+    }
+    .persona-tip-ico { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+
+    .reveal-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+      padding-top: 1.25rem; border-top: 1px solid #f3f4f6;
+    }
+    .saved-badge {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #15803d; font-weight: 500;
+    }
+    .restart-btn {
+      font-size: 13px; color: var(--muted); background: none;
+      border: 1px solid var(--border); padding: 7px 16px;
+      border-radius: 20px; cursor: pointer; font-family: var(--font);
+      transition: border-color .15s, color .15s;
+    }
+    .restart-btn:hover { border-color: #9ca3af; color: var(--text); }
+
+    @media (max-width: 500px) {
+      .shell { padding: 1.25rem; }
+      .opts  { grid-template-columns: 1fr; }
+      .q-title { font-size: 16px; }
+      .banner  { height: 130px; }
+      .banner-icon { font-size: 48px; }
+      .persona-name { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="survey-header">
+    <span class="survey-logo">Copilot Awareness Survey</span>
+    <span class="step-pill" id="step-pill">1 of 5</span>
+  </div>
+  <div id="app"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIG — paste your Apps Script web app URL here
+// ─────────────────────────────────────────────────────────────────────────────
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbygQe2B1mfKX3k_Y_HT7o8eCRiLwtFBpBwm6uQ6G5pwWehkNvgmnkO3wrVgVRO5CUlX1Q/exec';
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── QUESTIONS ────────────────────────────────────────────────────────────────
+const QS = [
+  {
+    id:'q1', col:'Q1: Time sinks (top 3)',
+    title:'Outside of core engineering, design, or field work, which tasks take up the most time in a typical working week?',
+    hint:'Select your top 3', type:'multi', max:3, pcolor:'#2563EB',
+    banner:{bg:'#EFF6FF',fg:'#1D4ED8',ac:'#BFDBFE',ic:'ti-clock-hour-4',
+      circles:[{w:120,h:120,t:-30,r:-25,op:.45},{w:50,h:50,b:-12,l:55,op:.25},{w:32,h:32,t:18,r:90,op:.2}]},
+    opts:[
+      {id:'a',ic:'ti-file-description',t:'Writing up project updates, design notes, or field inspection reports'},
+      {id:'b',ic:'ti-search',          t:'Searching for the latest plans, standards (DOT/local), or project documents'},
+      {id:'c',ic:'ti-book-2',          t:'Preparing for project work (reviewing previous designs, markups, or project history)'},
+      {id:'d',ic:'ti-refresh',         t:'Following up on status updates from internal teams, reviewers, or partners'},
+      {id:'e',ic:'ti-messages',        t:'Communicating with clients, agencies, or stakeholders (emails, RFIs, coordination)'},
+      {id:'f',ic:'ti-calendar-event',  t:'Attending or catching up on internal project meetings or coordination calls'},
+    ]
+  },
+  {
+    id:'q2', col:'Q2: Situations last month',
+    title:'Which of these situations have you experienced in the last month?',
+    hint:'Select all that apply', type:'multi', max:null, pcolor:'#D97706',
+    banner:{bg:'#FFFBEB',fg:'#B45309',ac:'#FCD34D',ic:'ti-alert-triangle',
+      circles:[{w:90,h:90,t:-20,l:-18,op:.4},{w:55,h:55,b:-12,r:80,op:.25},{w:30,h:30,t:10,r:40,op:.2}]},
+    opts:[
+      {id:'a',ic:'ti-file-search',    t:"Spent time looking for plans, standards, or documents I knew existed but couldn't find"},
+      {id:'b',ic:'ti-copy',           t:'Recreated design elements, calculations, or documentation that had already been done before'},
+      {id:'c',ic:'ti-mail-search',    t:'Had to dig through long email threads or plan sets to find a specific detail or decision'},
+      {id:'d',ic:'ti-repeat',         t:'Wrote repetitive project updates, reports, or coordination emails'},
+      {id:'e',ic:'ti-alert-circle',   t:"Missed or had to clarify a project detail because meeting notes or decisions weren't clearly captured"},
+      {id:'f',ic:'ti-database-import',t:'Manually pulled together information from multiple sources'},
+    ]
+  },
+  {
+    id:'q3', col:'Q3: Copilot awareness',
+    title:'How would you describe your current awareness of Microsoft Copilot?',
+    hint:'Select one', type:'single', max:1, pcolor:'#7C3AED',
+    banner:{bg:'#F5F3FF',fg:'#4338CA',ac:'#C4B5FD',ic:'ti-sparkles',
+      circles:[{w:100,h:100,b:-25,r:-20,op:.4},{w:42,h:42,t:12,l:30,op:.2},{w:60,h:60,t:-15,l:120,op:.15}]},
+    opts:[
+      {id:'a',ic:'ti-question-mark',t:"I've never heard of it / not sure what it is"},
+      {id:'b',ic:'ti-ear',          t:"I've heard the name but don't know what it does"},
+      {id:'c',ic:'ti-bulb',         t:"I have a general idea but haven't used it"},
+      {id:'d',ic:'ti-thumb-down',   t:"I've tried it once or twice but didn't find it useful"},
+      {id:'e',ic:'ti-clock',        t:'I use it occasionally'},
+      {id:'f',ic:'ti-star',         t:'I use it regularly as part of my workflow'},
+    ]
+  },
+  {
+    id:'q4', col:'Q4: Barriers to adoption',
+    title:"If you're not using Copilot (or not using it much), what's the reason?",
+    hint:'Select all that apply', type:'multi', max:null, pcolor:'#EA580C',
+    banner:{bg:'#FFF7ED',fg:'#C2410C',ac:'#FDBA74',ic:'ti-lock',
+      circles:[{w:85,h:85,t:-18,r:-18,op:.4},{w:44,h:44,b:-10,l:40,op:.25},{w:26,h:26,b:18,r:50,op:.2}]},
+    opts:[
+      {id:'a',ic:'ti-help',        t:"I don't know how to access it or get started"},
+      {id:'b',ic:'ti-compass-off', t:"I'm not sure what it can actually do for my type of work"},
+      {id:'c',ic:'ti-mood-sad',    t:"I tried it and it didn't give me useful results"},
+      {id:'d',ic:'ti-hourglass',   t:"I don't have time to learn something new"},
+      {id:'e',ic:'ti-building',    t:"I'm not sure it's relevant for field work — it seems more of an office tool"},
+      {id:'f',ic:'ti-user-x',      t:"I haven't been encouraged or given time to explore it"},
+      {id:'g',ic:'ti-key-off',     t:"I didn't know I had access to it"},
+    ]
+  },
+  {
+    id:'q5', col:'Q5: Most valuable use case',
+    title:'If Copilot could save you time on ONE thing in your working day, what would be most valuable?',
+    hint:'Select one — or describe your own below',
+    type:'single-text', max:1, pcolor:'#16A34A',
+    banner:{bg:'#F0FDF4',fg:'#15803D',ac:'#86EFAC',ic:'ti-rocket',
+      circles:[{w:95,h:95,b:-22,l:-20,op:.38},{w:50,h:50,t:8,r:28,op:.2},{w:28,h:28,b:10,r:78,op:.25}]},
+    opts:[
+      {id:'a',    ic:'ti-pencil',      t:'Drafting project updates, reports, or design summaries faster'},
+      {id:'b',    ic:'ti-search',      t:'Instantly finding plans, standards, or project history without searching'},
+      {id:'c',    ic:'ti-list-details',t:'Summarizing long email threads, meeting notes, or review comments'},
+      {id:'d',    ic:'ti-bolt',        t:'Getting a quick briefing on a project, corridor, or client before working on it'},
+      {id:'e',    ic:'ti-file-import', t:'Turning markups, field notes, or rough notes into a formatted document'},
+      {id:'f',    ic:'ti-send',        t:'Drafting clear, professional communication to clients, agencies, or partners'},
+      {id:'other',ic:'ti-dots',        t:'Something else (please describe below)'},
+    ]
+  }
+];
+
+// ── PERSONAS ─────────────────────────────────────────────────────────────────
+const PERSONAS = {
+  detective: {
+    name:'The Document Detective',
+    tagline:'"You could find a needle in a haystack — but you shouldn\'t have to."',
+    desc:'A significant chunk of your week disappears into tracking down plans, standards, and project history you know exists somewhere. Your superpower is persistence; your kryptonite is the search bar.',
+    icon:'ti-search',
+    bg:'#EFF6FF', fg:'#1D4ED8', iconBg:'rgba(29,78,216,.15)', tipBg:'#EFF6FF', tipBorder:'#BFDBFE', tipColor:'#1e40af',
+    decos:[{w:130,h:130,t:-35,r:-30,op:.3},{w:55,h:55,b:-15,l:30,op:.18}],
+    tips:[
+      {ic:'ti-file-search',  t:'Ask Copilot to find the latest version of any standard, plan, or spec across your entire Microsoft 365 environment — in seconds.'},
+      {ic:'ti-history',      t:'Before starting a project, ask Copilot to surface all related emails, files, and decisions from the last 12 months.'},
+      {ic:'ti-database',     t:'Use Copilot in Teams or Outlook to search across channels and inboxes — no more digging through thread after thread.'},
+    ]
+  },
+  writer: {
+    name:'The Report Writer',
+    tagline:'"Your words keep the whole project moving — but they shouldn\'t all be yours."',
+    desc:'A meaningful portion of your week goes into writing: updates, reports, field notes, coordination emails. The quality is there — but the volume is relentless, and it often feels like time away from your real work.',
+    icon:'ti-pencil',
+    bg:'#FFF7ED', fg:'#C2410C', iconBg:'rgba(194,65,12,.12)', tipBg:'#FFF7ED', tipBorder:'#FED7AA', tipColor:'#9a3412',
+    decos:[{w:120,h:120,t:-28,r:-25,op:.28},{w:48,h:48,b:-10,l:50,op:.18}],
+    tips:[
+      {ic:'ti-pencil',      t:'Give Copilot your bullet points and ask it to draft a full project update or field inspection report — then just review and edit.'},
+      {ic:'ti-file-import', t:'Paste in rough field notes or voice-memo transcripts and ask Copilot to turn them into a formatted document.'},
+      {ic:'ti-repeat',      t:'Build reusable Copilot prompts for your most common report types so every first draft starts 80% done.'},
+    ]
+  },
+  marathoner: {
+    name:'The Meeting Marathoner',
+    tagline:'"You\'re always in the loop — because you have to be."',
+    desc:'Your calendar is stacked with coordination calls, project catch-ups, and status reviews. You\'re exceptional at keeping everyone aligned — but it leaves precious little time for focused work.',
+    icon:'ti-calendar-event',
+    bg:'#F5F3FF', fg:'#4338CA', iconBg:'rgba(67,56,202,.12)', tipBg:'#F5F3FF', tipBorder:'#C4B5FD', tipColor:'#3730a3',
+    decos:[{w:110,h:110,b:-28,r:-25,op:.28},{w:45,h:45,t:10,l:28,op:.18}],
+    tips:[
+      {ic:'ti-list-details', t:'Use Copilot in Teams to get an instant meeting summary and action list — catch up on any call you missed in under a minute.'},
+      {ic:'ti-clock',        t:'Ask Copilot to draft a concise meeting agenda from an email thread — prep time drops from 20 minutes to 2.'},
+      {ic:'ti-bell',         t:'After a call, ask Copilot to extract all committed actions and owners from the transcript so nothing slips through.'},
+    ]
+  },
+  hub: {
+    name:'The Coordination Hub',
+    tagline:'"You\'re the glue. Everyone knows it — even if they don\'t say so."',
+    desc:'Stakeholder emails, RFIs, agency coordination, internal follow-ups — you manage a web of relationships that keeps projects on track. The communication never stops, and the stakes for getting it right are high.',
+    icon:'ti-git-merge',
+    bg:'#ECFDF5', fg:'#065F46', iconBg:'rgba(6,95,70,.12)', tipBg:'#ECFDF5', tipBorder:'#A7F3D0', tipColor:'#065f46',
+    decos:[{w:115,h:115,t:-30,l:-28,op:.28},{w:48,h:48,b:-10,r:40,op:.18}],
+    tips:[
+      {ic:'ti-send',         t:'Ask Copilot to draft a professional email to a client, agency, or reviewer — give it the key points, let it handle the tone and polish.'},
+      {ic:'ti-mail-search',  t:'Use Copilot in Outlook to summarise long email threads instantly — always respond with full context, never re-read 40 messages.'},
+      {ic:'ti-refresh',      t:'Ask Copilot to write a concise status update for stakeholders based on your project notes — consistent, clear, and quick.'},
+    ]
+  },
+  builder: {
+    name:'The Knowledge Builder',
+    tagline:'"You\'ve done this before. You just can\'t always find it."',
+    desc:'You invest real time in preparation — reviewing past designs, reconstructing project history, making sure work doesn\'t get duplicated. The institutional knowledge often lives in your head because it\'s faster than searching for it.',
+    icon:'ti-building',
+    bg:'#FFFBEB', fg:'#92400E', iconBg:'rgba(146,64,14,.12)', tipBg:'#FFFBEB', tipBorder:'#FDE68A', tipColor:'#92400e',
+    decos:[{w:105,h:105,b:-25,r:-22,op:.28},{w:42,h:42,t:8,l:24,op:.18}],
+    tips:[
+      {ic:'ti-bolt',         t:'Ask Copilot to brief you on any project — it will pull together relevant files, emails, and decisions before you even open a folder.'},
+      {ic:'ti-copy',         t:'Before starting new work, ask Copilot to surface similar past projects, previous calculations, or earlier design decisions.'},
+      {ic:'ti-database',     t:'Use Copilot in SharePoint to query your organisation\'s document library in plain English — stop rebuilding what already exists.'},
+    ]
+  }
+};
+
+// ── PERSONA SCORING ───────────────────────────────────────────────────────────
+// Weights: [detective, writer, marathoner, hub, builder]
+const SCORES = {
+  q1: { a:[0,3,0,1,1], b:[3,0,0,0,2], c:[1,0,0,0,3], d:[0,0,2,3,0], e:[0,1,1,3,0], f:[0,0,3,2,0] },
+  q2: { a:[3,0,0,0,2], b:[1,2,0,0,3], c:[2,0,2,1,1], d:[0,3,0,1,0], e:[0,0,3,1,1], f:[2,1,0,1,3] },
+  q5: { a:[0,3,0,1,1], b:[3,0,0,0,2], c:[0,0,2,2,0], d:[1,0,0,0,3], e:[1,2,0,0,1], f:[0,0,0,3,0] }
+};
+const P_KEYS = ['detective','writer','marathoner','hub','builder'];
+
+function calcPersona(answers) {
+  const totals = [0,0,0,0,0];
+  ['q1','q2','q5'].forEach(qid => {
+    const sel = answers[qid] || [];
+    sel.forEach(id => {
+      if (SCORES[qid] && SCORES[qid][id]) {
+        SCORES[qid][id].forEach((v,i) => totals[i] += v);
+      }
+    });
+  });
+  let best = 0;
+  totals.forEach((v,i) => { if (v > totals[best]) best = i; });
+  return P_KEYS[best];
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let step = 0, answers = {}, otherText = '';
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getSel(qid) { return answers[qid] || []; }
+
+function makeBanner(q, stepNum) {
+  const b = q.banner;
+  const circles = b.circles.map(c => {
+    let s = `position:absolute;width:${c.w}px;height:${c.h}px;border-radius:50%;background:${b.ac};opacity:${c.op};`;
+    if (c.t !== undefined) s += `top:${c.t}px;`;
+    if (c.b !== undefined) s += `bottom:${c.b}px;`;
+    if (c.l !== undefined) s += `left:${c.l}px;`;
+    if (c.r !== undefined) s += `right:${c.r}px;`;
+    return `<div class="b-circle" style="${s}"></div>`;
+  }).join('');
+  return `<div class="banner" style="background:${b.bg}">
+    ${circles}
+    <div class="banner-badge" style="background:${b.fg};color:#fff">Question ${stepNum} of ${QS.length}</div>
+    <i class="ti ${b.ic} banner-icon" style="color:${b.fg}" aria-hidden="true"></i>
+  </div>`;
+}
+
+function makeCard(o, q) {
+  const sel = getSel(q.id).includes(o.id);
+  const icoStyle = sel ? `background:${q.pcolor};color:#fff` : `background:${q.banner.bg};color:${q.banner.fg}`;
+  const cardStyle = sel ? `border-color:${q.pcolor};background:${q.banner.bg}` : '';
+  return `<button class="opt${sel?' sel':''}" style="${cardStyle}"
+    onclick="toggle('${q.id}','${o.id}')" aria-pressed="${sel}">
+    <div class="opt-ico" style="${icoStyle}"><i class="ti ${o.ic}" aria-hidden="true"></i></div>
+    <span class="opt-txt">${o.t}</span>
+  </button>`;
+}
+
+// ── RENDER SURVEY ─────────────────────────────────────────────────────────────
+function render() {
+  const q = QS[step];
+  const sel = getSel(q.id);
+  const pct = Math.round((step / QS.length) * 100);
+  const canNext = sel.length > 0 || (q.type === 'single-text' && otherText.trim().length > 0);
+  const isLast = step === QS.length - 1;
+  const showOther = q.type === 'single-text' && sel.includes('other');
+
+  let limitMsg = '';
+  if (q.max === 3) {
+    limitMsg = sel.length === 3
+      ? `<div class="limit-msg" style="color:${q.pcolor}">Maximum 3 selected — deselect one to change</div>`
+      : `<div class="limit-msg">${sel.length} / 3 selected</div>`;
+  } else if (q.type === 'multi') {
+    limitMsg = `<div class="limit-msg">${sel.length} selected</div>`;
+  } else {
+    limitMsg = '<div class="limit-msg" style="min-height:20px"></div>';
+  }
+
+  document.getElementById('step-pill').textContent = `${step+1} of ${QS.length}`;
+  document.getElementById('app').innerHTML = `<div class="fade">
+    <div class="progress-track">
+      <div class="progress-fill" style="width:${pct}%;background:${q.pcolor}"></div>
+    </div>
+    ${makeBanner(q, step+1)}
+    <div class="q-title">${q.title}</div>
+    <div class="q-hint">${q.hint}</div>
+    ${limitMsg}
+    <div class="opts" role="group" aria-label="${q.title}">
+      ${q.opts.map(o => makeCard(o, q)).join('')}
+    </div>
+    ${showOther ? `<textarea class="other-inp" id="other-inp" placeholder="Describe what would be most valuable to you...">${otherText}</textarea>` : ''}
+    <div class="nav">
+      <button class="btn" onclick="goBack()" ${step===0?'disabled':''}>← Back</button>
+      <button class="btn btn-primary" style="background:${q.pcolor};border-color:${q.pcolor}"
+        onclick="goNext()" ${!canNext?'disabled':''}>${isLast ? 'See my work type →' : 'Next →'}</button>
+    </div>
+  </div>`;
+
+  if (showOther) {
+    const ta = document.getElementById('other-inp');
+    if (ta) { ta.value = otherText; ta.addEventListener('input', e => { otherText = e.target.value; }); }
+  }
+}
+
+function toggle(qid, oid) {
+  const q = QS.find(x => x.id === qid);
+  const sel = getSel(qid);
+  if (q.type === 'single' || q.type === 'single-text') {
+    answers[qid] = sel.includes(oid) ? [] : [oid];
+    if (oid !== 'other') otherText = '';
+  } else {
+    if (sel.includes(oid)) answers[qid] = sel.filter(x => x !== oid);
+    else if (!q.max || sel.length < q.max) answers[qid] = [...sel, oid];
+  }
+  render();
+}
+
+function goBack() { if (step > 0) { step--; render(); } }
+function goNext() {
+  if (step < QS.length - 1) { step++; render(); }
+  else { showAnalysis(); }
+}
+
+// ── ANALYSIS ANIMATION ────────────────────────────────────────────────────────
+function showAnalysis() {
+  document.getElementById('step-pill').textContent = 'Analysing…';
+  document.getElementById('app').innerHTML = `
+    <div class="analysis-wrap">
+      <div class="analysis-title">Identifying your work type…</div>
+      <div class="analysis-sub">Analysing your responses across 5 dimensions</div>
+      <div class="analysis-bar-track"><div class="analysis-bar-fill" id="abar"></div></div>
+      <div class="analysis-steps">
+        <div class="a-step" id="as0"><i class="ti ti-clock a-step-ico" aria-hidden="true"></i>Mapping your time sinks</div>
+        <div class="a-step" id="as1"><i class="ti ti-alert-triangle a-step-ico" aria-hidden="true"></i>Reviewing last month's friction points</div>
+        <div class="a-step" id="as2"><i class="ti ti-sparkles a-step-ico" aria-hidden="true"></i>Assessing your Copilot readiness</div>
+        <div class="a-step" id="as3"><i class="ti ti-user a-step-ico" aria-hidden="true"></i>Matching to your work type</div>
+      </div>
+    </div>`;
+
+  const timings = [
+    { step: 0, delay: 100,  pct: 22,  cls:'active' },
+    { step: 0, delay: 700,  pct: 22,  cls:'done'   },
+    { step: 1, delay: 750,  pct: 48,  cls:'active' },
+    { step: 1, delay: 1400, pct: 48,  cls:'done'   },
+    { step: 2, delay: 1450, pct: 72,  cls:'active' },
+    { step: 2, delay: 2050, pct: 72,  cls:'done'   },
+    { step: 3, delay: 2100, pct: 95,  cls:'active' },
+    { step: 3, delay: 2750, pct: 100, cls:'done',  finish: true },
+  ];
+
+  timings.forEach(t => {
+    setTimeout(() => {
+      const el = document.getElementById('as' + t.step);
+      if (!el) return;
+      // remove both, then add the right one
+      el.classList.remove('active','done','visible');
+      el.classList.add('visible', t.cls);
+      const bar = document.getElementById('abar');
+      if (bar) bar.style.width = t.pct + '%';
+      if (t.finish) {
+        setTimeout(() => showReveal(calcPersona(answers)), 400);
+      }
+    }, t.delay);
+  });
+
+  // make steps visible one by one
+  [0,1,2,3].forEach(i => {
+    setTimeout(() => {
+      const el = document.getElementById('as'+i);
+      if (el) el.classList.add('visible');
+    }, i * 50 + 80);
+  });
+
+  // fire submission in background
+  submitToSheets();
+}
+
+// ── PERSONA REVEAL ────────────────────────────────────────────────────────────
+function showReveal(pKey) {
+  const p = PERSONAS[pKey];
+  document.getElementById('step-pill').textContent = 'Your work type';
+
+  const decos = p.decos.map(d => {
+    let s = `position:absolute;width:${d.w}px;height:${d.h}px;border-radius:50%;background:${p.fg};opacity:${d.op};`;
+    if (d.t !== undefined) s += `top:${d.t}px;`;
+    if (d.b !== undefined) s += `bottom:${d.b}px;`;
+    if (d.l !== undefined) s += `left:${d.l}px;`;
+    if (d.r !== undefined) s += `right:${d.r}px;`;
+    return `<div class="persona-deco" style="${s}"></div>`;
+  }).join('');
+
+  const tips = p.tips.map(t => `
+    <div class="persona-tip" style="background:${p.tipBg};border-color:${p.tipBorder};color:${p.tipColor}">
+      <i class="ti ${t.ic} persona-tip-ico" aria-hidden="true"></i>
+      <span>${t.t}</span>
+    </div>`).join('');
+
+  document.getElementById('app').innerHTML = `<div class="reveal-wrap">
+    <div class="persona-header" style="background:${p.bg};color:${p.fg}">
+      ${decos}
+      <div class="persona-eyebrow">Your Copilot work type</div>
+      <div class="persona-icon-wrap" style="background:${p.iconBg}">
+        <i class="ti ${p.icon}" style="color:${p.fg}" aria-hidden="true"></i>
+      </div>
+      <div class="persona-name" style="color:${p.fg}">${p.name}</div>
+      <div class="persona-tagline" style="color:${p.fg}">${p.tagline}</div>
+    </div>
+
+    <div class="persona-body">
+      <div class="persona-desc">${p.desc}</div>
+      <div class="persona-tips-title">How Copilot can help you specifically</div>
+      <div class="persona-tips">${tips}</div>
+    </div>
+
+    <div class="reveal-footer">
+      <div class="saved-badge">
+        <i class="ti ti-circle-check" style="font-size:16px" aria-hidden="true"></i>
+        Responses saved — thank you!
+      </div>
+      <button class="restart-btn" onclick="restartSurvey()">Take again</button>
+    </div>
+  </div>`;
+}
+
+// ── SUBMIT TO SHEETS ──────────────────────────────────────────────────────────
+async function submitToSheets() {
+  if (!SCRIPT_URL || SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') return;
+  const payload = { timestamp: new Date().toISOString() };
+  QS.forEach(q => {
+    const sel = answers[q.id] || [];
+    const labels = sel.map(id => {
+      if (id === 'other') return otherText.trim() ? 'Other: ' + otherText.trim() : 'Other';
+      const opt = q.opts.find(o => o.id === id);
+      return opt ? opt.t : id;
+    });
+    payload[q.id] = labels.join(' | ');
+  });
+  payload.persona = calcPersona(answers);
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) { console.error(e); }
+}
+
+function restartSurvey() {
+  step = 0; answers = {}; otherText = '';
+  document.getElementById('step-pill').textContent = '1 of 5';
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
