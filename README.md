@@ -15,6 +15,10 @@ Interactive visualization tool for analyzing traffic signal release patterns and
 - Interactive charts and graphs
 - Export functionality for analysis results
 
+**Pages:**
+- `index.html` (also serves as a hub page linking to other tools)
+- `SigRelease.html` (standalone copy of the visualizer)
+
 ### 🗺️ Interactive Origin-Destination Matrix Visualization (`SantaFeOD.html`)
 Advanced geospatial visualization tool for analyzing traffic flow patterns using origin-destination matrices with integrated mapping capabilities.
 
@@ -63,6 +67,14 @@ Standalone multi-step survey UI that assigns a persona-style result based on ans
 - “Other” free-text capture on applicable questions
 - Persona scoring + reveal screen with tailored tips
 - Clean, printable single-page HTML
+
+### 🔥 Eaton Fire: Data Analysis (`Eaton Fire.html`)
+NYT-style narrative page with interactive charts showing fire growth, containment progress, and other incident metrics.
+
+**Key Features:**
+- Multi-section narrative layout with summary stats
+- Chart.js visualizations (growth/containment, damage, timeline)
+- Single-file page (open directly in the browser)
 
 ## Quick Start
 
@@ -133,6 +145,7 @@ Traffic-Visualization-Tools/
 ├── PenaViz.html            # PENA Boulevard travel time analysis
 ├── confSeating.html        # Conference seating simulation
 ├── survey.html              # Copilot awareness survey (persona scoring)
+├── Eaton Fire.html          # Eaton Fire narrative analysis (Chart.js)
 ├── styles.css              # Shared styling
 ├── simulation.js           # Simulation engine
 ├── debug_restart.js        # Debug utilities
