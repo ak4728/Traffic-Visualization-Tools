@@ -45,6 +45,25 @@ Agent-based simulation for modeling conference seating dynamics and crowd behavi
 - Visual feedback and statistics
 - Behavioral pattern analysis
 
+### 🛣️ 72nd Avenue Corridor Study Map (`72nd_corridor_map.html`)
+Self-contained corridor-study dashboard for City of Arvada’s 72nd Ave corridor. Combines an interactive basemap with multiple analysis layers and small-multiple charts/panels.
+
+**Key Features:**
+- Interactive corridor map (Leaflet)
+- Layer toggles for contextual overlays (equity, safety, schools/RTD where available)
+- StreetLight-style corridor volume styling with a side panel
+- TCDS trend cards (AADT-by-year + hourly distribution)
+- Population & employment panel for quick context
+
+### 📝 Copilot Awareness Survey (`survey.html`)
+Standalone multi-step survey UI that assigns a persona-style result based on answers (runs entirely in the browser; no backend).
+
+**Key Features:**
+- Multi-step questionnaire with progress indicator
+- “Other” free-text capture on applicable questions
+- Persona scoring + reveal screen with tailored tips
+- Clean, printable single-page HTML
+
 ## Quick Start
 
 1. **Download/Clone the Repository**
@@ -109,9 +128,11 @@ Agent-based simulation for modeling conference seating dynamics and crowd behavi
 Traffic-Visualization-Tools/
 ├── index.html              # Main traffic signal visualizer
 ├── SigRelease.html          # Signal release function analysis
+├── 72nd_corridor_map.html   # 72nd Ave corridor-study map/dashboard
 ├── SantaFeOD.html          # Origin-destination matrix visualization
 ├── PenaViz.html            # PENA Boulevard travel time analysis
 ├── confSeating.html        # Conference seating simulation
+├── survey.html              # Copilot awareness survey (persona scoring)
 ├── styles.css              # Shared styling
 ├── simulation.js           # Simulation engine
 ├── debug_restart.js        # Debug utilities
@@ -155,4 +176,4 @@ Licensed under the GPL-3.0 License. See [LICENSE](LICENSE) file for details.
 For questions, bug reports, or feature requests, please open an issue on the project repository.
 
 ---
-*Last updated: January 2026*
+*Last updated: June 2026*
