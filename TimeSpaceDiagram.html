@@ -7,17 +7,27 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; background: #f7f8fa; color: #23272f; line-height: 1.6; padding: 12px; }
-  .container { max-width: 1700px; margin: 0 auto; }
-  header { text-align: center; padding: 12px; border-bottom: 2px solid #d5dbe5; margin-bottom: 14px; }
-  h1 { color: #0f7b82; font-size: 1.5em; font-weight: 600; letter-spacing: -0.01em; }
-  .subtitle { color: #6b7280; font-style: italic; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; justify-content: center; }
+  .container { max-width: none; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 14px; padding: 4px 10px 8px; border-bottom: 2px solid #d5dbe5; margin-bottom: 10px; }
+  h1 { color: #0f7b82; font-size: 1.25em; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { color: #6b7280; font-style: italic; font-size: 0.88em; }
+  .nav { font-size: 0.85em; }
+  .nav a { color: #0f7b82; text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; }
   .tab { background: #f0f3f8; border: 1px solid #e2e6ee; color: #4b5563; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.9em; transition: all .2s; }
   .tab:hover { background: #e3edf3; }
   .tab.active { background: #14919b; border-color: #14919b; color: #fff; font-weight: bold; }
   .panel { display: none; }
   .panel.active { display: block; }
-  .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 14px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
+  .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
+  .panel-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 10px; align-items: stretch; }
+  .panel-grid .viz-container { margin-bottom: 0; }
+  @media (max-width: 900px){ .panel-grid { grid-template-columns: 1fr; } }
+  .pane-head { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2px; }
+  .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
+  .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 380px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
   canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
   .road-canvas { background: #e7ebf0; margin-bottom: 12px; }
   .tsd-canvas { background: #ffffff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
@@ -65,8 +75,8 @@
 <div class="container">
   <header>
     <h1>The Time-Space Diagram</h1>
-    <div class="subtitle">Daganzo — Fundamentals of Transportation and Traffic Operations, Chapter 1</div>
-    <div style="margin-top:6px; font-size:0.9em;"><a href="DilemmaZone.html" style="color:#0f7b82; text-decoration:none;">Dilemma Zone →</a></div>
+    <span class="subtitle">Daganzo — Fundamentals of Transportation and Traffic Operations, Ch. 1</span>
+    <span class="nav"><a href="DilemmaZone.html">Dilemma Zone →</a></span>
   </header>
 
   <div class="tabs">
@@ -79,8 +89,12 @@
 
   <!-- PANEL 1: SINGLE VEHICLE -->
   <div class="panel active" id="single">
+    <div class="panel-grid">
     <div class="viz-container">
       <canvas id="singleTSD"  class="tsd-canvas"  width="1200" height="460"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">A <b>trajectory</b> is the curve x(t): position along a one-way guideway vs. time — exactly one x for every t. <b>Slope</b> = velocity <code>v = dx/dt</code>: steep → fast, flat → stopped. <b>Curvature</b> = acceleration: concave-down → decelerating, concave-up → accelerating. The car drives up the road beside the position axis, always level with its trajectory point.</span></span></div>
       <div class="readout" id="singleReadout">Press ▶ Play — the car drives up the road beside the position axis as its trajectory draws</div>
       <div class="controls">
         <button class="action" id="singlePlay">▶ Play</button>
@@ -100,18 +114,18 @@
           <span class="val" id="singleSpeedVal">1.0×</span>
         </div>
       </div>
-      <div class="explanation">
-        <h3>Reading a trajectory x(t)</h3>
-        <p>A <strong>trajectory</strong> is the curve x(t): position along a 1-D guideway vs. time. Every valid trajectory has <em>exactly one</em> x for each t.</p>
-        <p><strong>Slope</strong> = velocity <code>v = dx/dt</code>. Steep → fast. Flat → stopped. <strong>Curvature</strong> = acceleration. Concave-down → decelerating. Concave-up → accelerating.</p>
-      </div>
+    </div>
     </div>
   </div>
 
   <!-- PANEL 2: MANY VEHICLES -->
   <div class="panel" id="many">
+    <div class="panel-grid">
     <div class="viz-container">
       <canvas id="manyTSD"  class="tsd-canvas"  width="1200" height="460"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">A <b>horizontal line</b> is a stationary observer: its intersections with trajectories are <b>headways h</b>, and flow q = 1/h̄. A <b>vertical line</b> is an instantaneous photograph: gaps between vehicles are <b>spacings s</b>, and density k = 1/s̄. The observer counts fast cars more often, so time-mean speed V<sub>t</sub> ≥ space-mean speed V<sub>s</sub>. Drag both lines directly on the diagram — the observer also appears at the roadside.</span></span></div>
       <div class="legend">
         <div class="legend-item"><span class="swatch" style="background:#e63946"></span>Fast vehicles</div>
         <div class="legend-item"><span class="swatch" style="background:#457b9d"></span>Slow vehicles</div>
@@ -132,19 +146,18 @@
         <label><input type="checkbox" id="showPhoto" checked> Photograph (drag ↔ · double-click to re-follow)</label>
       </div>
       <div class="readout" id="manyReadout">Observer sees more FAST cars · Photo shows more SLOW cars → V<sub>t</sub> ≥ V<sub>s</sub></div>
-      <div class="explanation">
-        <h3>Many trajectories — two vehicle classes</h3>
-        <p>A <strong>horizontal line</strong> = stationary observer. Intersections with trajectories → <strong>headways h</strong>. Flow = 1/h̄.</p>
-        <p>A <strong>vertical line</strong> = instantaneous photograph. Gaps between vehicles → <strong>spacings s</strong>. Density = 1/s̄.</p>
-        <p>The observer sees fast cars more frequently → time-mean speed V<sub>t</sub> > space-mean speed V<sub>s</sub>.</p>
-      </div>
+    </div>
     </div>
   </div>
 
   <!-- PANEL 3: SIGNAL -->
   <div class="panel" id="signal">
+    <div class="panel-grid">
     <div class="viz-container">
       <canvas id="signalTSD"  class="tsd-canvas"  width="1200" height="460"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">Vehicles follow each other with the <b>GM 3rd model</b> <code>a = α·Δv/s</code> (α = 0.35, T = 0.6 s); a red signal acts as a stopped virtual leader at its stop line, so decelerations into the queue and the staggered discharge on green are car-following dynamics, not scripted. Each signal's red/green history is drawn as a colored bar along its line. The line connecting the kinks where vehicles join the queue is the <b>shockwave</b>. Tune <b>Signal 2 offset</b> so the platoon released by Signal 1 arrives at Signal 2 on green — a <b>green wave</b>; a bad offset stops the same platoon twice.</span></span></div>
       <div class="readout" id="signalReadout">Queues form on RED · Vehicles discharge on GREEN</div>
       <div class="controls">
         <button class="action" id="signalPlay">▶ Play</button>
@@ -170,19 +183,19 @@
           <span class="val" id="sigOffVal">4.0 s</span>
         </div>
       </div>
-      <div class="explanation">
-        <h3>Interrupted flow — two coordinated signals (GM car following)</h3>
-        <p>Vehicles arrive at constant headways and follow each other with the <strong>GM 3rd model</strong> <code>a = α·Δv/s</code> (α = 0.35, reaction time T = 0.6 s); a red signal acts as a <em>stopped virtual leader</em> at its stop line. So the smooth decelerations into the queue and the staggered discharge on <strong style="color:#2a9d8f">GREEN</strong> are car-following dynamics, not scripted. Each signal's red/green history is drawn as a colored bar along its horizontal line.</p>
-        <p>The line connecting the kinks where vehicles join the back of the queue is the <strong>shockwave</strong> moving upstream. Adjust the <strong>Signal 2 offset</strong> to coordinate the pair: with the right offset, the platoon released by Signal 1 arrives at Signal 2 just as it turns green — a <strong>green wave</strong>. A bad offset stops the same platoon twice.</p>
-      </div>
+    </div>
     </div>
   </div>
 
   <!-- PANEL 4: CLOSED LOOP -->
   <div class="panel" id="loop">
+    <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="loopRoad" class="road-canvas" width="1200" height="180"></canvas>
       <canvas id="loopTSD"  class="tsd-canvas"  width="1200" height="400"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">When a vehicle reaches the end of the route (x = L) it wraps back to x = 0, so each trajectory becomes a <b>sawtooth</b> — one tooth per lap. Relations: average speed <code>v = L/C</code> (C = cycle time), flow <code>q = n/C</code>, density <code>k = n/L</code>, so <code>q = k·v</code> — the fundamental relation holds on loops too.</span></span></div>
+      <canvas id="loopRoad" class="road-canvas" width="1200" height="180"></canvas>
       <div class="readout" id="loopReadout">Sawtooth trajectories — each tooth = one lap of the loop</div>
       <div class="controls">
         <button class="action" id="loopPlay">▶ Play</button>
@@ -198,18 +211,18 @@
           <span class="val" id="loopSpeedVal">1.0×</span>
         </div>
       </div>
-      <div class="explanation">
-        <h3>Closed loop — bus route analogy</h3>
-        <p>When a vehicle reaches the end of the route (x = L) it wraps back to x = 0. On the time-space diagram this creates a <strong>sawtooth</strong> pattern.</p>
-        <p>Relations: average speed <code>v = L/C</code> (C = cycle time). Flow <code>q = n/C</code>. Density <code>k = n/L</code>. Therefore <code>q = kv</code> — the fundamental relation holds on loops too.</p>
-      </div>
+    </div>
     </div>
   </div>
 
   <!-- PANEL 5: GM CAR FOLLOWING -->
   <div class="panel" id="gm">
+    <div class="panel-grid">
     <div class="viz-container">
       <canvas id="gmTSD"  class="tsd-canvas"  width="1200" height="520"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">Gazis–Herman–Rothery (GM): each follower's acceleration is a <b>delayed</b> response to its leader, <code>a = α·v<sup>m</sup>/s<sup>l</sup>·Δv</code> evaluated at t−T (1st: m=0, l=0 · 2nd: two-level α, higher when spacing &lt; 130 ft · 3rd: m=0, l=1 · 4th: m=1, l=1 · 5th: m=1, l=2). Every follower obeys the selected model, so one leader input cascades car-to-car. Press <b>🛑</b> mid-run and watch the disturbance propagate back as a <b>shockwave</b>; α, T and free-flow speed apply live. <b>Stability:</b> for the linear model the platoon is asymptotically stable only if <code>α·T ≤ ½</code> — exceed it and oscillations grow down the platoon until spacings collapse.</span></span></div>
       <div class="readout" id="gmReadout">Press ▶ Play — leader drives at free-flow speed; followers obey the GM model</div>
       <div class="controls">
         <button class="action" id="gmPlay">▶ Play</button>
@@ -262,20 +275,7 @@
       <div class="checkbox-row">
         <label><input type="checkbox" id="gmAuto" checked> Automatic leader slowdown at t = 10–18 s</label>
       </div>
-      <div class="explanation">
-        <h3>General Motors (Gazis–Herman–Rothery) car-following model</h3>
-        <p>Each follower's acceleration is a <em>delayed</em> response to the relative speed of its leader:
-        <code>a&#8345;&#8330;&#8321;(t+T) = α · v&#8345;&#8330;&#8321;&#7504;(t+T) / s&#737;(t) · [v&#8345;(t) − v&#8345;&#8330;&#8321;(t)]</code>
-        where <code>s</code> = spacing, <code>T</code> = driver reaction time, and <code>α, m, l</code> define the GM generation
-        (1st: m=0, l=0 · 2nd: two-level α, higher when spacing &lt; 130 ft · 3rd: m=0, l=1 · 4th: m=1, l=1 · 5th: m=1, l=2).
-        Every follower in the platoon obeys the selected model, so a single leader input cascades car-to-car down the whole string.</p>
-        <p>Press <strong>🛑 Leader brakes</strong> mid-run (or let the automatic slowdown fire) and watch the disturbance
-        propagate backward through the platoon as a <strong>shockwave</strong>. α, T and free-flow speed apply <em>live</em> —
-        no need to reset.</p>
-        <p><strong>Stability:</strong> for the linear model (m=0, l=0), the platoon is asymptotically stable only if
-        <code>α·T ≤ ½</code>. Push α or T past that and each vehicle overshoots more than the one ahead — oscillations grow
-        down the platoon until spacings collapse (⚠ near-collisions in the readout).</p>
-      </div>
+    </div>
     </div>
   </div>
 </div>
