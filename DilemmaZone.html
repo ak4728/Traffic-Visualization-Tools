@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Dilemma Zone</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; background: #f7f8fa; color: #23272f; line-height: 1.6; padding: 12px; }
+  .container { max-width: none; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 14px; padding: 4px 10px 8px; border-bottom: 2px solid #d5dbe5; margin-bottom: 10px; }
+  h1 { color: #0f7b82; font-size: 1.25em; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { color: #6b7280; font-style: italic; font-size: 0.88em; }
+  .nav { font-size: 0.85em; }
+  .nav a { color: #0f7b82; text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+  .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
+  .main-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 10px; align-items: stretch; margin-bottom: 10px; }
+  .main-grid .viz-container { margin-bottom: 0; }
+  @media (max-width: 900px){ .main-grid { grid-template-columns: 1fr; } }
+  .pane-head { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2px; }
+  .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
+  .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 360px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
+  #roadC { background: #eef0f4; touch-action: none; }
+  #chartC { background: #fff; cursor: crosshair; touch-action: none; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 12px 0 4px; align-items: center; }
+  .control-group { display: flex; flex-direction: column; align-items: center; gap: 3px; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 7px 12px; border-radius: 6px; }
+  .control-group label { font-size: 0.75em; color: #0f7b82; white-space: nowrap; }
+  input[type="range"] { width: 110px; accent-color: #14919b; }
+  .val { font-size: 0.82em; color: #1f2937; font-weight: bold; }
+  button.action { background: #14919b; color: #fff; border: none; padding: 9px 16px; border-radius: 6px; font-family: inherit; font-weight: bold; cursor: pointer; font-size: 0.9em; transition: transform .08s ease, box-shadow .15s ease, filter .15s ease; }
+  button.action:hover { filter: brightness(1.1); }
+  button.action:active { transform: scale(0.93); }
+  button.action.sec { background:#fff; color:#14919b; border:1px solid #14919b; }
+  button.action.warn { background:#e9a71f; color:#fff; }
+  .readout { text-align: center; font-family: 'Courier New', monospace; color: #0f6f76; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 5px; border-radius: 4px; margin-top: 8px; min-height: 20px; font-size: 0.84em; }
+  .badges { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:6px; font-family:'Courier New',monospace; font-size:0.8em; }
+  .badge { padding: 3px 10px; border-radius: 12px; background:#f0f3f8; }
+  .badge b { color:#1f2937; }
+  .b-go   { border: 1px solid #1d7a6f; color:#1d7a6f; }
+  .b-stop { border: 1px solid #3f6c9e; color:#3f6c9e; }
+  .b-dz   { border: 1px solid #c1121f; color:#c1121f; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: #f7f9fc; border: 1px solid #e2e6ee; border-radius: 8px; padding: 12px 14px; border-left: 4px solid #14919b; }
+  .card h3 { color: #0f7b82; font-size: 0.95em; margin-bottom: 4px; }
+  .card .formula { font-family: 'Courier New', monospace; font-size: 0.85em; color: #4b5563; }
+  .card .value { font-family: 'Courier New', monospace; font-size: 1.25em; color: #1f2937; font-weight: bold; margin-top: 4px; }
+  .card.dz-yes { border-left-color: #c1121f; }
+  .card.dz-yes .value { color: #c1121f; }
+  .card.dz-no { border-left-color: #1d7a6f; }
+  .card.dz-no .value { color: #1d7a6f; }
+  .card button { margin-top: 6px; }
+  .explanation { background: #f7f9fc; border: 1px solid #e2e6ee; border-left: 4px solid #14919b; padding: 12px 16px; border-radius: 4px; margin-top: 12px; font-size: 0.92em; }
+  .explanation h3 { color: #0f7b82; margin-bottom: 6px; }
+  .explanation p { margin-bottom: 6px; }
+  code { background: #eef1f5; padding: 1px 5px; border-radius: 3px; color: #b45309; font-size: 0.88em; }
+  @media (max-width: 640px){
+    body { padding: 6px; }
+    header { padding: 10px; margin-bottom: 12px; }
+    h1 { font-size: 1.25em; }
+    .viz-container { padding: 8px; }
+    .control-group { padding: 5px 7px; }
+    input[type="range"] { width: 88px; }
+    .explanation { font-size: 0.85em; padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>The Dilemma Zone</h1>
+    <span class="subtitle">Stop or go? At yellow onset, some drivers can do neither.</span>
+    <span class="nav"><a href="TimeSpaceDiagram.html">← Time-Space Diagram</a></span>
+  </header>
+
+  <!-- LIVE INTERSECTION + CHART -->
+  <div class="main-grid">
+  <div class="viz-container">
+    <canvas id="roadC" width="1400" height="240"></canvas>
+    <div class="readout" id="roadReadout">Traffic is running — press ⚡ to force the yellow and watch each driver decide</div>
+    <div class="badges">
+      <span class="badge b-go">cleared <b id="cGo">0</b></span>
+      <span class="badge b-stop">stopped safely <b id="cStop">0</b></span>
+      <span class="badge b-dz">⚠ ran red <b id="cRed">0</b></span>
+      <span class="badge b-dz">⚠ overshot line <b id="cOver">0</b></span>
+    </div>
+    <div class="controls">
+      <button class="action" id="playBtn">⏸ Pause</button>
+      <button class="action sec" id="resetBtn">↺ Reset</button>
+      <button class="action warn" id="forceYellow">⚡ Trigger yellow now</button>
+      <label style="font-size:0.85em; display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="ruleClear" checked> must fully clear the box (uncheck: only enter before red)
+      </label>
+    </div>
+    <div class="controls">
+      <div class="control-group"><label>Approach speed</label><input type="range" id="spd" min="20" max="70" step="1" value="45"><span class="val" id="spdVal">45 mph</span></div>
+      <div class="control-group"><label>Yellow time</label><input type="range" id="yel" min="2" max="6" step="0.1" value="3.0"><span class="val" id="yelVal">3.0 s</span></div>
+      <div class="control-group"><label>All-red</label><input type="range" id="ar" min="0" max="3" step="0.5" value="1"><span class="val" id="arVal">1.0 s</span></div>
+      <div class="control-group"><label>Perception-reaction</label><input type="range" id="prt" min="0.5" max="2.5" step="0.1" value="1.0"><span class="val" id="prtVal">1.0 s</span></div>
+      <div class="control-group"><label>Deceleration</label><input type="range" id="dec" min="8" max="15" step="0.5" value="10"><span class="val" id="decVal">10.0 ft/s²</span></div>
+      <div class="control-group"><label>Grade</label><input type="range" id="grade" min="-6" max="6" step="1" value="0"><span class="val" id="gradeVal">0 %</span></div>
+      <div class="control-group"><label>Intersection width</label><input type="range" id="wid" min="40" max="120" step="10" value="60"><span class="val" id="widVal">60 ft</span></div>
+      <div class="control-group"><label>Vehicle length</label><input type="range" id="vlen" min="12" max="25" step="1" value="18"><span class="val" id="vlenVal">18 ft</span></div>
+    </div>
+  </div>
+  <div class="viz-container">
+    <div class="pane-head">
+      <span class="help">i<span class="tip">
+        For every approach speed, the <b style="color:#42a5f5">blue curve</b> is the closest distance from which a driver can still stop comfortably (x_stop), and the <b style="color:#00a844">green curve</b> is the farthest distance from which the vehicle can clear before red (x_clear). Where blue rises above green, drivers between the two <i>can neither stop nor clear</i> — the <b style="color:#ef5350">dilemma zone</b>. Where green exceeds blue, both choices work — an <b style="color:#b8860b">option zone</b>. Drag the pulsing dot to set speed and position; it syncs with the probe car on the road.
+      </span></span>
+    </div>
+    <canvas id="chartC" width="760" height="470"></canvas>
+  </div>
+  </div>
+
+  <!-- FORMULA CARDS -->
+  <div class="viz-container">
+    <div class="cards">
+      <div class="card" id="cardStop">
+        <h3>Minimum stopping distance</h3>
+        <div class="formula">X<sub>stop</sub> = v·t<sub>PRT</sub> + v² / 2(a + G·g)</div>
+        <div class="value" id="vStop">—</div>
+      </div>
+      <div class="card" id="cardClear">
+        <h3>Maximum clearing distance</h3>
+        <div class="formula" id="fClear">X<sub>clear</sub> = v·(Y + AR) − (W + L)</div>
+        <div class="value" id="vClear">—</div>
+      </div>
+      <div class="card" id="cardDZ">
+        <h3>Dilemma zone</h3>
+        <div class="formula">exists when X<sub>stop</sub> &gt; X<sub>clear</sub></div>
+        <div class="value" id="vDZ">—</div>
+      </div>
+      <div class="card" id="cardY">
+        <h3>Required yellow (no dilemma)</h3>
+        <div class="formula">Y<sub>req</sub> = t<sub>PRT</sub> + v/2(a+G·g) + (W+L)/v − AR</div>
+        <div class="value" id="vYreq">—</div>
+        <button class="action" id="applyY">✓ Set yellow = required</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function el(id){ return document.getElementById(id); }
+
+// ───────── parameters ─────────
+const MPH = 1.46667;      // ft/s per mph
+const G_ACC = 32.2;       // ft/s²
+function P(){
+  const v = parseFloat(el('spd').value)*MPH;
+  const aEff = Math.max(3, parseFloat(el('dec').value) + G_ACC*(parseFloat(el('grade').value)/100));
+  return {
+    vMph: parseFloat(el('spd').value),
+    v, aEff,
+    Y:  parseFloat(el('yel').value),
+    AR: parseFloat(el('ar').value),
+    t:  parseFloat(el('prt').value),
+    W:  parseFloat(el('wid').value),
+    L:  parseFloat(el('vlen').value),
+    mustClear: el('ruleClear').checked
+  };
+}
+function xStop(p, v){ return v*p.t + v*v/(2*p.aEff); }
+function xClear(p, v){ return p.mustClear ? v*(p.Y+p.AR) - (p.W+p.L) : v*p.Y; }
+function yReq(p, v){
+  return p.mustClear ? p.t + v/(2*p.aEff) + (p.W+p.L)/v - p.AR
+                     : p.t + v/(2*p.aEff);
+}
+
+// ───────── road scene ─────────
+const roadC = el('roadC'), rctx = roadC.getContext('2d');
+const RW = roadC.width, RH = roadC.height;
+const VIEW_UP = 700;             // ft of approach shown
+function scale(p){ return RW/(VIEW_UP + p.W + 130); }
+function ftToPx(posFt, p){ return (posFt + VIEW_UP) * scale(p); }  // pos: 0 = stop line, negative upstream
+
+const ROAD_Y = 118, LANE_H = 32; // two one-way lanes: probe (top), traffic (bottom)
+const LANE_PROBE = ROAD_Y + LANE_H*0.5;
+const LANE_TRAF  = ROAD_Y + LANE_H*1.5;
+
+// signal phases
+const GREEN_T = 7, RED_T = 6;
+let phase='green', phaseT=0;
+let playing=true, lastTs=null;
+let cars=[], spawnT=0;
+let counts={go:0, stop:0, red:0, over:0};
+let probePos=-260;
+
+function resetSim(){
+  phase='green'; phaseT=0; cars=[]; spawnT=0;
+  counts={go:0, stop:0, red:0, over:0};
+  updateBadges();
+}
+
+function updateBadges(){
+  el('cGo').textContent=counts.go; el('cStop').textContent=counts.stop;
+  el('cRed').textContent=counts.red; el('cOver').textContent=counts.over;
+}
+
+// decide for one car at yellow onset (d = distance of front bumper to stop line)
+function decide(car, p){
+  const d = -car.pos;
+  if(d <= 0){ car.mode='go'; car.decision='go'; return; }
+  const xs = xStop(p, car.v), xc = xClear(p, car.v);
+  if(d <= xc){ car.mode='go'; car.decision='go'; }
+  else if(d >= xs){ startStopping(car, p, false); car.decision='stop'; }
+  else {
+    // dilemma! closer half goes (enters on red), farther half slams brakes (overshoots)
+    if(d < (xs+xc)/2 && xc > 0){ car.mode='go'; car.decision='dz-go'; }
+    else { startStopping(car, p, true); car.decision='dz-stop'; }
+  }
+}
+function startStopping(car, p, panic){
+  car.mode='stopWait'; car.reactT=p.t;
+  // choose braking rate that stops exactly at the line if it's comfortable, else full a_eff
+  const dAfterPRT = -car.pos - car.v*p.t;
+  car.brakeA = (dAfterPRT > 3) ? Math.min(p.aEff, car.v*car.v/(2*(dAfterPRT-3))) : p.aEff;
+  if(panic) car.brakeA = p.aEff;
+}
+
+function setPhase(ph){
+  phase=ph; phaseT=0;
+  const p=P();
+  if(ph==='yellow'){
+    cars.forEach(c=>{ if(c.mode==='cruise'||c.mode==='accel') decide(c,p); });
+  }
+  if(ph==='allred'){
+    // anyone upstream still cruising (spawned during yellow) must stop
+    cars.forEach(c=>{ if((c.mode==='cruise'||c.mode==='accel') && c.pos<0){ startStopping(c,p,false); c.decision='stop'; } });
+  }
+  if(ph==='green'){
+    // release EVERY held vehicle — including overshooters sitting inside the box
+    cars.forEach(c=>{
+      if(c.mode==='stopped'||c.mode==='braking'||c.mode==='stopWait'){
+        c.mode='accel';
+        if(c.pos<0) c.decision=null;   // upstream cars get a fresh decision next yellow
+      }
+    });
+  }
+}
+
+function stepSim(dt){
+  const p=P();
+  phaseT+=dt;
+  if(phase==='green' && phaseT>=GREEN_T) setPhase('yellow');
+  else if(phase==='yellow' && phaseT>=p.Y) setPhase('allred');
+  else if(phase==='allred' && phaseT>=p.AR) setPhase('red');
+  else if(phase==='red' && phaseT>=RED_T) setPhase('green');
+
+  // spawn
+  spawnT-=dt;
+  if(spawnT<=0){
+    const tail=cars.length?Math.min(...cars.map(c=>c.pos)):1e9;
+    if(tail > -VIEW_UP + 60){
+      const c={pos:-VIEW_UP+10, v:p.v, mode:'cruise', decision:null, reactT:0, brakeA:p.aEff, entered:false, counted:false};
+      if(phase!=='green'){
+        if(phase==='yellow'){ decide(c,p); } else { startStopping(c,p,false); c.decision='stop'; }
+      }
+      cars.push(c);
+    }
+    spawnT=2.5;
+  }
+
+  // sort front to back (largest pos first)
+  cars.sort((a,b)=>b.pos-a.pos);
+
+  cars.forEach((c,i)=>{
+    // dynamics by mode
+    if(c.mode==='cruise'||c.mode==='go'){
+      c.v=Math.min(p.v, c.v+6*dt);
+    } else if(c.mode==='accel'){
+      c.v=Math.min(p.v, c.v+6*dt);
+      if(c.v>=p.v-0.5) c.mode='cruise';
+    } else if(c.mode==='stopWait'){
+      c.reactT-=dt;
+      if(c.reactT<=0) c.mode='braking';
+    } else if(c.mode==='braking'){
+      c.v=Math.max(0, c.v-c.brakeA*dt);
+      if(c.v===0){
+        c.mode='stopped';
+        if(c.decision==='dz-stop' && c.pos>-3 && !c.counted){ counts.over++; c.flag='over'; c.counted=true; updateBadges(); }
+      }
+    } else if(c.mode==='stopped'){
+      c.v=0;
+      // wake up: on green, or anytime if already inside the box (clear the intersection),
+      // as soon as the gap ahead opens
+      if(phase==='green' || c.pos>0){
+        const gapOpen = (i===0) || (cars[i-1].pos - c.pos > p.L+10);
+        if(gapOpen) c.mode='accel';
+      }
+    }
+    const prev=c.pos;
+    c.pos+=c.v*dt;
+    // crossing the line
+    if(prev<0 && c.pos>=0){
+      c.entered=true;
+      if((phase==='allred'||phase==='red') && !c.counted){ counts.red++; c.flag='red'; c.counted=true; updateBadges(); }
+      else if(!c.counted){ counts.go++; c.counted=true; updateBadges(); }
+    }
+    // gap guard against car ahead in same lane
+    if(i>0){
+      const ahead=cars[i-1];
+      if(c.pos > ahead.pos - (p.L+6)){
+        c.pos = ahead.pos - (p.L+6);
+        if(c.v>ahead.v) c.v=ahead.v;
+        if(ahead.v===0 && c.pos<0 && c.mode!=='stopped'){
+          c.mode='stopped'; c.v=0;
+          if(c.decision===null||c.decision==='stop'){ if(!c.counted && c.decision==='stop'){ counts.stop++; c.counted=true; updateBadges(); } }
+        }
+      }
+    }
+    // count clean stops once fully stopped upstream
+    if(c.mode==='stopped' && c.decision==='stop' && !c.counted){ counts.stop++; c.counted=true; updateBadges(); }
+  });
+
+  // remove departed
+  cars=cars.filter(c=>c.pos < p.W + 120);
+}
+
+function carColor(c){
+  if(c.flag==='red'||c.flag==='over') return '#ff2e3f';
+  switch(c.decision){
+    case 'go': return '#2a9d8f';
+    case 'stop': return '#457b9d';
+    case 'dz-go': case 'dz-stop': return '#e63946';
+    default: return '#3fc1c9';
+  }
+}
+
+function drawRoad(){
+  const p=P(), s=scale(p);
+  rctx.clearRect(0,0,RW,RH);
+  const stopPx=ftToPx(0,p), crossW=p.W*s;
+
+  // approach + exit pavement (light asphalt)
+  rctx.fillStyle='#aeb7c1';
+  rctx.fillRect(0, ROAD_Y, RW, LANE_H*2);
+  // cross street
+  rctx.fillStyle='#c3cad3';
+  rctx.fillRect(stopPx, 0, crossW, RH);
+  rctx.fillStyle='#aeb7c1';
+  rctx.fillRect(stopPx, ROAD_Y, crossW, LANE_H*2);
+
+  // zones painted on the approach (measured back from the stop line)
+  const xs=xStop(p,p.v), xc=Math.max(0,xClear(p,p.v));
+  function zoneRect(fromFt, toFt, color){
+    const x1=ftToPx(-toFt,p), x2=ftToPx(-fromFt,p);
+    rctx.fillStyle=color;
+    rctx.fillRect(x1, ROAD_Y, x2-x1, LANE_H*2);
+  }
+  if(xc>0) zoneRect(0, Math.min(xc,VIEW_UP), 'rgba(42,157,143,0.30)');
+  if(xs>xc){
+    zoneRect(Math.min(xc,VIEW_UP), Math.min(xs,VIEW_UP), 'rgba(230,57,70,0.38)');
+    zoneRect(Math.min(xs,VIEW_UP), VIEW_UP, 'rgba(69,123,157,0.30)');
+  } else {
+    zoneRect(Math.min(xs,VIEW_UP), Math.min(xc,VIEW_UP), 'rgba(233,196,106,0.32)');
+    zoneRect(Math.min(xc,VIEW_UP), VIEW_UP, 'rgba(69,123,157,0.30)');
+  }
+
+  // zone labels under the road
+  rctx.font='600 11px '+SANS; rctx.textAlign='center';
+  function zoneLabel(fromFt, toFt, txt, color){
+    if(toFt-fromFt < 40) return;
+    const mid=ftToPx(-(fromFt+toFt)/2,p);
+    rctx.fillStyle=color;
+    rctx.fillText(txt, mid, ROAD_Y+LANE_H*2+16);
+    rctx.font='10px '+SANS;
+    rctx.fillText(Math.round(toFt-fromFt)+' ft', mid, ROAD_Y+LANE_H*2+29);
+    rctx.font='600 11px '+SANS;
+  }
+  if(xc>0) zoneLabel(0, Math.min(xc,VIEW_UP), 'CAN CLEAR', '#1d7a6f');
+  if(xs>xc) zoneLabel(Math.min(xc,VIEW_UP), Math.min(xs,VIEW_UP), '⚠ DILEMMA ZONE', '#c1121f');
+  else if(xc>xs) zoneLabel(Math.min(xs,VIEW_UP), Math.min(xc,VIEW_UP), 'OPTION ZONE', '#b8860b');
+  zoneLabel(Math.max(xs,xc), VIEW_UP, 'CAN STOP', '#3f6c9e');
+
+  // lane markings
+  rctx.strokeStyle='#fff'; rctx.lineWidth=2;
+  rctx.beginPath(); rctx.moveTo(0,ROAD_Y); rctx.lineTo(RW,ROAD_Y); rctx.stroke();
+  rctx.beginPath(); rctx.moveTo(0,ROAD_Y+LANE_H*2); rctx.lineTo(RW,ROAD_Y+LANE_H*2); rctx.stroke();
+  rctx.setLineDash([16,12]); rctx.strokeStyle='#f0c040'; rctx.lineWidth=1.5;
+  rctx.beginPath(); rctx.moveTo(0,ROAD_Y+LANE_H); rctx.lineTo(stopPx,ROAD_Y+LANE_H); rctx.stroke();
+  rctx.setLineDash([]);
+
+  // stop line
+  rctx.fillStyle='#fff';
+  rctx.fillRect(stopPx-4, ROAD_Y, 4, LANE_H*2);
+
+  // distance ticks every 100 ft
+  rctx.fillStyle='#6b7280'; rctx.font='10px '+SANS; rctx.textAlign='center';
+  for(let d=100; d<=VIEW_UP; d+=100){
+    const x=ftToPx(-d,p);
+    rctx.fillRect(x-0.5, ROAD_Y-6, 1, 6);
+    rctx.fillText(d+"'", x, ROAD_Y-10);
+  }
+  rctx.fillText("0'", stopPx, ROAD_Y-10);
+
+  // signal head
+  const sigX=stopPx-14, sigY=ROAD_Y-58;
+  rctx.fillStyle='#222';
+  rctx.beginPath(); rctx.roundRect(sigX-12, sigY, 24, 52, 5); rctx.fill();
+  const lit={red:phase==='red'||phase==='allred', yel:phase==='yellow', grn:phase==='green'};
+  rctx.fillStyle=lit.red?'#ff3333':'#4d0f0f';
+  rctx.beginPath(); rctx.arc(sigX, sigY+11, 6.5, 0, Math.PI*2); rctx.fill();
+  rctx.fillStyle=lit.yel?'#ffd23f':'#4d420f';
+  rctx.beginPath(); rctx.arc(sigX, sigY+26, 6.5, 0, Math.PI*2); rctx.fill();
+  rctx.fillStyle=lit.grn?'#35e065':'#0f4d20';
+  rctx.beginPath(); rctx.arc(sigX, sigY+41, 6.5, 0, Math.PI*2); rctx.fill();
+  // phase countdown
+  const p2=P();
+  const rem = phase==='green'?GREEN_T-phaseT : phase==='yellow'?p2.Y-phaseT : phase==='allred'?p2.AR-phaseT : RED_T-phaseT;
+  rctx.fillStyle='#374151'; rctx.font='600 11px '+SANS; rctx.textAlign='left';
+  rctx.fillText(phase.toUpperCase()+' '+Math.max(0,rem).toFixed(1)+'s', sigX+20, sigY+16);
+
+  // probe car (upper lane, draggable)
+  const px=ftToPx(probePos,p), pl=p.L*s;
+  const pd=-probePos;
+  const pxs=xStop(p,p.v), pxc=Math.max(0,xClear(p,p.v));
+  let verdict, vcol;
+  if(pd<=pxc){ verdict='GO — can clear'; vcol='#2a9d8f'; }
+  else if(pd>=pxs){ verdict='STOP — can stop'; vcol='#6aa4d8'; }
+  else if(pxs>pxc){ verdict='DILEMMA — neither!'; vcol='#ff6b76'; }
+  else { verdict='OPTION — either works'; vcol='#e9c46a'; }
+  rctx.fillStyle='#e9c46a';
+  rctx.beginPath(); rctx.roundRect(px-pl, LANE_PROBE-8, pl, 16, 3); rctx.fill();
+  rctx.fillStyle='rgba(255,255,255,0.4)';
+  rctx.fillRect(px-pl*0.28, LANE_PROBE-5, pl*0.14, 10);
+  // verdict chip
+  rctx.font='600 11px '+SANS;
+  const chip=`probe: d=${Math.round(pd)} ft → ${verdict}`;
+  const cw=rctx.measureText(chip).width+14;
+  let chx=Math.min(Math.max(px-cw/2, 6), RW-cw-6);
+  rctx.fillStyle='rgba(10,10,21,0.88)';
+  rctx.beginPath(); rctx.roundRect(chx, LANE_PROBE-40, cw, 20, 5); rctx.fill();
+  rctx.fillStyle=vcol; rctx.textAlign='left';
+  rctx.fillText(chip, chx+7, LANE_PROBE-26);
+  rctx.strokeStyle='rgba(233,196,106,0.5)'; rctx.lineWidth=1; rctx.setLineDash([3,3]);
+  rctx.beginPath(); rctx.moveTo(px-pl/2, LANE_PROBE-20); rctx.lineTo(px-pl/2, LANE_PROBE-9); rctx.stroke();
+  rctx.setLineDash([]);
+
+  // traffic cars (lower lane)
+  cars.forEach(c=>{
+    const cx=ftToPx(c.pos,p), cl=p.L*s;
+    rctx.fillStyle=carColor(c);
+    rctx.beginPath(); rctx.roundRect(cx-cl, LANE_TRAF-8, cl, 16, 3); rctx.fill();
+    rctx.fillStyle='rgba(255,255,255,0.35)';
+    rctx.fillRect(cx-cl*0.28, LANE_TRAF-5, cl*0.14, 10);
+    if(c.flag){
+      rctx.fillStyle='#c1121f'; rctx.font='600 10px '+SANS; rctx.textAlign='center';
+      rctx.fillText(c.flag==='red'?'RAN RED':'OVERSHOT', cx-cl/2, LANE_TRAF+24);
+    }
+  });
+
+  el('roadReadout').textContent =
+    `phase: ${phase.toUpperCase()}  |  X_stop = ${Math.round(xs)} ft  ·  X_clear = ${Math.round(Math.max(0,xc))} ft` +
+    (xs>xc ? `  |  ⚠ dilemma zone: ${Math.round(xs-Math.max(0,xc))} ft long` : `  |  ✓ no dilemma zone at ${p.vMph} mph`);
+}
+
+// probe dragging
+let dragProbe=false;
+roadC.addEventListener('pointerdown', e=>{
+  const r=roadC.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*roadC.width/r.width, my=(e.clientY-r.top)*roadC.height/r.height;
+  const p=P(), px=ftToPx(probePos,p);
+  if(Math.abs(my-LANE_PROBE)<20 && Math.abs(mx-(px-p.L*scale(p)/2))<40){
+    dragProbe=true; roadC.setPointerCapture(e.pointerId);
+  }
+});
+roadC.addEventListener('pointermove', e=>{
+  const r=roadC.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*roadC.width/r.width;
+  const p=P();
+  if(dragProbe){
+    probePos=Math.min(-8, Math.max(-VIEW_UP+20, mx/scale(p)-VIEW_UP));
+    if(!playing) drawRoad();
+  } else {
+    const px=ftToPx(probePos,p);
+    const my=(e.clientY-r.top)*roadC.height/r.height;
+    roadC.style.cursor=(Math.abs(my-LANE_PROBE)<20 && Math.abs(mx-(px-p.L*scale(p)/2))<40)?'grab':'default';
+  }
+});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>roadC.addEventListener(ev,()=>{ dragProbe=false; }));
+
+// ───────── chart ─────────
+const chartC=el('chartC'), cctx=chartC.getContext('2d');
+const CW=chartC.width, CH=chartC.height;
+const CP={l:70,r:30,t:26,b:52};
+const cpw=CW-CP.l-CP.r, cph=CH-CP.t-CP.b;
+const V0=10, V1=70, D1=800;
+let chartHover=null;
+
+function vToX(mph){ return CP.l + (mph-V0)/(V1-V0)*cpw; }
+function dToY(ft){ return CP.t + cph - Math.min(ft,D1)/D1*cph; }
+
+const SANS='"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+
+function probeVerdict(p){
+  const d=-probePos;
+  const xs=xStop(p,p.v), xc=Math.max(0,xClear(p,p.v));
+  if(d<=xc)  return {txt:'GO — can clear',        col:'#26a69a'};
+  if(d>=xs)  return {txt:'STOP — can stop',       col:'#42a5f5'};
+  if(xs>xc)  return {txt:'DILEMMA — neither!',    col:'#ef5350'};
+  return           {txt:'OPTION — either works',  col:'#e0a106'};
+}
+
+let dragDot=false;
+
+function drawChart(now){
+  const p=P();
+  cctx.clearRect(0,0,CW,CH);
+  cctx.fillStyle='#fff'; cctx.fillRect(0,0,CW,CH);
+
+  // subtle horizontal gridlines only
+  cctx.strokeStyle='#f1f3f7'; cctx.lineWidth=1;
+  for(let d=100; d<=D1; d+=100){
+    const y=dToY(d);
+    cctx.beginPath(); cctx.moveTo(CP.l,y); cctx.lineTo(CP.l+cpw,y); cctx.stroke();
+  }
+
+  // soft regions between the curves
+  for(let x=0;x<=cpw;x+=2){
+    const mph=V0+(x/cpw)*(V1-V0), v=mph*MPH;
+    const xs=Math.min(D1, xStop(p,v)), xc=Math.min(D1, Math.max(0,xClear(p,v)));
+    const px=CP.l+x;
+    if(xs>xc){
+      cctx.fillStyle='rgba(255,82,82,0.18)';
+      cctx.fillRect(px, dToY(xs), 2, dToY(xc)-dToY(xs));
+    } else if(xc>xs){
+      cctx.fillStyle='rgba(255,196,0,0.14)';
+      cctx.fillRect(px, dToY(xc), 2, dToY(xs)-dToY(xc));
+    }
+  }
+
+  // curves — thin, rounded, MUI palette
+  function curve(fn, color){
+    cctx.strokeStyle=color; cctx.lineWidth=2.5; cctx.lineJoin='round'; cctx.lineCap='round';
+    cctx.beginPath();
+    let started=false;
+    for(let x=0;x<=cpw;x+=2){
+      const mph=V0+(x/cpw)*(V1-V0);
+      const d=Math.max(0,fn(p, mph*MPH));
+      if(d>D1){ started=false; continue; }
+      const y=dToY(d);
+      if(!started){ cctx.moveTo(CP.l+x,y); started=true; } else cctx.lineTo(CP.l+x,y);
+    }
+    cctx.stroke();
+  }
+  curve(xStop,'#42a5f5');
+  curve((pp,v)=>Math.max(0,xClear(pp,v)),'#00c853');
+
+  // hairline domain axes
+  cctx.strokeStyle='#d6dae2'; cctx.lineWidth=1;
+  cctx.beginPath(); cctx.moveTo(CP.l, CP.t+cph+0.5); cctx.lineTo(CP.l+cpw, CP.t+cph+0.5); cctx.stroke();
+  cctx.beginPath(); cctx.moveTo(CP.l+0.5, CP.t); cctx.lineTo(CP.l+0.5, CP.t+cph); cctx.stroke();
+
+  // tick labels
+  cctx.fillStyle='#7b8494'; cctx.font='12px '+SANS;
+  for(let m=V0;m<=V1;m+=10){ cctx.textAlign='center'; cctx.fillText(m, vToX(m), CP.t+cph+18); }
+  for(let d=0;d<=D1;d+=100){ cctx.textAlign='right'; cctx.fillText(d, CP.l-8, dToY(d)+4); }
+
+  // axis unit labels inside the plot
+  cctx.fillStyle='#9aa1ad'; cctx.font='italic 12px '+SANS;
+  cctx.textAlign='left';  cctx.fillText('x (ft from stop line)', CP.l+10, CP.t+16);
+  cctx.textAlign='right'; cctx.fillText('v (mph)', CP.l+cpw-8, CP.t+cph-10);
+
+  // legend — small keys, top right
+  const lgX=CP.l+cpw-240, lgY=CP.t+12;
+  function key(y, color, label, isRegion){
+    if(isRegion){
+      cctx.globalAlpha=0.35; cctx.fillStyle=color;
+      cctx.fillRect(lgX, y, 10, 10); cctx.globalAlpha=1;
+    } else {
+      cctx.fillStyle=color; cctx.fillRect(lgX, y+4, 14, 2.5);
+    }
+    cctx.fillStyle='#4b5563'; cctx.font='12px '+SANS; cctx.textAlign='left';
+    cctx.fillText(label, lgX+20, y+9);
+  }
+  key(lgY,    '#42a5f5', 'x_stop — min stopping distance');
+  key(lgY+20, '#00c853', 'x_clear — max clearing distance');
+  key(lgY+40, '#ff5252', 'dilemma zone', true);
+  key(lgY+60, '#ffc400', 'option zone', true);
+
+  // hover hairline + tooltip card
+  if(chartHover && !dragDot && chartHover.x>CP.l && chartHover.x<CP.l+cpw && chartHover.y>CP.t && chartHover.y<CP.t+cph){
+    const mph=V0+((chartHover.x-CP.l)/cpw)*(V1-V0), v=mph*MPH;
+    const xs=xStop(p,v), xc=Math.max(0,xClear(p,v));
+    cctx.strokeStyle='#e3e6ec'; cctx.lineWidth=1;
+    cctx.beginPath(); cctx.moveTo(chartHover.x,CP.t); cctx.lineTo(chartHover.x,CP.t+cph); cctx.stroke();
+    [[xs,'#42a5f5'],[xc,'#00c853']].forEach(([d,col])=>{
+      if(d<=D1){ cctx.fillStyle=col; cctx.beginPath(); cctx.arc(chartHover.x, dToY(d), 3.5, 0, Math.PI*2); cctx.fill(); }
+    });
+    const rows=[
+      [`${mph.toFixed(0)} mph`, '#1f2937', true],
+      [`stop ≥ ${Math.round(xs)} ft`, '#42a5f5', false],
+      [`clear ≤ ${Math.round(xc)} ft`, '#00a844', false],
+      [xs>xc ? `dilemma: ${Math.round(xs-xc)} ft` : 'no dilemma ✓', xs>xc?'#ef5350':'#26a69a', false]
+    ];
+    cctx.font='600 12px '+SANS;
+    const tw=Math.max(...rows.map(r=>cctx.measureText(r[0]).width))+22;
+    const th=rows.length*19+12;
+    let bx=chartHover.x+14, by=Math.min(Math.max(chartHover.y-th/2, CP.t+6), CP.t+cph-th-6);
+    if(bx+tw>CP.l+cpw) bx=chartHover.x-tw-14;
+    cctx.save();
+    cctx.shadowColor='rgba(16,24,40,0.16)'; cctx.shadowBlur=14; cctx.shadowOffsetY=2;
+    cctx.fillStyle='#fff';
+    cctx.beginPath(); cctx.roundRect(bx,by,tw,th,8); cctx.fill();
+    cctx.restore();
+    rows.forEach((r,i)=>{
+      cctx.font=(r[2]?'600 12px ':'12px ')+SANS;
+      cctx.fillStyle=r[1]; cctx.textAlign='left';
+      cctx.fillText(r[0], bx+11, by+20+i*19);
+    });
+  }
+
+  // draggable pulsing dot: the vehicle's (speed, distance) state
+  const dx=vToX(p.vMph), dy=dToY(Math.min(D1,-probePos));
+  const vd=probeVerdict(p);
+  const r=6+1.6*Math.abs(Math.sin((now||0)/420));
+  cctx.save();
+  cctx.shadowColor='rgba(16,24,40,0.35)'; cctx.shadowBlur=8; cctx.shadowOffsetY=1;
+  cctx.fillStyle=vd.col;
+  cctx.beginPath(); cctx.arc(dx,dy,r,0,Math.PI*2); cctx.fill();
+  cctx.restore();
+  cctx.strokeStyle='#fff'; cctx.lineWidth=2.5;
+  cctx.beginPath(); cctx.arc(dx,dy,r,0,Math.PI*2); cctx.stroke();
+  // state chip above the dot
+  const chip=`${p.vMph} mph · ${Math.round(-probePos)} ft — ${vd.txt}`;
+  cctx.font='600 12px '+SANS;
+  const w=cctx.measureText(chip).width+16;
+  let bx2=Math.min(Math.max(dx-w/2, CP.l+4), CP.l+cpw-w-4);
+  let by2=dy-38; if(by2<CP.t+4) by2=dy+18;
+  cctx.save();
+  cctx.shadowColor='rgba(16,24,40,0.14)'; cctx.shadowBlur=10; cctx.shadowOffsetY=2;
+  cctx.fillStyle='#fff';
+  cctx.beginPath(); cctx.roundRect(bx2,by2,w,23,8); cctx.fill();
+  cctx.restore();
+  cctx.fillStyle=vd.col; cctx.textAlign='left';
+  cctx.fillText(chip, bx2+8, by2+16);
+}
+
+function chartXY(e){
+  const r=chartC.getBoundingClientRect();
+  return {x:(e.clientX-r.left)*chartC.width/r.width, y:(e.clientY-r.top)*chartC.height/r.height};
+}
+chartC.addEventListener('pointerdown', e=>{
+  const {x,y}=chartXY(e); const p=P();
+  const dx=vToX(p.vMph), dy=dToY(Math.min(D1,-probePos));
+  if(Math.hypot(x-dx,y-dy)<22){ dragDot=true; chartC.setPointerCapture(e.pointerId); }
+});
+chartC.addEventListener('pointermove', e=>{
+  const {x,y}=chartXY(e);
+  if(dragDot){
+    const mph=Math.round(Math.min(70, Math.max(20, V0+((x-CP.l)/cpw)*(V1-V0))));
+    el('spd').value=mph; el('spdVal').textContent=mph+' mph';
+    const d=Math.min(VIEW_UP-20, Math.max(10, (1-(y-CP.t)/cph)*D1));
+    probePos=-d;
+    updateCards();
+    if(!playing) drawRoad();
+  } else {
+    chartHover={x,y};
+    const p=P();
+    const dx=vToX(p.vMph), dy=dToY(Math.min(D1,-probePos));
+    chartC.style.cursor = Math.hypot(x-dx,y-dy)<22 ? 'grab' : 'crosshair';
+  }
+});
+['pointerup','pointercancel'].forEach(ev=>chartC.addEventListener(ev, ()=>{ dragDot=false; }));
+chartC.addEventListener('pointerleave', ()=>{ chartHover=null; dragDot=false; });
+
+// ───────── formula cards ─────────
+function updateCards(){
+  const p=P();
+  const xs=xStop(p,p.v), xc=xClear(p,p.v), dz=xs-Math.max(0,xc);
+  el('vStop').textContent=`${Math.round(xs)} ft  (at ${p.vMph} mph)`;
+  el('vClear').textContent=`${Math.round(Math.max(0,xc))} ft`;
+  el('fClear').innerHTML = p.mustClear
+    ? 'X<sub>clear</sub> = v·(Y + AR) − (W + L)'
+    : 'X<sub>clear</sub> = v·Y  (enter before red)';
+  const cd=el('cardDZ');
+  if(dz>0){
+    cd.className='card dz-yes';
+    el('vDZ').textContent=`YES — ${Math.round(dz)} ft (from ${Math.round(Math.max(0,xc))} to ${Math.round(xs)} ft)`;
+  } else {
+    cd.className='card dz-no';
+    el('vDZ').textContent='NONE ✓';
+  }
+  const yr=yReq(p,p.v);
+  el('vYreq').textContent=`${yr.toFixed(1)} s   (current: ${p.Y.toFixed(1)} s)`;
+  el('cardY').className = 'card ' + (p.Y>=yr-0.049 ? 'dz-no' : 'dz-yes');
+}
+el('applyY').addEventListener('click', ()=>{
+  const p=P();
+  const yr=Math.min(6, Math.max(2, Math.ceil(yReq(p,p.v)*10)/10));
+  el('yel').value=yr;
+  el('yelVal').textContent=yr.toFixed(1)+' s';
+  refresh();
+});
+
+// ───────── wiring ─────────
+function refresh(){
+  updateCards();
+  if(!playing) drawRoad();
+}
+[['spd',v=>v+' mph'],['yel',v=>parseFloat(v).toFixed(1)+' s'],['ar',v=>parseFloat(v).toFixed(1)+' s'],
+ ['prt',v=>parseFloat(v).toFixed(1)+' s'],['dec',v=>parseFloat(v).toFixed(1)+' ft/s²'],
+ ['grade',v=>v+' %'],['wid',v=>v+' ft'],['vlen',v=>v+' ft']].forEach(([id,fmt])=>{
+  el(id).addEventListener('input', ()=>{ el(id+'Val').textContent=fmt(el(id).value); refresh(); });
+});
+el('ruleClear').addEventListener('change', refresh);
+el('playBtn').addEventListener('click', ()=>{
+  playing=!playing;
+  el('playBtn').textContent=playing?'⏸ Pause':'▶ Play';
+  if(playing) lastTs=null;
+});
+el('resetBtn').addEventListener('click', ()=>{ resetSim(); refresh(); drawRoad(); });
+el('forceYellow').addEventListener('click', ()=>{
+  if(phase==='green'){ setPhase('yellow'); }
+  if(!playing){ playing=true; el('playBtn').textContent='⏸ Pause'; lastTs=null; }
+});
+
+// single loop: sim steps only while playing; the chart (and its pulsing dot) always animates
+function loop(ts){
+  if(!lastTs) lastTs=ts;
+  let dt=(ts-lastTs)/1000; lastTs=ts;
+  dt=Math.min(dt,0.05);
+  if(playing){ stepSim(dt); drawRoad(); }
+  drawChart(ts);
+  requestAnimationFrame(loop);
+}
+
+resetSim();
+refresh();
+drawRoad();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
