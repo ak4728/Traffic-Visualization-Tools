@@ -127,10 +127,10 @@
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">A <b>horizontal line</b> is a stationary observer: its intersections with trajectories are <b>headways h</b>, and flow q = 1/h̄. A <b>vertical line</b> is an instantaneous photograph: gaps between vehicles are <b>spacings s</b>, and density k = 1/s̄. The observer counts fast cars more often, so time-mean speed V<sub>t</sub> ≥ space-mean speed V<sub>s</sub>. Drag both lines directly on the diagram — the observer also appears at the roadside.</span></span></div>
       <div class="legend">
-        <div class="legend-item"><span class="swatch" style="background:#e63946"></span>Fast vehicles</div>
-        <div class="legend-item"><span class="swatch" style="background:#457b9d"></span>Slow vehicles</div>
-        <div class="legend-item"><span class="swatch" style="background:#2a9d8f"></span>Observer line (headways)</div>
-        <div class="legend-item"><span class="swatch" style="background:#e9c46a"></span>Photo line (spacings)</div>
+        <div class="legend-item"><span class="swatch" style="background:#a4161a"></span>Fast vehicles</div>
+        <div class="legend-item"><span class="swatch" style="background:#2c5378"></span>Slow vehicles</div>
+        <div class="legend-item"><span class="swatch" style="background:#14655c"></span>Observer line (headways)</div>
+        <div class="legend-item"><span class="swatch" style="background:#b8860b"></span>Photo line (spacings)</div>
       </div>
       <div class="controls">
         <button class="action" id="manyPlay">▶ Play</button>
@@ -433,7 +433,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.beginPath(); tctx.moveTo(ROAD.x1, cy); tctx.lineTo(PAD.l, cy); tctx.stroke();
     tctx.setLineDash([]);
     // drive in the right lane (upward travel)
-    drawCarV(tctx, ROAD.x0 + 0.75*(ROAD.x1-ROAD.x0), cy, '#3fc1c9', 0.62);
+    drawCarV(tctx, ROAD.x0 + 0.75*(ROAD.x1-ROAD.x0), cy, '#0e7c86', 0.62);
   }
 
   function drawTSD(xHistory, currentT01){
@@ -485,7 +485,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // trajectory so far
     if(xHistory.length > 1){
-      tctx.strokeStyle = '#e63946';
+      tctx.strokeStyle = '#a4161a';
       tctx.lineWidth = 3;
       tctx.lineJoin = 'round';
       tctx.beginPath();
@@ -500,7 +500,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       const last = xHistory[xHistory.length-1];
       const dpx = PAD.l + last[0]*plotW;
       const dpy = PAD.t + plotH - last[1]*plotH;
-      tctx.fillStyle = '#e63946';
+      tctx.fillStyle = '#a4161a';
       tctx.beginPath(); tctx.arc(dpx,dpy,6,0,Math.PI*2); tctx.fill();
       tctx.fillStyle = '#fff';
       tctx.beginPath(); tctx.arc(dpx,dpy,3,0,Math.PI*2); tctx.fill();
@@ -514,7 +514,7 @@ document.querySelectorAll('.tab').forEach(tab => {
         const len = 0.08;
         const tx1 = last[0]-len, tx2 = last[0]+len;
         const ty1 = last[1]-slope*len, ty2 = last[1]+slope*len;
-        tctx.strokeStyle = '#2a9d8f';
+        tctx.strokeStyle = '#14655c';
         tctx.lineWidth = 2;
         tctx.setLineDash([5,4]);
         tctx.beginPath();
@@ -525,7 +525,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 
         // velocity annotation
         const vKmh = slope * 100;
-        tctx.fillStyle = '#2a9d8f';
+        tctx.fillStyle = '#14655c';
         tctx.font = 'bold 12px Courier New';
         tctx.textAlign = 'left';
         tctx.fillText('v ≈ '+vKmh.toFixed(1)+' u/s', dpx+10, dpy-10);
@@ -632,8 +632,8 @@ document.querySelectorAll('.tab').forEach(tab => {
 
   // Two families: fast red, slow blue
   // Each vehicle defined by: speed (0-1 per DUR), startOffset (time offset of entry)
-  const FAST_COLOR = '#e63946';
-  const SLOW_COLOR = '#457b9d';
+  const FAST_COLOR = '#a4161a';
+  const SLOW_COLOR = '#2c5378';
 
   function makeVehicles(){
     const vehicles = [];
@@ -678,11 +678,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     // observer standing at the roadside (same height as the draggable line)
     if(el('showObserver').checked){
       const oy = PAD.t + plotH*obsFrac;
-      tctx.strokeStyle='#2a9d8f'; tctx.lineWidth=2; tctx.setLineDash([5,4]);
+      tctx.strokeStyle='#14655c'; tctx.lineWidth=2; tctx.setLineDash([5,4]);
       tctx.beginPath(); tctx.moveTo(ROAD.x0-5, oy); tctx.lineTo(ROAD.x1+5, oy); tctx.stroke();
       tctx.setLineDash([]);
       // stick figure: head + body
-      tctx.fillStyle='#2a9d8f';
+      tctx.fillStyle='#14655c';
       tctx.beginPath(); tctx.arc(ROAD.bg1+10, oy-7, 3.5, 0, Math.PI*2); tctx.fill();
       tctx.fillRect(ROAD.bg1+8, oy-3, 4, 10);
       tctx.font='bold 9px sans-serif'; tctx.textAlign='left';
@@ -754,10 +754,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     // observer line (horizontal, draggable)
     if(el('showObserver').checked){
       const obsY = PAD.t + plotH*obsFrac;
-      tctx.strokeStyle='#2a9d8f'; tctx.lineWidth=2; tctx.setLineDash([8,5]);
+      tctx.strokeStyle='#14655c'; tctx.lineWidth=2; tctx.setLineDash([8,5]);
       tctx.beginPath(); tctx.moveTo(PAD.l,obsY); tctx.lineTo(PAD.l+plotW,obsY); tctx.stroke();
       tctx.setLineDash([]);
-      tctx.fillStyle='#2a9d8f'; tctx.font='bold 11px sans-serif'; tctx.textAlign='left';
+      tctx.fillStyle='#14655c'; tctx.font='bold 11px sans-serif'; tctx.textAlign='left';
       tctx.fillText('Observer (fixed x — drag me)', PAD.l+4, obsY-5);
 
       // mark headway intersections
@@ -776,20 +776,20 @@ document.querySelectorAll('.tab').forEach(tab => {
         if(veh.color === FAST_COLOR){
           if(lastFastT !== null){
             const px2 = PAD.l+(lastFastT/DUR)*plotW;
-            tctx.strokeStyle='#e63946'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
+            tctx.strokeStyle='#a4161a'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
             tctx.beginPath(); tctx.moveTo(px2,obsY+12); tctx.lineTo(px,obsY+12); tctx.stroke();
             tctx.setLineDash([]);
-            tctx.fillStyle='#e63946'; tctx.font='10px sans-serif'; tctx.textAlign='center';
+            tctx.fillStyle='#a4161a'; tctx.font='10px sans-serif'; tctx.textAlign='center';
             tctx.fillText('h₁',(px2+px)/2,obsY+24);
           }
           lastFastT = tPass;
         } else {
           if(lastSlowT !== null){
             const px2 = PAD.l+(lastSlowT/DUR)*plotW;
-            tctx.strokeStyle='#457b9d'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
+            tctx.strokeStyle='#2c5378'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
             tctx.beginPath(); tctx.moveTo(px2,obsY-12); tctx.lineTo(px,obsY-12); tctx.stroke();
             tctx.setLineDash([]);
-            tctx.fillStyle='#457b9d'; tctx.font='10px sans-serif'; tctx.textAlign='center';
+            tctx.fillStyle='#2c5378'; tctx.font='10px sans-serif'; tctx.textAlign='center';
             tctx.fillText('h₂',(px2+px)/2,obsY-22);
           }
           lastSlowT = tPass;
@@ -801,10 +801,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     if(el('showPhoto').checked){
       const pT = photoT===null ? tSec : Math.min(photoT, tSec);
       const px = PAD.l + (pT/DUR)*plotW;
-      tctx.strokeStyle='#e9c46a'; tctx.lineWidth=2; tctx.setLineDash([8,5]);
+      tctx.strokeStyle='#b8860b'; tctx.lineWidth=2; tctx.setLineDash([8,5]);
       tctx.beginPath(); tctx.moveTo(px,PAD.t); tctx.lineTo(px,PAD.t+plotH); tctx.stroke();
       tctx.setLineDash([]);
-      tctx.fillStyle='#e9c46a'; tctx.font='bold 11px sans-serif'; tctx.textAlign='center';
+      tctx.fillStyle='#b8860b'; tctx.font='bold 11px sans-serif'; tctx.textAlign='center';
       tctx.fillText(photoT===null ? 'Photo (drag me)' : 'Photo', px, PAD.t+12);
 
       // mark spacing dots
@@ -819,20 +819,20 @@ document.querySelectorAll('.tab').forEach(tab => {
         if(veh.color===FAST_COLOR){
           if(lastFastX!==null){
             const py2 = PAD.t+plotH-lastFastX*plotH;
-            tctx.strokeStyle='#e63946'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
+            tctx.strokeStyle='#a4161a'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
             tctx.beginPath(); tctx.moveTo(px+14,py2); tctx.lineTo(px+14,dpy); tctx.stroke();
             tctx.setLineDash([]);
-            tctx.fillStyle='#e63946'; tctx.font='10px sans-serif'; tctx.textAlign='left';
+            tctx.fillStyle='#a4161a'; tctx.font='10px sans-serif'; tctx.textAlign='left';
             tctx.fillText('s₁',px+17,(py2+dpy)/2);
           }
           lastFastX=x01;
         } else {
           if(lastSlowX!==null){
             const py2 = PAD.t+plotH-lastSlowX*plotH;
-            tctx.strokeStyle='#457b9d'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
+            tctx.strokeStyle='#2c5378'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
             tctx.beginPath(); tctx.moveTo(px-14,py2); tctx.lineTo(px-14,dpy); tctx.stroke();
             tctx.setLineDash([]);
-            tctx.fillStyle='#457b9d'; tctx.font='10px sans-serif'; tctx.textAlign='right';
+            tctx.fillStyle='#2c5378'; tctx.font='10px sans-serif'; tctx.textAlign='right';
             tctx.fillText('s₂',px-17,(py2+dpy)/2);
           }
           lastSlowX=x01;
@@ -979,7 +979,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     const vehs = [];
     let arrT = 0.5;
     while(arrT < DUR - 2){
-      vehs.push({ arrT, color: '#e63946', history: [] });
+      vehs.push({ arrT, color: '#a4161a', history: [] });
       arrT += p.headway;
     }
     return vehs;
@@ -1071,7 +1071,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       const x01 = veh.history[idx][1];
       if(x01 > 1.02) return;
       const cy = PAD.t + plotH - Math.min(x01, 1)*plotH;
-      drawCarV(tctx, ROAD.x0 + 0.75*(ROAD.x1-ROAD.x0), cy, '#e63946', 0.5);
+      drawCarV(tctx, ROAD.x0 + 0.75*(ROAD.x1-ROAD.x0), cy, '#a4161a', 0.5);
     });
   }
 
@@ -1139,7 +1139,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       if(tSec < veh.arrT) return;
       const hist = veh.history.filter(h => h[0] <= tSec);
       if(hist.length < 2) return;
-      tctx.strokeStyle='#e63946'; tctx.lineWidth=2; tctx.lineJoin='round';
+      tctx.strokeStyle='#a4161a'; tctx.lineWidth=2; tctx.lineJoin='round';
       tctx.beginPath();
       hist.forEach(([ht,hx],i) => {
         const px=PAD.l+(ht/DUR)*plotW;
@@ -1151,7 +1151,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       const last=hist[hist.length-1];
       const dpx=PAD.l+(last[0]/DUR)*plotW;
       const dpy=PAD.t+plotH-last[1]*plotH;
-      tctx.fillStyle='#e63946';
+      tctx.fillStyle='#a4161a';
       tctx.beginPath(); tctx.arc(dpx,dpy,3.5,0,Math.PI*2); tctx.fill();
     });
 
@@ -1233,7 +1233,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 
   const DUR = 16;        // seconds shown on TSD
   const LOOP_SPEED = 0.12; // x per second (normalized, loop length=1)
-  const COLORS = ['#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#a786c9'];
+  const COLORS = ['#a4161a','#2c5378','#14655c','#b8860b','#b45309','#5b4a7a'];
 
   let animId=null, playing=false, t=0, lastTime=null;
   let buses=[], histories=[];
@@ -1500,7 +1500,7 @@ document.querySelectorAll('.tab').forEach(tab => {
   const DT = 0.02;       // integration step (s)
   const CAR_LEN = 16;    // feet
   const MPH = 1.46667;   // ft/s per mph
-  const COLORS = ['#e63946','#f4a261','#e9c46a','#8ab17d','#2a9d8f','#457b9d','#6d597a','#b56576'];
+  const COLORS = ['#a4161a','#b45309','#8d6f00','#40663c','#14655c','#2c5378','#4f3f5c','#8c3a4c'];
 
   // GM generations: exponents + sensible slider ranges for α (its units change with m, l).
   // 2nd model: two-level sensitivity — α when close (< 130 ft), α/2 when far.

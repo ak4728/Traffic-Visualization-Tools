@@ -322,12 +322,12 @@ function stepSim(dt){
 }
 
 function carColor(c){
-  if(c.flag==='red'||c.flag==='over') return '#ff2e3f';
+  if(c.flag==='red'||c.flag==='over') return '#7a0c11';
   switch(c.decision){
-    case 'go': return '#2a9d8f';
-    case 'stop': return '#457b9d';
-    case 'dz-go': case 'dz-stop': return '#e63946';
-    default: return '#3fc1c9';
+    case 'go': return '#14655c';
+    case 'stop': return '#2c5378';
+    case 'dz-go': case 'dz-stop': return '#a4161a';
+    default: return '#0e7c86';
   }
 }
 
@@ -424,7 +424,7 @@ function drawRoad(){
   else if(pd>=pxs){ verdict='STOP — can stop'; vcol='#6aa4d8'; }
   else if(pxs>pxc){ verdict='DILEMMA — neither!'; vcol='#ff6b76'; }
   else { verdict='OPTION — either works'; vcol='#e9c46a'; }
-  rctx.fillStyle='#e9c46a';
+  rctx.fillStyle='#b8860b';
   rctx.beginPath(); rctx.roundRect(px-pl, LANE_PROBE-8, pl, 16, 3); rctx.fill();
   rctx.fillStyle='rgba(255,255,255,0.4)';
   rctx.fillRect(px-pl*0.28, LANE_PROBE-5, pl*0.14, 10);
@@ -437,7 +437,7 @@ function drawRoad(){
   rctx.beginPath(); rctx.roundRect(chx, LANE_PROBE-40, cw, 20, 5); rctx.fill();
   rctx.fillStyle=vcol; rctx.textAlign='left';
   rctx.fillText(chip, chx+7, LANE_PROBE-26);
-  rctx.strokeStyle='rgba(233,196,106,0.5)'; rctx.lineWidth=1; rctx.setLineDash([3,3]);
+  rctx.strokeStyle='rgba(184,134,11,0.55)'; rctx.lineWidth=1; rctx.setLineDash([3,3]);
   rctx.beginPath(); rctx.moveTo(px-pl/2, LANE_PROBE-20); rctx.lineTo(px-pl/2, LANE_PROBE-9); rctx.stroke();
   rctx.setLineDash([]);
 
