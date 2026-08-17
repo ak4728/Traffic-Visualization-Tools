@@ -21,14 +21,14 @@
   .panel { display: none; }
   .panel.active { display: block; }
   .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
-  .panel-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 10px; align-items: stretch; }
+  .panel-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 10px; align-items: stretch; }
   .panel-grid .viz-container { margin-bottom: 0; }
   @media (max-width: 900px){ .panel-grid { grid-template-columns: 1fr; } }
   .pane-head { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2px; }
   .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
   .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 380px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
   .help:hover .tip { display: block; }
-  .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: 260px; height: auto; display: block; margin: 8px auto 0; }
+  .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: min(400px, 100%); height: auto; display: block; margin: 8px auto 0; }
   .mini-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: flex-start; }
   .mini-row .gauge-canvas { margin: 8px 0 0; }
   canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
@@ -94,7 +94,7 @@
   <div class="panel active" id="single">
     <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="singleTSD"  class="tsd-canvas"  width="1200" height="460"></canvas>
+      <canvas id="singleTSD"  class="tsd-canvas"  width="1200" height="560"></canvas>
     </div>
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">A <b>trajectory</b> is the curve x(t): position along a one-way guideway vs. time — exactly one x for every t. <b>Slope</b> = velocity <code>v = dx/dt</code>: steep → fast, flat → stopped. <b>Curvature</b> = acceleration: concave-down → decelerating, concave-up → accelerating. The car drives up the road beside the position axis, always level with its trajectory point.</span></span></div>
@@ -129,7 +129,7 @@
   <div class="panel" id="many">
     <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="manyTSD"  class="tsd-canvas"  width="1200" height="460"></canvas>
+      <canvas id="manyTSD"  class="tsd-canvas"  width="1200" height="560"></canvas>
     </div>
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">A <b>horizontal line</b> is a stationary observer: its intersections with trajectories are <b>headways h</b>, and flow q = 1/h̄. A <b>vertical line</b> is an instantaneous photograph: gaps between vehicles are <b>spacings s</b>, and density k = 1/s̄. The observer counts fast cars more often, so time-mean speed V<sub>t</sub> ≥ space-mean speed V<sub>s</sub>. Drag both lines directly on the diagram — the observer also appears at the roadside.</span></span></div>
@@ -165,13 +165,14 @@
   <div class="panel" id="signal">
     <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="signalTSD"  class="tsd-canvas"  width="1200" height="460"></canvas>
+      <canvas id="signalTSD"  class="tsd-canvas"  width="1200" height="560"></canvas>
     </div>
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">Vehicles follow each other with the <b>GM 3rd model</b> <code>a = α·Δv/s</code> (α = 0.35, T = 0.6 s); a red signal acts as a stopped virtual leader at its stop line, so decelerations into the queue and the staggered discharge on green are car-following dynamics, not scripted. Each signal's red/green history is drawn as a colored bar along its line. The line connecting the kinks where vehicles join the queue is the <b>shockwave</b>. Tune <b>Signal 2 offset</b> so the platoon released by Signal 1 arrives at Signal 2 on green — a <b>green wave</b>; a bad offset stops the same platoon twice.</span></span></div>
       <div class="readout" id="signalReadout">Queues form on RED · Vehicles discharge on GREEN</div>
       <div class="mini-row">
         <canvas id="sigThru" class="gauge-canvas" width="520" height="300"></canvas>
+        <canvas id="sigQueue" class="gauge-canvas" width="520" height="300"></canvas>
       </div>
       <div class="controls">
         <button class="action" id="signalPlay">▶ Play</button>
@@ -1298,6 +1299,24 @@ document.querySelectorAll('.tab').forEach(tab => {
         if(h[1] >= SIG2_X){ veh.crossT = h[0]; break; }
       }
     });
+    computeQueueHist();
+  }
+
+  // stopped-vehicle count over the whole run (deterministic, so precomputed)
+  let qHist = [];
+  function computeQueueHist(){
+    qHist = [];
+    const dt = 0.05;
+    for(let ts=0; ts<=DUR; ts+=0.2){
+      let cnt = 0;
+      vehicles.forEach(v => {
+        if(ts < v.arrT) return;
+        const idx = Math.round((ts - v.arrT)/dt);
+        if(idx < 1 || idx >= v.history.length) return;
+        if(v.history[idx][1] - v.history[idx-1][1] < 0.0005) cnt++;
+      });
+      qHist.push([ts, cnt]);
+    }
   }
 
   function drawRoadStrip(tSec, p){
@@ -1484,11 +1503,55 @@ document.querySelectorAll('.tab').forEach(tab => {
     }
   }
 
+  // queue length (stopped vehicles) over time
+  const queueC = el('sigQueue'), qcx = queueC.getContext('2d');
+  function drawQueueChart(){
+    qcx.setTransform(1,0,0,1,0,0);
+    qcx.clearRect(0,0,queueC.width,queueC.height);
+    qcx.setTransform(2,0,0,2,0,0);
+    const W=260, H=150, L=26, Rm=8, T=18, B=20;
+    const pw=W-L-Rm, ph=H-T-B;
+    const QMAX = Math.max(1, ...qHist.map(q=>q[1]));
+    qcx.font='600 8px sans-serif'; qcx.fillStyle='#9aa1ad'; qcx.textAlign='left';
+    qcx.fillText('QUEUE — stopped vehicles', 8, 11);
+    qcx.strokeStyle='#eef1f6'; qcx.lineWidth=1;
+    qcx.fillStyle='#7b8494'; qcx.font='7px sans-serif';
+    const yStep = Math.max(1, Math.ceil(QMAX/4));
+    for(let g=0; g<=QMAX; g+=yStep){
+      const y=T+ph-(g/QMAX)*ph;
+      qcx.beginPath(); qcx.moveTo(L,y); qcx.lineTo(L+pw,y); qcx.stroke();
+      qcx.textAlign='right'; qcx.fillText(g, L-3, y+2);
+    }
+    qcx.textAlign='center';
+    for(let g=0; g<=DUR; g+=5) qcx.fillText(g+'s', L+(g/DUR)*pw, H-8);
+    qcx.strokeStyle='#d6dae2';
+    qcx.beginPath(); qcx.moveTo(L,T+ph+0.5); qcx.lineTo(L+pw,T+ph+0.5); qcx.stroke();
+    // curve up to now
+    qcx.strokeStyle='#a4161a'; qcx.lineWidth=2; qcx.lineJoin='round';
+    qcx.beginPath();
+    let started=false, qNow=0;
+    for(const [ts,cnt] of qHist){
+      if(ts > t+1e-6) break;
+      qNow=cnt;
+      const px=L+(ts/DUR)*pw, py=T+ph-(cnt/QMAX)*ph;
+      if(!started){ qcx.moveTo(px,py); started=true; } else qcx.lineTo(px,py);
+    }
+    if(started){
+      qcx.stroke();
+      const px=L+(Math.min(t,DUR)/DUR)*pw, py=T+ph-(qNow/QMAX)*ph;
+      qcx.fillStyle='#a4161a';
+      qcx.beginPath(); qcx.arc(px,py,2.5,0,Math.PI*2); qcx.fill();
+      qcx.font='700 9px sans-serif'; qcx.textAlign='left';
+      qcx.fillText(`${qNow} stopped`, Math.min(px+5, W-52), Math.max(py-4, T+8));
+    }
+  }
+
   function render(){
     const p = getParams();
     drawTSD(t, p);
     drawRoadStrip(t, p);
     drawThruChart();
+    drawQueueChart();
   }
 
   function reset(){
