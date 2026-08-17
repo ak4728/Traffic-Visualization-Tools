@@ -28,7 +28,7 @@
   .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
   .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 380px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
   .help:hover .tip { display: block; }
-  .gauge-canvas { background: #fff; border: 1px solid #eceff4; margin-top: 8px; }
+  .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: 260px; height: auto; display: block; margin: 8px auto 0; }
   canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
   .road-canvas { background: #e7ebf0; margin-bottom: 12px; }
   .tsd-canvas { background: #ffffff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
@@ -97,7 +97,7 @@
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">A <b>trajectory</b> is the curve x(t): position along a one-way guideway vs. time — exactly one x for every t. <b>Slope</b> = velocity <code>v = dx/dt</code>: steep → fast, flat → stopped. <b>Curvature</b> = acceleration: concave-down → decelerating, concave-up → accelerating. The car drives up the road beside the position axis, always level with its trajectory point.</span></span></div>
       <div class="readout" id="singleReadout">Press ▶ Play — the car drives up the road beside the position axis as its trajectory draws</div>
-      <canvas id="singleGauge" class="gauge-canvas" width="420" height="230"></canvas>
+      <canvas id="singleGauge" class="gauge-canvas" width="520" height="300"></canvas>
       <div class="controls">
         <button class="action" id="singlePlay">▶ Play</button>
         <button class="action sec" id="singleReset">↺ Reset</button>
@@ -148,6 +148,7 @@
         <label><input type="checkbox" id="showPhoto" checked> Photograph (drag ↔ · double-click to re-follow)</label>
       </div>
       <div class="readout" id="manyReadout">Observer sees more FAST cars · Photo shows more SLOW cars → V<sub>t</sub> ≥ V<sub>s</sub></div>
+      <canvas id="manyBars" class="gauge-canvas" width="520" height="260"></canvas>
     </div>
     </div>
   </div>
@@ -562,10 +563,14 @@ document.querySelectorAll('.tab').forEach(tab => {
   }
 
   function drawGauge(v, a){
+    // draw at 2x into a 520x300 canvas shown at 260x150 CSS px — crisp on normal & retina
+    gctx.setTransform(1,0,0,1,0,0);
     gctx.clearRect(0,0,GW,GH);
-    const cx=GW/2, cy=GH-42, R=Math.min(GW/2-36, GH-78);
+    gctx.setTransform(2,0,0,2,0,0);
+    const W=260, H=150;
+    const cx=W/2, cy=H-32, R=78;
     // dial background
-    gctx.lineWidth=16; gctx.lineCap='round';
+    gctx.lineWidth=10; gctx.lineCap='round';
     gctx.strokeStyle='#eef1f6';
     gctx.beginPath(); gctx.arc(cx,cy,R,Math.PI,2*Math.PI); gctx.stroke();
     // progress arc coloured by acceleration state
@@ -576,35 +581,35 @@ document.querySelectorAll('.tab').forEach(tab => {
       gctx.beginPath(); gctx.arc(cx,cy,R,Math.PI,Math.PI*(1+frac)); gctx.stroke();
     }
     // ticks
-    gctx.lineCap='butt'; gctx.lineWidth=2; gctx.strokeStyle='#c3cad3';
-    gctx.fillStyle='#7b8494'; gctx.font='11px sans-serif'; gctx.textAlign='center';
+    gctx.lineCap='butt'; gctx.lineWidth=1.5; gctx.strokeStyle='#c3cad3';
+    gctx.fillStyle='#7b8494'; gctx.font='8px sans-serif'; gctx.textAlign='center';
     for(let tv=0;tv<=VMAX;tv+=50){
       const ang=Math.PI*(1+tv/VMAX);
       gctx.beginPath();
-      gctx.moveTo(cx+Math.cos(ang)*(R-14), cy+Math.sin(ang)*(R-14));
-      gctx.lineTo(cx+Math.cos(ang)*(R-24), cy+Math.sin(ang)*(R-24));
+      gctx.moveTo(cx+Math.cos(ang)*(R-8), cy+Math.sin(ang)*(R-8));
+      gctx.lineTo(cx+Math.cos(ang)*(R-15), cy+Math.sin(ang)*(R-15));
       gctx.stroke();
-      gctx.fillText(tv, cx+Math.cos(ang)*(R-38), cy+Math.sin(ang)*(R-38)+4);
+      gctx.fillText(tv, cx+Math.cos(ang)*(R-25), cy+Math.sin(ang)*(R-25)+3);
     }
     // needle
     const ang=Math.PI*(1+frac);
-    gctx.strokeStyle='#1f2937'; gctx.lineWidth=3.5; gctx.lineCap='round';
+    gctx.strokeStyle='#1f2937'; gctx.lineWidth=2.5; gctx.lineCap='round';
     gctx.beginPath(); gctx.moveTo(cx,cy);
-    gctx.lineTo(cx+Math.cos(ang)*(R-30), cy+Math.sin(ang)*(R-30)); gctx.stroke();
+    gctx.lineTo(cx+Math.cos(ang)*(R-19), cy+Math.sin(ang)*(R-19)); gctx.stroke();
     gctx.fillStyle='#1f2937';
-    gctx.beginPath(); gctx.arc(cx,cy,6,0,Math.PI*2); gctx.fill();
+    gctx.beginPath(); gctx.arc(cx,cy,4,0,Math.PI*2); gctx.fill();
     // digital speed
-    gctx.font='700 30px sans-serif'; gctx.textAlign='center'; gctx.fillStyle='#1f2937';
-    gctx.fillText(v.toFixed(0), cx, cy-R*0.32);
-    gctx.font='11px sans-serif'; gctx.fillStyle='#7b8494';
-    gctx.fillText('speed (u/s = % of route per s)', cx, cy-R*0.32+16);
+    gctx.font='700 20px sans-serif'; gctx.textAlign='center'; gctx.fillStyle='#1f2937';
+    gctx.fillText(v.toFixed(0), cx, cy-R*0.34);
+    gctx.font='8px sans-serif'; gctx.fillStyle='#7b8494';
+    gctx.fillText('speed (u/s = % of route per s)', cx, cy-R*0.34+12);
     // acceleration state
-    gctx.font='600 13px sans-serif';
+    gctx.font='600 10px sans-serif';
     gctx.fillStyle = a>8 ? '#40663c' : a<-8 ? '#a4161a' : '#7b8494';
     const lbl = a>8 ? '▲ accelerating' : a<-8 ? '▼ decelerating' : '— steady';
-    gctx.fillText(`a = ${a.toFixed(1)} u/s²   ${lbl}`, cx, cy+26);
-    gctx.font='600 11px sans-serif'; gctx.fillStyle='#9aa1ad'; gctx.textAlign='left';
-    gctx.fillText('SPEEDOMETER', 10, 16);
+    gctx.fillText(`a = ${a.toFixed(1)} u/s²   ${lbl}`, cx, cy+20);
+    gctx.font='600 8px sans-serif'; gctx.fillStyle='#9aa1ad'; gctx.textAlign='left';
+    gctx.fillText('SPEEDOMETER', 8, 11);
   }
 
   function render(){
@@ -916,6 +921,34 @@ document.querySelectorAll('.tab').forEach(tab => {
 
   // time-mean speed: average over vehicles PASSING the observer line;
   // space-mean speed: average over vehicles PRESENT in the photo
+  const barsC = el('manyBars'), bctx = barsC.getContext('2d');
+
+  function drawSpeedBars(Vt, Vs, nT, nS){
+    bctx.setTransform(1,0,0,1,0,0);
+    bctx.clearRect(0,0,barsC.width,barsC.height);
+    bctx.setTransform(2,0,0,2,0,0);
+    const W=260, H=130, base=100, maxH=64;
+    bctx.font='600 8px sans-serif'; bctx.fillStyle='#9aa1ad'; bctx.textAlign='left';
+    bctx.fillText('MEAN SPEEDS (% of L per s)', 8, 11);
+    if(Vt>0 && Vs>0){
+      bctx.fillStyle = Vt >= Vs-0.01 ? '#1d7a6f' : '#c1121f';
+      bctx.textAlign='right';
+      bctx.fillText(Vt >= Vs-0.01 ? 'Vₜ ≥ Vₛ ✓' : 'Vₜ < Vₛ ?!', 252, 11);
+    }
+    const maxV = Math.max(Vt, Vs, 0.1);
+    [[Vt,'#0e7c86',`time-mean Vₜ (${nT})`,75],[Vs,'#b45309',`space-mean Vₛ (${nS})`,185]].forEach(([val,col,lab,bx])=>{
+      const h = val/maxV*maxH;
+      bctx.fillStyle=col;
+      bctx.beginPath(); bctx.roundRect(bx-24, base-h, 48, Math.max(h,1), 3); bctx.fill();
+      bctx.fillStyle='#1f2937'; bctx.font='700 11px sans-serif'; bctx.textAlign='center';
+      bctx.fillText(val.toFixed(1), bx, base-h-5);
+      bctx.fillStyle='#4b5563'; bctx.font='8px sans-serif';
+      bctx.fillText(lab, bx, base+13);
+    });
+    bctx.strokeStyle='#d6dae2'; bctx.lineWidth=1;
+    bctx.beginPath(); bctx.moveTo(28,base+0.5); bctx.lineTo(232,base+0.5); bctx.stroke();
+  }
+
   function updateSpeedStats(){
     const obsX01 = 1 - obsFrac;
     const passed = [];
@@ -930,6 +963,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     el('manyReadout').textContent =
       `t=${t.toFixed(1)}s  |  time-mean Vₜ = ${Vt.toFixed(1)} %/s (${passed.length} passings)  |  space-mean Vₛ = ${Vs.toFixed(1)} %/s (${onRoad.length} in photo)` +
       (passed.length && onRoad.length ? (Vt >= Vs-0.01 ? '  →  Vₜ ≥ Vₛ ✓' : '') : '');
+    drawSpeedBars(Vt, Vs, passed.length, onRoad.length);
   }
 
   function render(){
@@ -1123,9 +1157,11 @@ document.querySelectorAll('.tab').forEach(tab => {
             x = hj[idx][1] - GAP; v = 0;
           }
         }
+        // no red-running here: any vehicle whose front bumper hadn't crossed the
+        // line when the red began is held at the stop line, no exceptions
         for(const sig of sigs){
-          if(phaseAt(ts, p, sig.off)==='red' && xPrev < sig.x - 0.004 && x > sig.x - 0.004){
-            x = sig.x - 0.004; v = 0;
+          if(phaseAt(ts, p, sig.off)==='red' && xPrev < sig.x && x > sig.x - 0.004){
+            x = Math.min(x, sig.x - 0.004); v = 0;
           }
         }
         x = Math.max(x, 0);
@@ -1325,8 +1361,10 @@ document.querySelectorAll('.tab').forEach(tab => {
   const plotW = TW - PAD.l - PAD.r;
   const plotH = TH - PAD.t - PAD.b;
 
-  const DUR = 16;        // seconds shown on TSD
-  const LOOP_SPEED = 0.12; // x per second (normalized, loop length=1)
+  const DUR = 60;          // seconds shown on TSD (a full minute)
+  const LOOP_SPEED = 0.12; // mean desired speed (loop lengths per second)
+  const BUS_LEN = 0.015;   // bus length as a fraction of the loop
+  const GM_A = 0.25;       // GM-3 sensitivity on the ring
   const COLORS = ['#a4161a','#2c5378','#14655c','#b8860b','#b45309','#5b4a7a'];
 
   let animId=null, playing=false, t=0, lastTime=null;
@@ -1350,7 +1388,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     buses = [];
     histories = [];
     for(let i=0;i<n;i++){
-      buses.push({ phase: i/n }); // evenly spaced
+      // evenly spaced, but each driver wants a slightly different speed (±18%)
+      buses.push({ phase: i/n, v0: LOOP_SPEED*(1 + (Math.random()*0.36 - 0.18)) });
       histories.push([]);
     }
   }
@@ -1383,8 +1422,9 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // buses
     buses.forEach((bus,i)=>{
-      const x01 = (bus.phase + tSec*LOOP_SPEED) % 1;
-      const pos = loopPos(x01);
+      const hist = histories[i];
+      const idx = Math.min(hist.length-1, Math.max(0, Math.round(tSec/0.05)));
+      const pos = loopPos(hist[idx][1]);
       // bus body
       rctx.fillStyle=COLORS[i%COLORS.length];
       rctx.beginPath(); rctx.arc(pos.x,pos.y,11,0,Math.PI*2); rctx.fill();
@@ -1395,9 +1435,9 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // center info
     rctx.fillStyle='#4b5563'; rctx.font='11px sans-serif'; rctx.textAlign='center';
-    rctx.fillText(`n=${buses.length} buses`, CX, CY-8);
-    rctx.fillText(`v=${LOOP_SPEED.toFixed(2)} L/s`, CX, CY+10);
-    rctx.fillText(`q=nv=${(buses.length*LOOP_SPEED).toFixed(2)}`, CX, CY+26);
+    rctx.fillText(`n=${buses.length} buses · GM following`, CX, CY-8);
+    rctx.fillText(`v₀ = ${LOOP_SPEED.toFixed(2)} ±18% L/s`, CX, CY+10);
+    rctx.fillText('faster buses catch slower → bunching', CX, CY+26);
   }
 
   function drawTSD(tSec){
@@ -1433,10 +1473,10 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // tick labels
     tctx.font='11px sans-serif'; tctx.fillStyle='#555';
-    for(let i=0;i<=8;i++){
-      const tx=PAD.l+(i/8)*plotW;
+    for(let i=0;i<=6;i++){
+      const tx=PAD.l+(i/6)*plotW;
       tctx.textAlign='center';
-      tctx.fillText((i/8*DUR).toFixed(0)+'s', tx, PAD.t+plotH+14);
+      tctx.fillText((i/6*DUR).toFixed(0)+'s', tx, PAD.t+plotH+14);
     }
     tctx.textAlign='right';
     tctx.fillText('0',PAD.l-4,PAD.t+plotH+4);
@@ -1503,32 +1543,60 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // stats box
     const n=buses.length;
-    const cycleT=(1/LOOP_SPEED).toFixed(1);
-    const q=(n*LOOP_SPEED).toFixed(3);
-    const k=n.toFixed(0);
-    tctx.fillStyle='rgba(15,52,96,0.85)';
-    tctx.beginPath(); tctx.roundRect(PAD.l+plotW-190, PAD.t+22, 185, 72, 6); tctx.fill();
-    tctx.fillStyle='#3fc1c9'; tctx.font='11px Courier New'; tctx.textAlign='left';
-    const sx=PAD.l+plotW-182, sy=PAD.t+38;
-    tctx.fillText(`n  = ${n} buses`,          sx, sy);
-    tctx.fillText(`v  = ${LOOP_SPEED} L/s`,   sx, sy+16);
-    tctx.fillText(`C  = ${cycleT} s (cycle)`, sx, sy+32);
-    tctx.fillText(`q  = n·v = ${q}  k = n/L = ${k}`, sx, sy+48);
-    tctx.fillText(`→  q = k·v  ✓`,            sx, sy+64);
+    const vbar = buses.reduce((s,b)=>s+b.v0,0)/n;
+    tctx.fillStyle='#ffffff'; tctx.strokeStyle='#e2e6ee'; tctx.lineWidth=1.5;
+    tctx.beginPath(); tctx.roundRect(PAD.l+plotW-215, PAD.t+22, 210, 72, 6); tctx.fill(); tctx.stroke();
+    tctx.fillStyle='#1f2937'; tctx.font='11px Courier New'; tctx.textAlign='left';
+    const sx=PAD.l+plotW-207, sy=PAD.t+38;
+    tctx.fillText(`n  = ${n} buses (GM following)`, sx, sy);
+    tctx.fillText(`v̄₀ = ${vbar.toFixed(3)} L/s (±18%)`, sx, sy+16);
+    tctx.fillText(`q  = n·v̄ = ${(n*vbar).toFixed(2)}   k = ${n}`, sx, sy+32);
+    tctx.fillText(`→  q = k·v̄  ✓`, sx, sy+48);
+    tctx.fillText(`bunches = converging stripes`, sx, sy+64);
 
     drawHover(tctx, tsdC, PAD, plotW, plotH, DUR, f => (f*100).toFixed(0)+'% of L');
   }
 
   function buildHistories(){
-    // pre-compute full histories for all buses at fine resolution
-    const dt=0.05;
-    buses.forEach((bus,i)=>{
-      histories[i]=[];
-      for(let ts=0; ts<=DUR+dt; ts+=dt){
-        const x01 = (bus.phase + ts*LOOP_SPEED) % 1;
-        histories[i].push([parseFloat(ts.toFixed(3)), x01]);
+    // GM car following around the ring: bus i follows bus (i+1)%n.
+    // Faster desired speeds catch slower buses ahead → platoons/bunching.
+    const dt = 0.05, n = buses.length;
+    let xs = buses.map(b => b.phase);
+    let vs = buses.map(b => b.v0);
+    histories = buses.map((b,i) => [[0, xs[i]]]);
+    const steps = Math.round(DUR/dt);
+    for(let k=1; k<=steps; k++){
+      const ts = k*dt;
+      const nx = new Array(n), nv = new Array(n);
+      for(let i=0;i<n;i++){
+        if(n === 1){
+          nv[i] = buses[i].v0;
+          nx[i] = (xs[i] + nv[i]*dt) % 1;
+          continue;
+        }
+        const j = (i+1) % n;   // the bus ahead on the ring
+        const gap = Math.max(((xs[j] - xs[i]) % 1 + 1) % 1 - BUS_LEN, 0.002);
+        const dv = vs[j] - vs[i];
+        let a = 1.2*(buses[i].v0 - vs[i]);            // relax toward own desired speed
+        if(gap < 0.18) a = Math.min(a, GM_A*dv/gap);  // GM-3 term when close
+        a = Math.max(-0.6, Math.min(0.3, a));
+        nv[i] = Math.max(0.02, vs[i] + a*dt);
+        nx[i] = (xs[i] + nv[i]*dt) % 1;
       }
-    });
+      // no overtaking on a single-lane loop
+      if(n > 1){
+        for(let i=0;i<n;i++){
+          const j = (i+1) % n;
+          const gap = ((nx[j] - nx[i]) % 1 + 1) % 1;
+          if(gap < BUS_LEN){
+            nx[i] = ((nx[j] - BUS_LEN) % 1 + 1) % 1;
+            nv[i] = Math.min(nv[i], nv[j]);
+          }
+        }
+      }
+      xs = nx; vs = nv;
+      for(let i=0;i<n;i++) histories[i].push([ts, xs[i]]);
+    }
   }
 
   function reset(){
@@ -1539,9 +1607,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     drawLoopRoad(0);
     drawTSD(0);
     const n=buses.length;
-    const cycleT=(1/LOOP_SPEED).toFixed(1);
     el('loopReadout').textContent=
-      `${n} bus(es) · cycle time C=${cycleT}s · q=n/C=${(n/cycleT).toFixed(3)} · k=n/L=${n} · v=q/k=${LOOP_SPEED}`;
+      `${n} buses · GM car following · desired speeds vary ±18% — press ▶ Play and watch faster buses catch slower ones`;
   }
 
   function animate(ts){
@@ -1554,7 +1621,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     drawTSD(t);
     const n=buses.length;
     el('loopReadout').textContent=
-      `t=${t.toFixed(2)}s  |  ${n} bus(es) circling  |  q=${(n*LOOP_SPEED).toFixed(3)} veh/s  |  k=${n} veh/L  |  v=${LOOP_SPEED} L/s  →  q=kv ✓`;
+      `t=${t.toFixed(1)}s  |  ${n} buses circling with GM following (v₀ ± 18%)  |  bunches form where sawtooth stripes converge`;
     if(t<DUR){ animId=requestAnimationFrame(animate); }
     else { playing=false; el('loopPlay').textContent='▶ Play'; }
   }
@@ -1797,8 +1864,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     const showStab = el('gmModel').value==='1';
     const boxW=230, boxH = showStab ? 122 : 106;
     const bx0=PAD.l+plotW-boxW-8, by0=PAD.t+plotH-boxH-8;
-    tctx.fillStyle='rgba(15,52,96,0.9)';
-    tctx.beginPath(); tctx.roundRect(bx0,by0,boxW,boxH,6); tctx.fill();
+    tctx.fillStyle='#ffffff'; tctx.strokeStyle='#e2e6ee'; tctx.lineWidth=1.5;
+    tctx.beginPath(); tctx.roundRect(bx0,by0,boxW,boxH,6); tctx.fill(); tctx.stroke();
     // colour legend: one swatch per vehicle (spacing shrinks to fit large platoons)
     const sw = Math.max(15, Math.min(24, Math.floor((boxW-20)/vehicles.length)));
     let lx=bx0+10;
@@ -1811,7 +1878,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       lx+=sw;
     });
     // live stats
-    tctx.fillStyle='#3fc1c9'; tctx.font='11px Courier New';
+    tctx.fillStyle='#1f2937'; tctx.font='11px Courier New';
     const sx=bx0+10, sy=ly+30;
     tctx.fillText(`leader v = ${(lead.v/MPH).toFixed(0)} mph`, sx, sy);
     tctx.fillText(`tail   v = ${(tail.v/MPH).toFixed(0)} mph`, sx, sy+15);
@@ -1819,7 +1886,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.fillText(`T=${tau().toFixed(1)}s  α=${alpha()} ${cfg.unit}`, sx, sy+45);
     if(showStab){
       const C = alpha()*tau();
-      tctx.fillStyle = C<=0.5 ? '#7de08d' : '#ff8080';
+      tctx.fillStyle = C<=0.5 ? '#1d7a6f' : '#c1121f';
       tctx.fillText(`α·T=${C.toFixed(2)} ${C<=0.5?'(stable ≤0.5)':'(UNSTABLE >0.5)'}`, sx, sy+60);
     }
 
