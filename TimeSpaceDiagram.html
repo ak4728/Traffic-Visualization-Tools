@@ -213,7 +213,7 @@
         <button class="action sec" id="loopReset">↺ Reset</button>
         <div class="control-group">
           <label>Number of buses</label>
-          <input type="range" id="loopN" min="1" max="12" step="1" value="8">
+          <input type="range" id="loopN" min="1" max="20" step="1" value="8">
           <span class="val" id="loopNVal">8</span>
         </div>
         <div class="control-group">
@@ -753,14 +753,20 @@ document.querySelectorAll('.tab').forEach(tab => {
   const SLOW_COLOR = '#2c5378';
 
   function makeVehicles(){
+    // continuous stream: random arrivals from before t=0 until the end of the
+    // window, each randomly fast or slow with a little speed jitter
     const vehicles = [];
-    // Fast: v=0.85 of full width per DUR, headway=2.5s
-    for(let i=0;i<6;i++){
-      vehicles.push({ speed: 0.085, headway: 2.5, offset: -i*2.5, color: FAST_COLOR, lane: 0.3 });
-    }
-    // Slow: v=0.04, headway=2.0s
-    for(let i=0;i<5;i++){
-      vehicles.push({ speed: 0.038, headway: 2.0, offset: -i*2.0, color: SLOW_COLOR, lane: 0.7 });
+    let tA = -8;
+    while(tA < DUR - 0.3){
+      const fast = Math.random() < 0.5;
+      const base = fast ? 0.085 : 0.038;
+      vehicles.push({
+        speed: base*(1 + (Math.random()*0.2 - 0.1)),
+        offset: tA,
+        color: fast ? FAST_COLOR : SLOW_COLOR,
+        lane: fast ? 0.3 : 0.7
+      });
+      tA += 0.4 + Math.random()*1.0;
     }
     return vehicles;
   }
@@ -856,7 +862,9 @@ document.querySelectorAll('.tab').forEach(tab => {
       const py1 = PAD.t + plotH - x1*plotH;
       tctx.strokeStyle = veh.color;
       tctx.lineWidth = 2.5;
+      tctx.globalAlpha = 0.45;   // translucent so crossings & headways stay readable
       tctx.beginPath(); tctx.moveTo(px0,py0); tctx.lineTo(px1,py1); tctx.stroke();
+      tctx.globalAlpha = 1;
 
       // dot at current position
       const xNow = getVehX(veh, tSec);
@@ -963,6 +971,28 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.beginPath(); tctx.moveTo(nowPx,PAD.t); tctx.lineTo(nowPx,PAD.t+plotH); tctx.stroke();
     tctx.fillStyle='#333'; tctx.font='bold 13px sans-serif'; tctx.textAlign='left';
     tctx.fillText('Time-Space Diagram', PAD.l+4, PAD.t+16);
+
+    // average headway (observer) and average spacing (photo) along the bottom
+    const obsX01s = 1 - obsFrac;
+    const passTimes = vehicles.map(v => v.offset + obsX01s/v.speed)
+                              .filter(tp => tp >= 0 && tp <= tSec)
+                              .sort((a,b) => a-b);
+    let hbar = 0;
+    if(passTimes.length > 1){
+      for(let i=1;i<passTimes.length;i++) hbar += passTimes[i]-passTimes[i-1];
+      hbar /= passTimes.length-1;
+    }
+    const pT2 = photoT===null ? tSec : Math.min(photoT, tSec);
+    const posNow = vehicles.map(v => getVehX(v, pT2)).filter(x => x !== null).sort((a,b) => a-b);
+    let sbar = 0;
+    if(posNow.length > 1){
+      for(let i=1;i<posNow.length;i++) sbar += posNow[i]-posNow[i-1];
+      sbar /= posNow.length-1;
+    }
+    tctx.font='600 12px sans-serif'; tctx.fillStyle='#0f7b82'; tctx.textAlign='left';
+    tctx.fillText(hbar ? `avg headway h̄ = ${hbar.toFixed(2)} s  →  q = 1/h̄ = ${(1/hbar).toFixed(2)} veh/s` : 'avg headway h̄ = — (no passings yet)', PAD.l, TH-4);
+    tctx.textAlign='right';
+    tctx.fillText(sbar ? `avg spacing s̄ = ${(sbar*100).toFixed(1)} %L  →  k = 1/s̄ = ${(1/sbar).toFixed(1)} veh/L` : 'avg spacing s̄ = —', PAD.l+plotW, TH-4);
 
     drawHover(tctx, tsdC, PAD, plotW, plotH, DUR, f => (f*100).toFixed(0)+'% of L');
   }
