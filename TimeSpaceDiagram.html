@@ -233,7 +233,7 @@
   <!-- PANEL 5: GM CAR FOLLOWING -->
   <div class="panel" id="gm">
     <div class="viz-container">
-      <canvas id="gmTSD"  class="tsd-canvas"  width="1800" height="560"></canvas>
+      <canvas id="gmTSD"  class="tsd-canvas"  width="1800" height="440"></canvas>
     </div>
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">Gazis–Herman–Rothery (GM): each follower's acceleration is a <b>delayed</b> response to its leader, <code>a = α·v<sup>m</sup>/s<sup>l</sup>·Δv</code> evaluated at t−T (1st: m=0, l=0 · 2nd: two-level α, higher when spacing &lt; 130 ft · 3rd: m=0, l=1 · 4th: m=1, l=1 · 5th: m=1, l=2). Every follower obeys the selected model, so one leader input cascades car-to-car. Press <b>🛑</b> mid-run and watch the disturbance propagate back as a <b>shockwave</b>; α, T and free-flow speed apply live. <b>Stability:</b> for the linear model the platoon is asymptotically stable only if <code>α·T ≤ ½</code> — exceed it and oscillations grow down the platoon until spacings collapse.</span></span></div>
@@ -248,8 +248,6 @@
           <input type="range" id="gmSpd" min="0.3" max="3" step="0.1" value="1">
           <span class="val" id="gmSpdVal">1.0×</span>
         </div>
-      </div>
-      <div class="controls">
         <div class="control-group">
           <label>GM model (m, l)</label>
           <select id="gmModel">
@@ -285,9 +283,9 @@
           <input type="range" id="gmS0" min="50" max="160" step="10" value="100">
           <span class="val" id="gmS0Val">100 ft</span>
         </div>
-      </div>
-      <div class="checkbox-row">
-        <label><input type="checkbox" id="gmAuto" checked> Automatic leader slowdown at t = 10–18 s</label>
+        <label style="font-size:0.85em; display:flex; align-items:center; gap:6px; cursor:pointer; white-space:nowrap;">
+          <input type="checkbox" id="gmAuto" checked> auto slowdown t=10–18s
+        </label>
       </div>
     </div>
   </div>
