@@ -28,6 +28,7 @@
   .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
   .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 380px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
   .help:hover .tip { display: block; }
+  .gauge-canvas { background: #fff; border: 1px solid #eceff4; margin-top: 8px; }
   canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
   .road-canvas { background: #e7ebf0; margin-bottom: 12px; }
   .tsd-canvas { background: #ffffff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
@@ -96,6 +97,7 @@
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">A <b>trajectory</b> is the curve x(t): position along a one-way guideway vs. time — exactly one x for every t. <b>Slope</b> = velocity <code>v = dx/dt</code>: steep → fast, flat → stopped. <b>Curvature</b> = acceleration: concave-down → decelerating, concave-up → accelerating. The car drives up the road beside the position axis, always level with its trajectory point.</span></span></div>
       <div class="readout" id="singleReadout">Press ▶ Play — the car drives up the road beside the position axis as its trajectory draws</div>
+      <canvas id="singleGauge" class="gauge-canvas" width="420" height="230"></canvas>
       <div class="controls">
         <button class="action" id="singlePlay">▶ Play</button>
         <button class="action sec" id="singleReset">↺ Reset</button>
@@ -202,8 +204,8 @@
         <button class="action sec" id="loopReset">↺ Reset</button>
         <div class="control-group">
           <label>Number of buses</label>
-          <input type="range" id="loopN" min="1" max="6" step="1" value="3">
-          <span class="val" id="loopNVal">3</span>
+          <input type="range" id="loopN" min="1" max="12" step="1" value="8">
+          <span class="val" id="loopNVal">8</span>
         </div>
         <div class="control-group">
           <label>Playback Speed</label>
@@ -263,7 +265,7 @@
         </div>
         <div class="control-group">
           <label>Vehicles</label>
-          <input type="range" id="gmN" min="3" max="8" step="1" value="6">
+          <input type="range" id="gmN" min="2" max="12" step="1" value="6">
           <span class="val" id="gmNVal">6</span>
         </div>
         <div class="control-group">
@@ -545,9 +547,71 @@ document.querySelectorAll('.tab').forEach(tab => {
   let xfunc = getXfunc('accel');
   let lastX01 = 0;
 
+  // speedometer gauge (right pane)
+  const gaugeC = el('singleGauge'), gctx = gaugeC.getContext('2d');
+  const GW = gaugeC.width, GH = gaugeC.height;
+  const VMAX = 250; // u/s (percent of route per second)
+
+  function curKin(){
+    const n = xHistory.length;
+    if(n < 3) return {v:0, a:0};
+    const v = (xHistory[n-1][1]-xHistory[n-3][1])/(xHistory[n-1][0]-xHistory[n-3][0]+0.001)*100;
+    let a = 0;
+    if(n > 5) a = (xHistory[n-1][1]-2*xHistory[n-3][1]+xHistory[n-5][1])/Math.pow(xHistory[n-1][0]-xHistory[n-5][0]+0.001,2)*10;
+    return {v: Math.max(0, v), a};
+  }
+
+  function drawGauge(v, a){
+    gctx.clearRect(0,0,GW,GH);
+    const cx=GW/2, cy=GH-42, R=Math.min(GW/2-36, GH-78);
+    // dial background
+    gctx.lineWidth=16; gctx.lineCap='round';
+    gctx.strokeStyle='#eef1f6';
+    gctx.beginPath(); gctx.arc(cx,cy,R,Math.PI,2*Math.PI); gctx.stroke();
+    // progress arc coloured by acceleration state
+    const frac=Math.min(1, v/VMAX);
+    const col = a>8 ? '#40663c' : a<-8 ? '#a4161a' : '#0e7c86';
+    if(frac>0.005){
+      gctx.strokeStyle=col;
+      gctx.beginPath(); gctx.arc(cx,cy,R,Math.PI,Math.PI*(1+frac)); gctx.stroke();
+    }
+    // ticks
+    gctx.lineCap='butt'; gctx.lineWidth=2; gctx.strokeStyle='#c3cad3';
+    gctx.fillStyle='#7b8494'; gctx.font='11px sans-serif'; gctx.textAlign='center';
+    for(let tv=0;tv<=VMAX;tv+=50){
+      const ang=Math.PI*(1+tv/VMAX);
+      gctx.beginPath();
+      gctx.moveTo(cx+Math.cos(ang)*(R-14), cy+Math.sin(ang)*(R-14));
+      gctx.lineTo(cx+Math.cos(ang)*(R-24), cy+Math.sin(ang)*(R-24));
+      gctx.stroke();
+      gctx.fillText(tv, cx+Math.cos(ang)*(R-38), cy+Math.sin(ang)*(R-38)+4);
+    }
+    // needle
+    const ang=Math.PI*(1+frac);
+    gctx.strokeStyle='#1f2937'; gctx.lineWidth=3.5; gctx.lineCap='round';
+    gctx.beginPath(); gctx.moveTo(cx,cy);
+    gctx.lineTo(cx+Math.cos(ang)*(R-30), cy+Math.sin(ang)*(R-30)); gctx.stroke();
+    gctx.fillStyle='#1f2937';
+    gctx.beginPath(); gctx.arc(cx,cy,6,0,Math.PI*2); gctx.fill();
+    // digital speed
+    gctx.font='700 30px sans-serif'; gctx.textAlign='center'; gctx.fillStyle='#1f2937';
+    gctx.fillText(v.toFixed(0), cx, cy-R*0.32);
+    gctx.font='11px sans-serif'; gctx.fillStyle='#7b8494';
+    gctx.fillText('speed (u/s = % of route per s)', cx, cy-R*0.32+16);
+    // acceleration state
+    gctx.font='600 13px sans-serif';
+    gctx.fillStyle = a>8 ? '#40663c' : a<-8 ? '#a4161a' : '#7b8494';
+    const lbl = a>8 ? '▲ accelerating' : a<-8 ? '▼ decelerating' : '— steady';
+    gctx.fillText(`a = ${a.toFixed(1)} u/s²   ${lbl}`, cx, cy+26);
+    gctx.font='600 11px sans-serif'; gctx.fillStyle='#9aa1ad'; gctx.textAlign='left';
+    gctx.fillText('SPEEDOMETER', 10, 16);
+  }
+
   function render(){
     drawTSD(xHistory, t);
     drawRoadStrip(lastX01);
+    const k = curKin();
+    drawGauge(k.v, k.a);
   }
 
   function reset(){
@@ -850,9 +914,28 @@ document.querySelectorAll('.tab').forEach(tab => {
     drawHover(tctx, tsdC, PAD, plotW, plotH, DUR, f => (f*100).toFixed(0)+'% of L');
   }
 
+  // time-mean speed: average over vehicles PASSING the observer line;
+  // space-mean speed: average over vehicles PRESENT in the photo
+  function updateSpeedStats(){
+    const obsX01 = 1 - obsFrac;
+    const passed = [];
+    vehicles.forEach(veh => {
+      const tPass = veh.offset + obsX01/veh.speed;
+      if(tPass >= 0 && tPass <= t) passed.push(veh.speed);
+    });
+    const pT = photoT===null ? t : Math.min(photoT, t);
+    const onRoad = vehicles.filter(v => getVehX(v, pT) !== null).map(v => v.speed);
+    const mean = arr => arr.length ? arr.reduce((s,x)=>s+x,0)/arr.length : 0;
+    const Vt = mean(passed)*100, Vs = mean(onRoad)*100;
+    el('manyReadout').textContent =
+      `t=${t.toFixed(1)}s  |  time-mean Vₜ = ${Vt.toFixed(1)} %/s (${passed.length} passings)  |  space-mean Vₛ = ${Vs.toFixed(1)} %/s (${onRoad.length} in photo)` +
+      (passed.length && onRoad.length ? (Vt >= Vs-0.01 ? '  →  Vₜ ≥ Vₛ ✓' : '') : '');
+  }
+
   function render(){
     drawTSD(t);
     drawRoadStrip(t);
+    updateSpeedStats();
   }
 
   function reset(){
@@ -870,11 +953,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     t+=dt*spd;
     if(t>DUR) t=DUR;
     render();
-    // readout: count vehicles on road
-    const onRoad = vehicles.filter(v=>getVehX(v,t)!==null);
-    const fast=onRoad.filter(v=>v.color===FAST_COLOR).length;
-    const slow=onRoad.filter(v=>v.color===SLOW_COLOR).length;
-    el('manyReadout').textContent=`t=${t.toFixed(1)}s  |  Fast on road: ${fast}  |  Slow on road: ${slow}  |  Observer sees fast more often → Vt ≥ Vs`;
     if(t<DUR){ animId=requestAnimationFrame(animate); }
     else { playing=false; el('manyPlay').textContent='▶ Play'; }
   }
@@ -996,26 +1074,42 @@ document.querySelectorAll('.tab').forEach(tab => {
     vehicles.forEach((veh, vi) => {
       veh.history = [];
       let x = 0, v = FREE_SPEED;
+      let brakeHold = false;
       for(let ts = veh.arrT; ts <= DUR; ts += dt){
         // free-flow relaxation toward desired speed
         let a = 2.5*(FREE_SPEED - v);
-        // GM term on the vehicle ahead (its state read T seconds ago)
+        // leader state read T seconds ago
+        let xA = null, vA = null;
         if(vi > 0){
           const hj = vehicles[vi-1].history;
           const now = Math.round((ts - vehicles[vi-1].arrT)/dt);
           if(hj.length && now >= 0){
             const idx = Math.min(hj.length-1, Math.max(0, now - lag));
-            const xA = hj[idx][1], vA = hj[idx][2];
-            const s = xA - x - GAP*0.8;
-            if(s < 0.30) a = Math.min(a, GM_ALPHA*(vA - v)/Math.max(s, 0.004));
+            xA = hj[idx][1]; vA = hj[idx][2];
           }
         }
-        // red signal ahead = stationary virtual leader at the stop line
+        // GM term only against a MOVING leader (against a stopped one, α·Δv/s
+        // decays speed asymptotically and cars would park far upstream)
+        if(xA !== null && vA >= 0.02){
+          const s = xA - x - GAP*0.8;
+          if(s < 0.30) a = Math.min(a, GM_ALPHA*(vA - v)/Math.max(s, 0.004));
+        }
+        // stopping targets (red stop line, stopped leader): brake-to-a-point —
+        // engage the kinematic decel v²/2s when it reaches a comfortable level
+        let aReq = 0;
         for(const sig of sigs){
           if(x < sig.x - 0.002 && phaseAt(ts, p, sig.off)==='red'){
-            const s = sig.x - x;
-            if(s < 0.30) a = Math.min(a, GM_ALPHA*(0 - v)/Math.max(s - 0.004, 0.004));
+            aReq = Math.max(aReq, v*v/(2*Math.max(sig.x - 0.004 - x, 0.004)));
           }
+        }
+        if(xA !== null && vA < 0.02){
+          aReq = Math.max(aReq, v*v/(2*Math.max(xA - GAP - x, 0.004)));
+        }
+        if(aReq > 0.12 || (brakeHold && aReq > 0.02)){
+          a = Math.min(a, -Math.max(aReq, 0.06));
+          brakeHold = true;
+        } else {
+          brakeHold = false;
         }
         a = Math.max(-1.2, Math.min(0.35, a));
         v = Math.max(0, v + a*dt);
@@ -1701,19 +1795,20 @@ document.querySelectorAll('.tab').forEach(tab => {
     for(let i=1;i<vehicles.length;i++) minGap=Math.min(minGap, vehicles[i-1].x-vehicles[i].x-CAR_LEN);
     const cfg=modelCfg();
     const showStab = el('gmModel').value==='1';
-    const boxW=214, boxH = showStab ? 122 : 106;
+    const boxW=230, boxH = showStab ? 122 : 106;
     const bx0=PAD.l+plotW-boxW-8, by0=PAD.t+plotH-boxH-8;
     tctx.fillStyle='rgba(15,52,96,0.9)';
     tctx.beginPath(); tctx.roundRect(bx0,by0,boxW,boxH,6); tctx.fill();
-    // colour legend: one swatch per vehicle
+    // colour legend: one swatch per vehicle (spacing shrinks to fit large platoons)
+    const sw = Math.max(15, Math.min(24, Math.floor((boxW-20)/vehicles.length)));
     let lx=bx0+10;
     const ly=by0+16;
     tctx.font='bold 10px Courier New'; tctx.textAlign='left';
     vehicles.forEach((veh,i)=>{
       tctx.fillStyle=COLORS[i%COLORS.length];
-      tctx.fillRect(lx, ly-6, 16, 4);
-      tctx.fillText(i===0?'Ldr':String(i+1), lx+1, ly+10);
-      lx+=24;
+      tctx.fillRect(lx, ly-6, Math.min(16, sw-4), 4);
+      tctx.fillText(i===0?(sw<20?'L':'Ldr'):String(i+1), lx, ly+10);
+      lx+=sw;
     });
     // live stats
     tctx.fillStyle='#3fc1c9'; tctx.font='11px Courier New';
