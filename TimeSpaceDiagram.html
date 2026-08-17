@@ -202,11 +202,11 @@
   <div class="panel" id="loop">
     <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="loopTSD"  class="tsd-canvas"  width="1200" height="400"></canvas>
+      <canvas id="loopTSD"  class="tsd-canvas"  width="1200" height="560"></canvas>
     </div>
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">When a vehicle reaches the end of the route (x = L) it wraps back to x = 0, so each trajectory becomes a <b>sawtooth</b> — one tooth per lap. Relations: average speed <code>v = L/C</code> (C = cycle time), flow <code>q = n/C</code>, density <code>k = n/L</code>, so <code>q = k·v</code> — the fundamental relation holds on loops too.</span></span></div>
-      <canvas id="loopRoad" class="road-canvas" width="1200" height="180"></canvas>
+      <canvas id="loopRoad" class="road-canvas" width="1200" height="420"></canvas>
       <div class="readout" id="loopReadout">Sawtooth trajectories — each tooth = one lap of the loop</div>
       <div class="controls">
         <button class="action" id="loopPlay">▶ Play</button>
@@ -1489,21 +1489,21 @@ document.querySelectorAll('.tab').forEach(tab => {
   function drawLoopRoad(tSec){
     rctx.clearRect(0,0,RW,RH);
     // track shadow
-    rctx.strokeStyle='#98a1ac'; rctx.lineWidth=22;
+    rctx.strokeStyle='#98a1ac'; rctx.lineWidth=36;
     rctx.beginPath(); rctx.ellipse(CX,CY,RX,RY,0,0,Math.PI*2); rctx.stroke();
     // track surface
-    rctx.strokeStyle='#aeb7c1'; rctx.lineWidth=18;
+    rctx.strokeStyle='#aeb7c1'; rctx.lineWidth=31;
     rctx.beginPath(); rctx.ellipse(CX,CY,RX,RY,0,0,Math.PI*2); rctx.stroke();
     // track markings
-    rctx.strokeStyle='#f0c040'; rctx.lineWidth=1.5; rctx.setLineDash([15,12]);
+    rctx.strokeStyle='#f0c040'; rctx.lineWidth=2; rctx.setLineDash([18,14]);
     rctx.beginPath(); rctx.ellipse(CX,CY,RX,RY,0,0,Math.PI*2); rctx.stroke();
     rctx.setLineDash([]);
     // start/end marker
     const sp = loopPos(0);
-    rctx.strokeStyle='#39424e'; rctx.lineWidth=3;
-    rctx.beginPath(); rctx.moveTo(sp.x,sp.y-14); rctx.lineTo(sp.x,sp.y+14); rctx.stroke();
-    rctx.fillStyle='#39424e'; rctx.font='bold 11px sans-serif'; rctx.textAlign='center';
-    rctx.fillText('x=0 / x=L', sp.x, sp.y-18);
+    rctx.strokeStyle='#39424e'; rctx.lineWidth=4;
+    rctx.beginPath(); rctx.moveTo(sp.x,sp.y-22); rctx.lineTo(sp.x,sp.y+22); rctx.stroke();
+    rctx.fillStyle='#39424e'; rctx.font='bold 14px sans-serif'; rctx.textAlign='center';
+    rctx.fillText('x=0 / x=L', sp.x, sp.y-28);
 
     // direction arrow
     const ap = loopPos(0.25);
@@ -1519,17 +1519,17 @@ document.querySelectorAll('.tab').forEach(tab => {
       const pos = loopPos(hist[idx][1]);
       // bus body
       rctx.fillStyle=COLORS[i%COLORS.length];
-      rctx.beginPath(); rctx.arc(pos.x,pos.y,11,0,Math.PI*2); rctx.fill();
+      rctx.beginPath(); rctx.arc(pos.x,pos.y,16,0,Math.PI*2); rctx.fill();
       // number
-      rctx.fillStyle='#fff'; rctx.font='bold 10px sans-serif'; rctx.textAlign='center';
-      rctx.fillText(i+1, pos.x, pos.y+4);
+      rctx.fillStyle='#fff'; rctx.font='bold 14px sans-serif'; rctx.textAlign='center';
+      rctx.fillText(i+1, pos.x, pos.y+5);
     });
 
     // center info
-    rctx.fillStyle='#4b5563'; rctx.font='11px sans-serif'; rctx.textAlign='center';
-    rctx.fillText(`n=${buses.length} buses · GM following`, CX, CY-8);
-    rctx.fillText(`v₀ = ${LOOP_SPEED.toFixed(2)} ±18% L/s`, CX, CY+10);
-    rctx.fillText('faster buses catch slower → bunching', CX, CY+26);
+    rctx.fillStyle='#4b5563'; rctx.font='15px sans-serif'; rctx.textAlign='center';
+    rctx.fillText(`n=${buses.length} buses · GM following`, CX, CY-12);
+    rctx.fillText(`v₀ = ${LOOP_SPEED.toFixed(2)} ±18% L/s + driver noise`, CX, CY+10);
+    rctx.fillText('faster buses catch slower → bunching', CX, CY+32);
   }
 
   function drawTSD(tSec){
@@ -1669,7 +1669,9 @@ document.querySelectorAll('.tab').forEach(tab => {
         const j = (i+1) % n;   // the bus ahead on the ring
         const gap = Math.max(((xs[j] - xs[i]) % 1 + 1) % 1 - BUS_LEN, 0.002);
         const dv = vs[j] - vs[i];
-        let a = 1.2*(buses[i].v0 - vs[i]);             // relax toward OWN desired speed
+        // relax toward OWN desired speed + per-step driver noise, so speeds
+        // keep fluctuating instead of the ring settling to one uniform speed
+        let a = 1.2*(buses[i].v0 - vs[i]) + (Math.random()-0.5)*0.35;
         // GM-3 only at short range — a wide range couples the whole ring to the
         // slowest bus within seconds and every speed looks constant
         if(gap < 0.055) a = Math.min(a, GM_A*dv/gap);
