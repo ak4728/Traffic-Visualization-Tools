@@ -170,6 +170,9 @@
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">Vehicles follow each other with the <b>GM 3rd model</b> <code>a = α·Δv/s</code> (α = 0.35, T = 0.6 s); a red signal acts as a stopped virtual leader at its stop line, so decelerations into the queue and the staggered discharge on green are car-following dynamics, not scripted. Each signal's red/green history is drawn as a colored bar along its line. The line connecting the kinks where vehicles join the queue is the <b>shockwave</b>. Tune <b>Signal 2 offset</b> so the platoon released by Signal 1 arrives at Signal 2 on green — a <b>green wave</b>; a bad offset stops the same platoon twice.</span></span></div>
       <div class="readout" id="signalReadout">Queues form on RED · Vehicles discharge on GREEN</div>
+      <div class="mini-row">
+        <canvas id="sigThru" class="gauge-canvas" width="520" height="300"></canvas>
+      </div>
       <div class="controls">
         <button class="action" id="signalPlay">▶ Play</button>
         <button class="action sec" id="signalReset">↺ Reset</button>
@@ -519,7 +522,7 @@ document.querySelectorAll('.tab').forEach(tab => {
         const n = xHistory.length-1;
         const [t1,x1] = xHistory[Math.max(0,n-3)];
         const [t2,x2] = xHistory[n];
-        const slope = (x2-x1)/(t2-t1+0.0001);
+        const slope = (x2-x1)/(t2-t1+1e-6);
         const len = 0.08;
         const tx1 = last[0]-len, tx2 = last[0]+len;
         const ty1 = last[1]-slope*len, ty2 = last[1]+slope*len;
@@ -559,12 +562,16 @@ document.querySelectorAll('.tab').forEach(tab => {
   const GW = gaugeC.width, GH = gaugeC.height;
   const VMAX = 250; // u/s (percent of route per second)
 
+  // single source of truth for current speed/acceleration — the same 3-step
+  // window the tangent annotation uses, with a negligible epsilon
   function curKin(){
     const n = xHistory.length;
-    if(n < 3) return {v:0, a:0};
-    const v = (xHistory[n-1][1]-xHistory[n-3][1])/(xHistory[n-1][0]-xHistory[n-3][0]+0.001)*100;
+    if(n < 4) return {v:0, a:0};
+    const [t1,x1] = xHistory[n-4];
+    const [t2,x2] = xHistory[n-1];
+    const v = (x2-x1)/(t2-t1+1e-6)*100;
     let a = 0;
-    if(n > 5) a = (xHistory[n-1][1]-2*xHistory[n-3][1]+xHistory[n-5][1])/Math.pow(xHistory[n-1][0]-xHistory[n-5][0]+0.001,2)*10;
+    if(n > 5) a = (xHistory[n-1][1]-2*xHistory[n-3][1]+xHistory[n-5][1])/Math.pow((xHistory[n-1][0]-xHistory[n-5][0])/2+1e-6,2)*2.5;
     return {v: Math.max(0, v), a};
   }
 
@@ -691,17 +698,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     lastX01 = x01;
     render();
 
-    // readout
-    const vApprox = xHistory.length > 2
-      ? (xHistory[xHistory.length-1][1] - xHistory[xHistory.length-3][1]) /
-        (xHistory[xHistory.length-1][0] - xHistory[xHistory.length-3][0] + 0.001)
-      : 0;
-    const accel = xHistory.length > 5
-      ? (xHistory[xHistory.length-1][1] - 2*xHistory[xHistory.length-3][1] + xHistory[xHistory.length-5][1]) /
-        Math.pow(xHistory[xHistory.length-1][0] - xHistory[xHistory.length-5][0] + 0.001, 2) * 10
-      : 0;
+    // readout — same curKin() the gauge and tangent annotation use
+    const kin = curKin();
     el('singleReadout').textContent =
-      `t = ${(t*DUR).toFixed(2)}s  |  x = ${(x01*100).toFixed(1)}%  |  v = ${(vApprox*100).toFixed(1)} u/s  |  a = ${accel.toFixed(2)} u/s²`;
+      `t = ${(t*DUR).toFixed(2)}s  |  x = ${(x01*100).toFixed(1)}%  |  v = ${kin.v.toFixed(1)} u/s  |  a = ${kin.a.toFixed(2)} u/s²`;
 
     if(t < 1){ animId = requestAnimationFrame(animate); }
     else {
@@ -1291,6 +1291,13 @@ document.querySelectorAll('.tab').forEach(tab => {
         veh.history.push([ts, Math.min(x, 1.05), v]);
       }
     });
+    // record when each vehicle clears Signal 2 (for the throughput chart)
+    vehicles.forEach(veh => {
+      veh.crossT = null;
+      for(const h of veh.history){
+        if(h[1] >= SIG2_X){ veh.crossT = h[0]; break; }
+      }
+    });
   }
 
   function drawRoadStrip(tSec, p){
@@ -1420,10 +1427,68 @@ document.querySelectorAll('.tab').forEach(tab => {
     drawHover(tctx, tsdC, PAD, plotW, plotH, DUR, f => (f*100).toFixed(0)+'% of L');
   }
 
+  // cumulative input-output (throughput) chart:
+  // gray = arrivals at x=0, teal = vehicles that have cleared Signal 2.
+  // Vertical gap = vehicles currently between entry and S2; horizontal gap = trip time.
+  const thruC = el('sigThru'), thx = thruC.getContext('2d');
+  function drawThruChart(){
+    thx.setTransform(1,0,0,1,0,0);
+    thx.clearRect(0,0,thruC.width,thruC.height);
+    thx.setTransform(2,0,0,2,0,0);
+    const W=260, H=150, L=26, Rm=8, T=18, B=20;
+    const pw=W-L-Rm, ph=H-T-B;
+    const N = Math.max(1, vehicles.length);
+    thx.font='600 8px sans-serif'; thx.fillStyle='#9aa1ad'; thx.textAlign='left';
+    thx.fillText('THROUGHPUT — cumulative vehicles', 8, 11);
+    // grid + ticks
+    thx.strokeStyle='#eef1f6'; thx.lineWidth=1;
+    thx.fillStyle='#7b8494'; thx.font='7px sans-serif';
+    const yStep = Math.max(1, Math.ceil(N/4));
+    for(let g=0; g<=N; g+=yStep){
+      const y=T+ph-(g/N)*ph;
+      thx.beginPath(); thx.moveTo(L,y); thx.lineTo(L+pw,y); thx.stroke();
+      thx.textAlign='right'; thx.fillText(g, L-3, y+2);
+    }
+    thx.textAlign='center';
+    for(let g=0; g<=DUR; g+=5) thx.fillText(g+'s', L+(g/DUR)*pw, H-8);
+    thx.strokeStyle='#d6dae2';
+    thx.beginPath(); thx.moveTo(L,T+ph+0.5); thx.lineTo(L+pw,T+ph+0.5); thx.stroke();
+    // cumulative step curves
+    function stepCurve(times, color){
+      thx.strokeStyle=color; thx.lineWidth=2; thx.lineJoin='round';
+      thx.beginPath();
+      let cnt=0, py=T+ph;
+      thx.moveTo(L, py);
+      times.forEach(tt=>{
+        const x=L+(Math.min(tt,DUR)/DUR)*pw;
+        thx.lineTo(x, py);
+        cnt++;
+        py=T+ph-(cnt/N)*ph;
+        thx.lineTo(x, py);
+      });
+      thx.lineTo(L+(Math.min(t,DUR)/DUR)*pw, py);
+      thx.stroke();
+      return cnt;
+    }
+    const arr = vehicles.map(v=>v.arrT).filter(x=>x<=t).sort((a,b)=>a-b);
+    const dep = vehicles.map(v=>v.crossT).filter(x=>x!==null && x<=t).sort((a,b)=>a-b);
+    const nIn = stepCurve(arr, '#9aa1ad');
+    const nOut = stepCurve(dep, '#0f7b82');
+    // legend + live numbers
+    thx.font='600 8px sans-serif'; thx.textAlign='right';
+    thx.fillStyle='#9aa1ad'; thx.fillText(`in: ${nIn}`, 200, 11);
+    thx.fillStyle='#0f7b82'; thx.fillText(`past S2: ${nOut}`, 252, 11);
+    if(t > 1){
+      thx.fillStyle='#0f7b82'; thx.font='700 9px sans-serif'; thx.textAlign='left';
+      thx.fillText(`throughput q = ${(nOut/Math.min(t,DUR)).toFixed(2)} veh/s`, L+4, T+12);
+    }
+  }
+
   function render(){
     const p = getParams();
     drawTSD(t, p);
     drawRoadStrip(t, p);
+    drawThruChart();
   }
 
   function reset(){
