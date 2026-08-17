@@ -29,6 +29,8 @@
   .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 380px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
   .help:hover .tip { display: block; }
   .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: 260px; height: auto; display: block; margin: 8px auto 0; }
+  .mini-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: flex-start; }
+  .mini-row .gauge-canvas { margin: 8px 0 0; }
   canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
   .road-canvas { background: #e7ebf0; margin-bottom: 12px; }
   .tsd-canvas { background: #ffffff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
@@ -97,7 +99,10 @@
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">A <b>trajectory</b> is the curve x(t): position along a one-way guideway vs. time — exactly one x for every t. <b>Slope</b> = velocity <code>v = dx/dt</code>: steep → fast, flat → stopped. <b>Curvature</b> = acceleration: concave-down → decelerating, concave-up → accelerating. The car drives up the road beside the position axis, always level with its trajectory point.</span></span></div>
       <div class="readout" id="singleReadout">Press ▶ Play — the car drives up the road beside the position axis as its trajectory draws</div>
-      <canvas id="singleGauge" class="gauge-canvas" width="520" height="300"></canvas>
+      <div class="mini-row">
+        <canvas id="singleGauge" class="gauge-canvas" width="520" height="300"></canvas>
+        <canvas id="singleVt" class="gauge-canvas" width="520" height="300"></canvas>
+      </div>
       <div class="controls">
         <button class="action" id="singlePlay">▶ Play</button>
         <button class="action sec" id="singleReset">↺ Reset</button>
@@ -148,7 +153,10 @@
         <label><input type="checkbox" id="showPhoto" checked> Photograph (drag ↔ · double-click to re-follow)</label>
       </div>
       <div class="readout" id="manyReadout">Observer sees more FAST cars · Photo shows more SLOW cars → V<sub>t</sub> ≥ V<sub>s</sub></div>
-      <canvas id="manyBars" class="gauge-canvas" width="520" height="260"></canvas>
+      <div class="mini-row">
+        <canvas id="manyBars" class="gauge-canvas" width="520" height="260"></canvas>
+        <canvas id="manyDens" class="gauge-canvas" width="520" height="260"></canvas>
+      </div>
     </div>
     </div>
   </div>
@@ -220,9 +228,8 @@
 
   <!-- PANEL 5: GM CAR FOLLOWING -->
   <div class="panel" id="gm">
-    <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="gmTSD"  class="tsd-canvas"  width="1200" height="520"></canvas>
+      <canvas id="gmTSD"  class="tsd-canvas"  width="1800" height="560"></canvas>
     </div>
     <div class="viz-container">
       <div class="pane-head"><span class="help">i<span class="tip">Gazis–Herman–Rothery (GM): each follower's acceleration is a <b>delayed</b> response to its leader, <code>a = α·v<sup>m</sup>/s<sup>l</sup>·Δv</code> evaluated at t−T (1st: m=0, l=0 · 2nd: two-level α, higher when spacing &lt; 130 ft · 3rd: m=0, l=1 · 4th: m=1, l=1 · 5th: m=1, l=2). Every follower obeys the selected model, so one leader input cascades car-to-car. Press <b>🛑</b> mid-run and watch the disturbance propagate back as a <b>shockwave</b>; α, T and free-flow speed apply live. <b>Stability:</b> for the linear model the platoon is asymptotically stable only if <code>α·T ≤ ½</code> — exceed it and oscillations grow down the platoon until spacings collapse.</span></span></div>
@@ -278,7 +285,6 @@
       <div class="checkbox-row">
         <label><input type="checkbox" id="gmAuto" checked> Automatic leader slowdown at t = 10–18 s</label>
       </div>
-    </div>
     </div>
   </div>
 </div>
@@ -612,11 +618,53 @@ document.querySelectorAll('.tab').forEach(tab => {
     gctx.fillText('SPEEDOMETER', 8, 11);
   }
 
+  // v(t) profile chart beside the gauge
+  const vtC = el('singleVt'), vtx = vtC.getContext('2d');
+  function drawVChart(){
+    vtx.setTransform(1,0,0,1,0,0);
+    vtx.clearRect(0,0,vtC.width,vtC.height);
+    vtx.setTransform(2,0,0,2,0,0);
+    const W=260, H=150, L=28, Rm=8, T=18, B=20;
+    const pw=W-L-Rm, ph=H-T-B;
+    vtx.font='600 8px sans-serif'; vtx.fillStyle='#9aa1ad'; vtx.textAlign='left';
+    vtx.fillText('SPEED PROFILE v(t)', 8, 11);
+    vtx.strokeStyle='#eef1f6'; vtx.lineWidth=1;
+    vtx.fillStyle='#7b8494'; vtx.font='7px sans-serif';
+    for(let g=0; g<=VMAX; g+=50){
+      const y=T+ph-(g/VMAX)*ph;
+      vtx.beginPath(); vtx.moveTo(L,y); vtx.lineTo(L+pw,y); vtx.stroke();
+      vtx.textAlign='right'; vtx.fillText(g, L-3, y+2);
+    }
+    vtx.textAlign='center';
+    for(let g=0; g<=DUR; g+=2) vtx.fillText(g+'s', L+(g/DUR)*pw, H-8);
+    vtx.strokeStyle='#d6dae2';
+    vtx.beginPath(); vtx.moveTo(L,T+ph+0.5); vtx.lineTo(L+pw,T+ph+0.5); vtx.stroke();
+    if(xHistory.length>2){
+      vtx.strokeStyle='#0e7c86'; vtx.lineWidth=2; vtx.lineJoin='round';
+      vtx.beginPath();
+      let started=false, lastP=null;
+      for(let k=2;k<xHistory.length;k++){
+        const dtk=xHistory[k][0]-xHistory[k-2][0]+1e-5;
+        const v=Math.max(0,(xHistory[k][1]-xHistory[k-2][1])/dtk*100);
+        const px=L+xHistory[k][0]*pw;
+        const py=T+ph-Math.min(v,VMAX)/VMAX*ph;
+        if(!started){ vtx.moveTo(px,py); started=true; } else vtx.lineTo(px,py);
+        lastP=[px,py];
+      }
+      vtx.stroke();
+      if(lastP){
+        vtx.fillStyle='#0e7c86';
+        vtx.beginPath(); vtx.arc(lastP[0],lastP[1],2.5,0,Math.PI*2); vtx.fill();
+      }
+    }
+  }
+
   function render(){
     drawTSD(xHistory, t);
     drawRoadStrip(lastX01);
     const k = curKin();
     drawGauge(k.v, k.a);
+    drawVChart();
   }
 
   function reset(){
@@ -949,6 +997,49 @@ document.querySelectorAll('.tab').forEach(tab => {
     bctx.beginPath(); bctx.moveTo(28,base+0.5); bctx.lineTo(232,base+0.5); bctx.stroke();
   }
 
+  // density k(t): vehicles present on the road over time
+  const densC = el('manyDens'), dctx = densC.getContext('2d');
+  function drawDensChart(){
+    dctx.setTransform(1,0,0,1,0,0);
+    dctx.clearRect(0,0,densC.width,densC.height);
+    dctx.setTransform(2,0,0,2,0,0);
+    const W=260, H=130, L=26, Rm=8, T=18, B=20;
+    const pw=W-L-Rm, ph=H-T-B;
+    const KMAX = Math.max(1, vehicles.length);
+    dctx.font='600 8px sans-serif'; dctx.fillStyle='#9aa1ad'; dctx.textAlign='left';
+    dctx.fillText('DENSITY k(t) — vehicles on road', 8, 11);
+    dctx.strokeStyle='#eef1f6'; dctx.lineWidth=1;
+    dctx.fillStyle='#7b8494'; dctx.font='7px sans-serif';
+    const kStep = Math.max(1, Math.ceil(KMAX/4));
+    for(let g=0; g<=KMAX; g+=kStep){
+      const y=T+ph-(g/KMAX)*ph;
+      dctx.beginPath(); dctx.moveTo(L,y); dctx.lineTo(L+pw,y); dctx.stroke();
+      dctx.textAlign='right'; dctx.fillText(g, L-3, y+2);
+    }
+    dctx.textAlign='center';
+    for(let g=0; g<=DUR; g+=3) dctx.fillText(g+'s', L+(g/DUR)*pw, H-8);
+    dctx.strokeStyle='#d6dae2';
+    dctx.beginPath(); dctx.moveTo(L,T+ph+0.5); dctx.lineTo(L+pw,T+ph+0.5); dctx.stroke();
+    // curve up to current time (density is deterministic, so sample directly)
+    dctx.strokeStyle='#2c5378'; dctx.lineWidth=2; dctx.lineJoin='round';
+    dctx.beginPath();
+    let started=false, kNow=0;
+    for(let ts=0; ts<=t+1e-6; ts+=0.1){
+      const k = vehicles.filter(v=>getVehX(v,ts)!==null).length;
+      kNow=k;
+      const px=L+(Math.min(ts,DUR)/DUR)*pw, py=T+ph-(k/KMAX)*ph;
+      if(!started){ dctx.moveTo(px,py); started=true; } else dctx.lineTo(px,py);
+    }
+    if(started){
+      dctx.stroke();
+      const px=L+(Math.min(t,DUR)/DUR)*pw, py=T+ph-(kNow/KMAX)*ph;
+      dctx.fillStyle='#2c5378';
+      dctx.beginPath(); dctx.arc(px,py,2.5,0,Math.PI*2); dctx.fill();
+      dctx.font='700 9px sans-serif'; dctx.textAlign='left';
+      dctx.fillText(`k = ${kNow}/L`, Math.min(px+5, W-42), Math.max(py-4, T+8));
+    }
+  }
+
   function updateSpeedStats(){
     const obsX01 = 1 - obsFrac;
     const passed = [];
@@ -964,6 +1055,7 @@ document.querySelectorAll('.tab').forEach(tab => {
       `t=${t.toFixed(1)}s  |  time-mean Vₜ = ${Vt.toFixed(1)} %/s (${passed.length} passings)  |  space-mean Vₛ = ${Vs.toFixed(1)} %/s (${onRoad.length} in photo)` +
       (passed.length && onRoad.length ? (Vt >= Vs-0.01 ? '  →  Vₜ ≥ Vₛ ✓' : '') : '');
     drawSpeedBars(Vt, Vs, passed.length, onRoad.length);
+    drawDensChart();
   }
 
   function render(){
@@ -1577,8 +1669,10 @@ document.querySelectorAll('.tab').forEach(tab => {
         const j = (i+1) % n;   // the bus ahead on the ring
         const gap = Math.max(((xs[j] - xs[i]) % 1 + 1) % 1 - BUS_LEN, 0.002);
         const dv = vs[j] - vs[i];
-        let a = 1.2*(buses[i].v0 - vs[i]);            // relax toward own desired speed
-        if(gap < 0.18) a = Math.min(a, GM_A*dv/gap);  // GM-3 term when close
+        let a = 1.2*(buses[i].v0 - vs[i]);             // relax toward OWN desired speed
+        // GM-3 only at short range — a wide range couples the whole ring to the
+        // slowest bus within seconds and every speed looks constant
+        if(gap < 0.055) a = Math.min(a, GM_A*dv/gap);
         a = Math.max(-0.6, Math.min(0.3, a));
         nv[i] = Math.max(0.02, vs[i] + a*dt);
         nx[i] = (xs[i] + nv[i]*dt) % 1;
@@ -1620,8 +1714,17 @@ document.querySelectorAll('.tab').forEach(tab => {
     drawLoopRoad(t);
     drawTSD(t);
     const n=buses.length;
+    let vmin=Infinity, vmax=0;
+    const idx=Math.min(histories[0].length-1, Math.round(t/0.05));
+    if(idx>0){
+      buses.forEach((b,i)=>{
+        const h=histories[i];
+        const v=(((h[idx][1]-h[idx-1][1])%1+1)%1)/0.05;
+        vmin=Math.min(vmin,v); vmax=Math.max(vmax,v);
+      });
+    } else { vmin=0; vmax=0; }
     el('loopReadout').textContent=
-      `t=${t.toFixed(1)}s  |  ${n} buses circling with GM following (v₀ ± 18%)  |  bunches form where sawtooth stripes converge`;
+      `t=${t.toFixed(1)}s  |  ${n} buses, GM following  |  current speeds ${vmin.toFixed(3)}–${vmax.toFixed(3)} L/s  |  bunches form where stripes converge`;
     if(t<DUR){ animId=requestAnimationFrame(animate); }
     else { playing=false; el('loopPlay').textContent='▶ Play'; }
   }
@@ -1873,7 +1976,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.font='bold 10px Courier New'; tctx.textAlign='left';
     vehicles.forEach((veh,i)=>{
       tctx.fillStyle=COLORS[i%COLORS.length];
-      tctx.fillRect(lx, ly-6, Math.min(16, sw-4), 4);
+      tctx.fillRect(lx, ly-8, Math.min(16, sw-4), 6);
+      tctx.fillStyle='#1f2937';
       tctx.fillText(i===0?(sw<20?'L':'Ldr'):String(i+1), lx, ly+10);
       lx+=sw;
     });
