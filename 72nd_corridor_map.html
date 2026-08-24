@@ -88,7 +88,9 @@ input:checked + .slider:before { transform: translateX(13px); }
   position: absolute; right: 10px; top: 44px; z-index: 998;
   width: 320px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
   border-radius: 8px; box-shadow: -4px 4px 20px rgba(0,0,0,0.5);
-  max-height: calc(100vh - 120px); display: none; flex-direction: column;
+  /* sized against the MAP frame (not the viewport) so the open TCDS panel
+     shrinks it instead of covering its lower half */
+  max-height: calc(100% - 54px); display: none; flex-direction: column;
   overflow: hidden;
 }
 #sl-panel-header {
@@ -124,6 +126,7 @@ input:checked + .slider:before { transform: translateX(13px); }
   position: absolute; left: 54px; top: 10px; z-index: 997;
   width: 268px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
   border-radius: 8px; box-shadow: 4px 4px 20px rgba(0,0,0,0.5); display: none;
+  max-height: calc(100% - 20px); overflow-y: auto;
 }
 #pop-panel-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -604,7 +607,7 @@ function buildTcdsMarker() {
   if (tcdsMarker) return;
   tcdsMarker=L.circleMarker([39.82717,-105.1175],{radius:10,color:'#ffb74d',fillColor:'#ffb74d',fillOpacity:0.25,weight:2.5}).addTo(map);
   tcdsMarker.bindTooltip('<b>TCDS Station 203149</b><br>72nd Ave E/O Oak St', {className:'custom-tooltip',sticky:true});
-  tcdsMarker.on('click',()=>document.getElementById('tcds-panel').classList.add('open'));
+  tcdsMarker.on('click',()=>{ document.getElementById('tcds-panel').classList.add('open'); setTimeout(()=>map.invalidateSize(), 380); });
 }
 
 // ── Crash layer ───────────────────────────────────────────────────────
@@ -707,6 +710,7 @@ function toggleLayer(name,on) {
     const panel=document.getElementById('tcds-panel');
     if (on) { buildTcdsMarker(); el.classList.add('active'); panel.classList.add('open'); initTcdsCharts(); }
     else { if(tcdsMarker){map.removeLayer(tcdsMarker);tcdsMarker=null;} el.classList.remove('active'); panel.classList.remove('open'); }
+    setTimeout(()=>map.invalidateSize(), 380); // after the 0.35s height transition
   }
   if (name==='safety') {
     if (on) { buildCrashLayer(); el.classList.add('active'); document.getElementById('leg-crash').style.display='block'; }
