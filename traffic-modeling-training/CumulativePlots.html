@@ -78,7 +78,7 @@
       <canvas id="ncChart" class="big-canvas" width="1200" height="560"></canvas>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip"><b>N(x,t)</b> counts the cumulative vehicles past location x by time t, here on a <b>two-lane</b> road. The <b>vertical gap</b> between the curves is the accumulation between the detectors; with FIFO the <b>horizontal gap</b> at height n is vehicle n's trip time. A mid-road <b>slowdown</b> (orange zone, active t = 12–26 s) creates a queue: N₂ flattens then recovers at capacity. Steps show the true counts; the <b>smooth overlays</b> are monotone-cubic fits. The dashed <b>virtual arrival curve</b> is N₁ shifted by the free-flow trip time — its gap to N₂ (shaded) is pure <b>delay</b>. Drag the detector lines; when the run finishes, every vehicle's delay is charted below.</span></span></div>
+      <div class="pane-head"><span class="help">i<span class="tip"><b>N(x,t)</b> counts the cumulative vehicles past location x by time t, here on a <b>two-lane</b> road. The <b>vertical gap</b> between the curves is the accumulation between the detectors; with FIFO the <b>horizontal gap</b> at height n is vehicle n's trip time X₁→X₂, and the <b>shaded area between the curves</b> is the total vehicle-time spent between the detectors — it widens while the mid-road <b>slowdown</b> (orange zone, t = 12–20 s) is choking flow and narrows back as the queue drains. Steps are the true counts; the strong lines are monotone-cubic smooth fits. Each vehicle's <b>delay</b> is its X₁→X₂ trip time minus its own free-flow trip time — charted per vehicle below once trips complete. Drag the detector lines to move X₁/X₂.</span></span></div>
       <canvas id="ncRoad" class="road-mini" width="520" height="420"></canvas>
       <div class="readout" id="ncReadout">Press ▶ Play — vehicles cross detector X₁ (teal) then X₂ (amber)</div>
       <div class="controls">
@@ -95,11 +95,11 @@
           <span class="val" id="ncSpdVal">1.0×</span>
         </div>
         <div class="control-group">
-          <label>Slowdown (t = 12–26 s)</label>
+          <label>Slowdown (t = 12–20 s)</label>
           <div style="display:flex; align-items:center; gap:8px; font-size:0.82em">
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ncSlow" checked> on</label>
-            <input type="range" id="ncSev" min="10" max="90" step="5" value="35" style="width:80px">
-            <span class="val" id="ncSevVal">35%</span>
+            <input type="range" id="ncSev" min="25" max="90" step="5" value="45" style="width:80px">
+            <span class="val" id="ncSevVal">45%</span>
           </div>
         </div>
       </div>
@@ -223,7 +223,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const roadC = el('ncRoad'), rx = roadC.getContext('2d');
   const dC = el('ncDelay'), dxx = dC.getContext('2d');
   const DUR=40, DT=0.05, S_MIN=0.03, VEHL=0.02;
-  const Z1=0.45, Z2=0.58, TS1=12, TS2=26;   // slow zone (space) and its active window (time)
+  const Z1=0.48, Z2=0.55, TS1=12, TS2=20;   // slow zone (space) and its active window (time)
   const LANE_COL=['#0e7c86','#8c3a4c'];
   let vehicles=[], t=0, playing=true, lastTs=null;
   let d1=0.25, d2=0.80;
@@ -347,17 +347,16 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.fillStyle='#c77700'; cx.font='11px '+SANS; cx.textAlign='center';
       cx.fillText('slowdown active', (s.X(TS1)+s.X(TS2))/2, P.t+s.ph-6);
     }
-    // smooth curves (fitted) + virtual arrivals + delay shading
+    // smooth curves (fitted) + shaded area BETWEEN N₁ and N₂:
+    // the area is total vehicle-time spent between the detectors — congestion
+    // shows as the band widening while the slowdown is active
     const f1=smoothCurveOf(pass1), f2=smoothCurveOf(pass2);
-    const ffMean=(d2-d1)/0.05;
     if(f1 && f2){
-      // delay area: virtual arrivals (N1 shifted by free-flow trip) vs N2
       cx.fillStyle='rgba(239,83,80,0.15)';
       cx.beginPath();
       let started=false;
       for(let x=0; x<=tNow; x+=0.25){
-        const v1=f1(Math.max(0,x-ffMean)), v2=f2(x);
-        const y=v1>v2 ? s.Y(Math.min(v1,NMAX)) : s.Y(Math.min(v2,NMAX));
+        const y=s.Y(Math.min(Math.max(f1(x),f2(x)),NMAX));
         if(!started){ cx.moveTo(s.X(x),y); started=true; } else cx.lineTo(s.X(x),y);
       }
       for(let x=tNow; x>=0; x-=0.25) cx.lineTo(s.X(x), s.Y(Math.min(f2(x),NMAX)));
@@ -399,12 +398,11 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     }
     smoothPlot(f1,'#0e7c86',false,0);
     smoothPlot(f2,'#b45309',false,0);
-    smoothPlot(f1,'#0e7c86',true,ffMean);
     // legend
     cx.font='600 12px '+SANS; cx.textAlign='left';
-    cx.fillStyle='#0e7c86'; cx.fillText('— N(X₁,t) upstream · – – virtual arrivals (+free-flow trip)', P.l+120, P.t+16);
-    cx.fillStyle='#b45309'; cx.fillText('— N(X₂,t) downstream', P.l+120, P.t+34);
-    cx.fillStyle='#ef5350'; cx.fillText('■ delay (virtual arrivals vs N₂)', P.l+120, P.t+52);
+    cx.fillStyle='#0e7c86'; cx.fillText('— N(X₁,t) upstream arrivals', P.l+120, P.t+16);
+    cx.fillStyle='#b45309'; cx.fillText('— N(X₂,t) downstream departures', P.l+120, P.t+34);
+    cx.fillStyle='#ef5350'; cx.fillText('■ area between = vehicle-time spent X₁→X₂ (widens under congestion)', P.l+120, P.t+52);
     // hover
     if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
       const ht=Math.min((hover.x-P.l)/s.pw*DUR, tNow);
