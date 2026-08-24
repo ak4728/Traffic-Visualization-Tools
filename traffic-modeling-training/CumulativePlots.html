@@ -98,8 +98,8 @@
           <label>Slowdown (t = 12–20 s)</label>
           <div style="display:flex; align-items:center; gap:8px; font-size:0.82em">
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ncSlow" checked> on</label>
-            <input type="range" id="ncSev" min="25" max="90" step="5" value="45" style="width:80px">
-            <span class="val" id="ncSevVal">45%</span>
+            <input type="range" id="ncSev" min="25" max="90" step="5" value="35" style="width:80px">
+            <span class="val" id="ncSevVal">35%</span>
           </div>
         </div>
       </div>
@@ -283,9 +283,11 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         let nx=x+vmax*DT;
         if(v.leader){
           const li=Math.round((ts+DT-v.leader.t0)/DT);
-          if(li>=0){
-            const lx=v.leader.hist[Math.min(li, v.leader.hist.length-1)];
-            nx=Math.min(nx, lx-S_MIN);
+          // constrain ONLY while the leader is still on the stretch — once its
+          // history ends it has exited, otherwise followers see a phantom car
+          // parked at the exit and the whole road gridlocks behind it
+          if(li>=0 && li<v.leader.hist.length){
+            nx=Math.min(nx, v.leader.hist[li]-S_MIN);
           }
         }
         x=Math.max(x,nx);
