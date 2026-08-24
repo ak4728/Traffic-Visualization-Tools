@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detector N-Curves — Real Data</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; background: #f7f8fa; color: #23272f; line-height: 1.6; padding: 12px; }
+  .container { max-width: none; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 14px; padding: 4px 10px 8px; border-bottom: 2px solid #d5dbe5; margin-bottom: 10px; }
+  h1 { color: #0f7b82; font-size: 1.25em; font-weight: 600; }
+  .subtitle { color: #6b7280; font-style: italic; font-size: 0.88em; }
+  .nav { font-size: 0.85em; }
+  .nav a { color: #0f7b82; text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+  .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
+  .panel-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 10px; align-items: stretch; }
+  .panel-grid .viz-container { margin-bottom: 0; }
+  @media (max-width: 900px){ .panel-grid { grid-template-columns: 1fr; } }
+  .pane-head { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2px; }
+  .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
+  .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 400px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
+  .big-canvas { background: #fff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
+  .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: min(400px, 100%); height: auto; display: block; margin: 8px auto 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 10px 0; align-items: center; }
+  .control-group { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 8px 14px; border-radius: 6px; }
+  .control-group label { font-size: 0.78em; color: #0f7b82; }
+  input[type="range"] { width: 120px; accent-color: #14919b; }
+  select { background:#fff; color:#1f2937; border:1px solid #14919b; padding:4px 6px; border-radius:4px; font-family:inherit; font-size:0.85em; }
+  .val { font-size: 0.82em; color: #1f2937; font-weight: bold; }
+  button.action { background: #14919b; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; font-family: inherit; font-weight: bold; cursor: pointer; font-size: 0.9em; transition: transform .08s ease, filter .15s ease; }
+  button.action:hover { filter: brightness(1.1); }
+  button.action:active { transform: scale(0.93); }
+  button.action.sec { background:#fff; color:#14919b; border:1px solid #14919b; }
+  .dir-pill { padding: 4px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 700; cursor: pointer; border: 1.5px solid #d6dae2; color: #6b7280; background: #fff; user-select: none; }
+  .dir-pill.active { border-color: #14919b; color: #fff; background: #14919b; }
+  .drop {
+    border: 2px dashed #b9c2cf; border-radius: 8px; padding: 14px; text-align: center;
+    color: #6b7280; font-size: 0.88em; cursor: pointer; transition: all .15s; margin-bottom: 8px;
+  }
+  .drop:hover, .drop.over { border-color: #14919b; color: #0f7b82; background: #f0fafa; }
+  .file-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .file-card { display: flex; align-items: center; gap: 8px; background: #f7f9fc; border: 1px solid #e2e6ee; border-radius: 6px; padding: 6px 10px; font-size: 0.82em; }
+  .file-card b { color: #0f7b82; }
+  .file-card .loc { color: #6b7280; flex: 1; }
+  .badge { padding: 1px 8px; border-radius: 10px; font-size: 0.85em; font-weight: 700; }
+  .badge.up { background: rgba(66,165,245,0.15); color: #1565c0; }
+  .badge.dn { background: rgba(0,200,83,0.15); color: #1d7a6f; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .card { background: #f7f9fc; border: 1px solid #e2e6ee; border-radius: 8px; padding: 8px 10px; border-left: 4px solid #14919b; }
+  .card h3 { color: #0f7b82; font-size: 0.78em; margin-bottom: 2px; font-weight: 600; }
+  .card .value { font-family: 'Courier New', monospace; font-size: 1.02em; color: #1f2937; font-weight: bold; }
+  .readout { text-align: center; font-family: 'Courier New', monospace; color: #0f6f76; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 6px; border-radius: 4px; margin-top: 8px; font-size: 0.82em; }
+  .note { font-size: 0.76em; color: #8a94a3; margin-top: 6px; line-height: 1.4; }
+  @media (max-width: 640px){ body { padding: 6px; } input[type="range"] { width: 95px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Detector N-Curves — Real Data</h1>
+    <span class="subtitle">Build cumulative curves from hourly detector counts (CDOT VOLUME exports)</span>
+    <span class="nav"><a href="CumulativePlots.html">← Ch.2 Cumulative Plots</a> · <a href="TimeSpaceDiagram.html">Time-Space Diagram</a></span>
+  </header>
+
+  <div class="panel-grid">
+  <div class="viz-container">
+    <canvas id="chart" class="big-canvas" width="1200" height="600"></canvas>
+    <div class="readout" id="readout">Load detector files to build cumulative curves</div>
+  </div>
+  <div class="viz-container">
+    <div class="pane-head"><span class="help">i<span class="tip">Each file is one detector-direction of hourly counts. Pick which station sits at the <b>West</b> end (E/W road) or <b>North</b> end (N/S road): for EB traffic the west station is <b>upstream (arrivals)</b> and the east one <b>downstream (departures)</b> — and vice versa for WB (for N/S: NB flows toward the north station). Because ramps between detectors add/remove traffic, the downstream curve is optionally <b>rescaled</b> so daily totals match; the upstream curve is <b>shifted by free-flow travel time</b> so any remaining horizontal gap is <b>delay</b>, the vertical gap is <b>excess accumulation</b>, and the shaded area is total delay. Hourly steps are smoothed with a monotone cubic so the curves look like fluid N-curves — toggle it off to see the raw staircase.</span></span></div>
+
+    <div class="drop" id="drop">📄 Drop VOLUME_*.xlsx files here or click to browse<br><span style="font-size:0.85em">(one file per detector per direction)</span></div>
+    <input type="file" id="fileIn" multiple accept=".xlsx,.xls" style="display:none">
+    <div style="text-align:center; margin-bottom:6px"><button class="action sec" id="loadSample">Load the 4 I-70 sample files</button></div>
+    <div class="file-list" id="fileList"></div>
+
+    <div class="controls" id="cfgRow" style="display:none">
+      <div class="control-group">
+        <label>Road orientation</label>
+        <select id="orient"><option value="EW">East – West</option><option value="NS">North – South</option></select>
+      </div>
+      <div class="control-group">
+        <label id="endLabel">Detector at the WEST end</label>
+        <select id="westSel"></select>
+      </div>
+      <div class="control-group">
+        <label>Analysis direction</label>
+        <div style="display:flex; gap:6px" id="dirPills"></div>
+      </div>
+    </div>
+    <div class="controls" id="adjRow" style="display:none">
+      <div class="control-group">
+        <label>Free-flow travel time shift</label>
+        <input type="range" id="ffShift" min="0" max="30" step="1" value="5">
+        <span class="val" id="ffShiftVal">5 min</span>
+      </div>
+      <div class="control-group">
+        <label>Options</label>
+        <div style="display:flex; gap:12px; font-size:0.82em">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="normTot" checked> normalize totals</label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="smooth" checked> smooth</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="cards" id="statCards" style="display:none">
+      <div class="card"><h3>Vehicles (upstream, 24 h)</h3><div class="value" id="stVeh">—</div></div>
+      <div class="card"><h3>Total delay</h3><div class="value" id="stTot">—</div></div>
+      <div class="card"><h3>Max delay</h3><div class="value" id="stMax">—</div></div>
+      <div class="card"><h3>Peak excess accumulation</h3><div class="value" id="stAcc">—</div></div>
+    </div>
+    <canvas id="volChart" class="gauge-canvas" width="520" height="300" style="display:none"></canvas>
+    <div class="note">Delay here is <i>relative</i>: hourly counts smear congestion, ramps between the detectors break conservation (normalization approximates it), and the free-flow shift sets the zero-delay baseline. Treat results as a corridor-level estimate, not a per-vehicle measurement.</div>
+  </div>
+  </div>
+</div>
+
+<script>
+function el(id){ return document.getElementById(id); }
+const SANS='"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+
+// ── parsing ───────────────────────────────────────────────────────────
+// files: {name, station, dir, locatedOn, date, counts[24], total}
+let files = [];
+
+function parseWorkbook(name, wb){
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+  const meta = {};
+  const counts = new Array(24).fill(null);
+  rows.forEach(r => {
+    if(!r) return;
+    for(let i=0;i<r.length-1;i++){
+      const k = (r[i]==null?'':String(r[i])).trim();
+      if(['Location ID','Direction','Located On','Start Date'].includes(k) && meta[k]===undefined){
+        const v = (r[i+1]==null?'':String(r[i+1])).trim();
+        if(v && v!==k) meta[k]=v;
+      }
+    }
+    const a = (r[0]==null?'':String(r[0])).trim();
+    const m = a.match(/^(\d{1,2}):\d{2}\s*-\s*\d{1,2}:\d{2}$/);
+    if(m){
+      const hr = parseInt(m[1],10);
+      const v = parseFloat(r[1]);
+      if(hr>=0 && hr<24 && isFinite(v)) counts[hr]=v;
+    }
+  });
+  if(counts.some(c=>c===null)) throw new Error(name+': could not find 24 hourly counts');
+  const id = meta['Location ID'] || name;
+  const station = id.replace(/_(EB|WB|NB|SB)$/i,'');
+  let dir = (meta['Direction']||'').toUpperCase();
+  if(!['EB','WB','NB','SB'].includes(dir)){
+    const sfx = id.match(/_(EB|WB|NB|SB)$/i);
+    dir = sfx ? sfx[1].toUpperCase() : '?';
+  }
+  return { name, station, dir, locatedOn: meta['Located On']||'', date: meta['Start Date']||'',
+           counts, total: counts.reduce((a,b)=>a+b,0) };
+}
+
+function addFiles(fileObjs){
+  let pending = fileObjs.length;
+  fileObjs.forEach(f => {
+    const rd = new FileReader();
+    rd.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const rec = parseWorkbook(f.name, wb);
+        files = files.filter(x => !(x.station===rec.station && x.dir===rec.dir));
+        files.push(rec);
+      } catch(err){ alert(err.message); }
+      if(--pending===0) refreshConfig();
+    };
+    rd.readAsArrayBuffer(f);
+  });
+}
+
+el('drop').addEventListener('click', ()=>el('fileIn').click());
+el('fileIn').addEventListener('change', e=>addFiles([...e.target.files]));
+['dragover','dragenter'].forEach(ev=>el('drop').addEventListener(ev, e=>{ e.preventDefault(); el('drop').classList.add('over'); }));
+['dragleave','drop'].forEach(ev=>el('drop').addEventListener(ev, e=>{ e.preventDefault(); el('drop').classList.remove('over'); }));
+el('drop').addEventListener('drop', e=>addFiles([...e.dataTransfer.files]));
+
+el('loadSample').addEventListener('click', async ()=>{
+  const names=['VOLUME_195427764.xlsx','VOLUME_195427765.xlsx','VOLUME_196234001.xlsx','VOLUME_196234002.xlsx'];
+  try {
+    let loaded=0;
+    for(const n of names){
+      const resp = await fetch(n);
+      if(!resp.ok) throw new Error('fetch failed');
+      const buf = await resp.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const rec = parseWorkbook(n, wb);
+      files = files.filter(x => !(x.station===rec.station && x.dir===rec.dir));
+      files.push(rec);
+      loaded++;
+    }
+    refreshConfig();
+  } catch(err){
+    alert('Could not fetch the sample files (this works when the page is served over http, e.g. GitHub Pages). Opened from disk? Use the file picker and select the four VOLUME_*.xlsx files.');
+  }
+});
+
+// ── configuration ─────────────────────────────────────────────────────
+let curDir = null;
+
+function stations(){ return [...new Set(files.map(f=>f.station))]; }
+function dirsAvailable(){
+  const ss = stations();
+  if(ss.length<2) return [];
+  const out = [];
+  ['EB','WB','NB','SB'].forEach(d => {
+    if(ss.every(s => files.some(f=>f.station===s && f.dir===d))) out.push(d);
+  });
+  return out;
+}
+function westStation(){ return el('westSel').value; }
+function eastStation(){ return stations().find(s=>s!==westStation()); }
+// upstream station for a direction, honoring orientation and W/N assignment
+function upstreamStation(dir){
+  const w=westStation(), e=eastStation();
+  if(dir==='EB') return w;        // eastbound flows W → E
+  if(dir==='WB') return e;
+  // N/S: "westSel" holds the NORTH station; NB flows S → N, SB flows N → S
+  if(dir==='NB') return e;        // upstream is the SOUTH (other) station
+  if(dir==='SB') return w;
+  return w;
+}
+
+function refreshConfig(){
+  // file cards
+  el('fileList').innerHTML = files.map(f=>{
+    const up = curDir && f.dir===curDir && f.station===upstreamStation(curDir);
+    const dn = curDir && f.dir===curDir && f.station!==upstreamStation(curDir);
+    return `<div class="file-card"><b>${f.station}_${f.dir}</b><span class="loc">${f.locatedOn||f.name} · ${f.date}</span>`+
+      `<span>${Math.round(f.total).toLocaleString()} veh</span>`+
+      (up?'<span class="badge up">upstream</span>':dn?'<span class="badge dn">downstream</span>':'')+
+      `</div>`;
+  }).join('');
+  const ss = stations();
+  el('cfgRow').style.display = ss.length>=2 ? 'flex':'none';
+  if(ss.length<2){ el('adjRow').style.display='none'; el('statCards').style.display='none'; return; }
+  // station selector (preserve choice)
+  const sel = el('westSel'), prev = sel.value;
+  sel.innerHTML = ss.map(s=>`<option value="${s}">${s} — ${ (files.find(f=>f.station===s)||{}).locatedOn||'' }</option>`).join('');
+  if(ss.includes(prev)) sel.value = prev;
+  // direction pills
+  const dirs = dirsAvailable();
+  if(!dirs.includes(curDir)) curDir = dirs[0] || null;
+  el('dirPills').innerHTML = dirs.map(d=>`<span class="dir-pill${d===curDir?' active':''}" data-d="${d}">${d}</span>`).join('') || '<span style="font-size:0.8em;color:#c1121f">need both stations per direction</span>';
+  el('dirPills').querySelectorAll('.dir-pill').forEach(p=>p.addEventListener('click', ()=>{ curDir=p.dataset.d; refreshConfig(); }));
+  el('adjRow').style.display='flex';
+  el('statCards').style.display='grid';
+  el('volChart').style.display='block';
+  render();
+}
+
+el('orient').addEventListener('change', ()=>{
+  el('endLabel').textContent = el('orient').value==='EW' ? 'Detector at the WEST end' : 'Detector at the NORTH end';
+  refreshConfig();
+});
+el('westSel').addEventListener('change', refreshConfig);
+el('ffShift').addEventListener('input', ()=>{ el('ffShiftVal').textContent=el('ffShift').value+' min'; render(); });
+el('normTot').addEventListener('change', render);
+el('smooth').addEventListener('change', render);
+
+// ── math ──────────────────────────────────────────────────────────────
+// monotone cubic (Fritsch–Carlson) through (xs, ys); returns evaluator
+function pchip(xs, ys){
+  const n=xs.length, h=[], d=[];
+  for(let i=0;i<n-1;i++){ h.push(xs[i+1]-xs[i]); d.push((ys[i+1]-ys[i])/h[i]); }
+  const m=new Array(n);
+  m[0]=d[0]; m[n-1]=d[n-2];
+  for(let i=1;i<n-1;i++){
+    if(d[i-1]*d[i]<=0) m[i]=0;
+    else { const w1=2*h[i]+h[i-1], w2=h[i]+2*h[i-1]; m[i]=(w1+w2)/(w1/d[i-1]+w2/d[i]); }
+  }
+  return function(x){
+    if(x<=xs[0]) return ys[0];
+    if(x>=xs[n-1]) return ys[n-1];
+    let i=0; while(i<n-2 && x>xs[i+1]) i++;
+    const t=(x-xs[i])/h[i];
+    const h00=(1+2*t)*(1-t)*(1-t), h10=t*(1-t)*(1-t), h01=t*t*(3-2*t), h11=t*t*(t-1);
+    return h00*ys[i]+h10*h[i]*m[i]+h01*ys[i+1]+h11*h[i]*m[i+1];
+  };
+}
+
+const GRID_DT = 1/12;   // 5-minute evaluation grid (hours)
+function series(){
+  const dir=curDir; if(!dir) return null;
+  const upF = files.find(f=>f.station===upstreamStation(dir) && f.dir===dir);
+  const dnF = files.find(f=>f.station!==upstreamStation(dir) && f.dir===dir);
+  if(!upF || !dnF) return null;
+  const scale = el('normTot').checked ? upF.total/dnF.total : 1;
+  const cum = counts => { const c=[0]; counts.forEach(v=>c.push(c[c.length-1]+v)); return c; };
+  const cumUp = cum(upF.counts), cumDn = cum(dnF.counts.map(v=>v*scale));
+  const hrs = Array.from({length:25},(_,i)=>i);
+  const tau = parseFloat(el('ffShift').value)/60;   // hours
+  const smoothOn = el('smooth').checked;
+  const fUp = smoothOn ? pchip(hrs,cumUp) : (x=>stepEval(hrs,cumUp,x));
+  const fDn = smoothOn ? pchip(hrs,cumDn) : (x=>stepEval(hrs,cumDn,x));
+  const ts=[], up=[], dn=[];
+  for(let x=0; x<=24+1e-9; x+=GRID_DT){
+    ts.push(x);
+    up.push(fUp(Math.max(0, x-tau)));   // upstream shifted right by free-flow time
+    dn.push(fDn(x));
+  }
+  return {ts, up, dn, upF, dnF, scale, tau};
+}
+// linear interpolation along the staircase corners (raw mode)
+function stepEval(xs, ys, x){
+  if(x<=xs[0]) return ys[0];
+  if(x>=xs[xs.length-1]) return ys[ys.length-1];
+  let i=0; while(x>xs[i+1]) i++;
+  const f=(x-xs[i])/(xs[i+1]-xs[i]);
+  return ys[i]+(ys[i+1]-ys[i])*f;
+}
+function invOf(ts, arr, n){
+  for(let i=1;i<arr.length;i++){
+    if(arr[i]>=n){
+      const f=(n-arr[i-1])/(arr[i]-arr[i-1]+1e-12);
+      return ts[i-1]+(ts[i]-ts[i-1])*f;
+    }
+  }
+  return null;
+}
+
+// ── charts ────────────────────────────────────────────────────────────
+const C=el('chart'), cx=C.getContext('2d');
+const W=C.width, H=C.height, P={l:80,r:20,t:26,b:46};
+let hover=null;
+
+function fmtK(v){ return v>=1000 ? (v/1000).toFixed(v>=10000?0:1)+'k' : Math.round(v); }
+
+function render(){
+  const s=series();
+  cx.clearRect(0,0,W,H);
+  cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  if(!s){ el('readout').textContent='Load both stations for at least one direction'; return; }
+  const pw=W-P.l-P.r, ph=H-P.t-P.b;
+  const yMax=Math.ceil(Math.max(s.up[s.up.length-1], s.dn[s.dn.length-1])/10000)*10000 || 10000;
+  const X=t=>P.l+(t/24)*pw, Y=n=>P.t+ph-(n/yMax)*ph;
+  // grid + axes
+  cx.strokeStyle='#f1f3f7'; cx.lineWidth=1;
+  const yTick=yMax/5;
+  for(let g=yTick; g<=yMax; g+=yTick){ cx.beginPath(); cx.moveTo(P.l,Y(g)); cx.lineTo(P.l+pw,Y(g)); cx.stroke(); }
+  cx.strokeStyle='#d6dae2';
+  cx.beginPath(); cx.moveTo(P.l,P.t+ph+0.5); cx.lineTo(P.l+pw,P.t+ph+0.5); cx.stroke();
+  cx.beginPath(); cx.moveTo(P.l+0.5,P.t); cx.lineTo(P.l+0.5,P.t+ph); cx.stroke();
+  cx.fillStyle='#7b8494'; cx.font='12px '+SANS;
+  for(let g=0; g<=24; g+=2){ cx.textAlign='center'; cx.fillText(g+':00', X(g), P.t+ph+18); }
+  for(let g=0; g<=yMax; g+=yTick){ cx.textAlign='right'; cx.fillText(fmtK(g), P.l-8, Y(g)+4); }
+  cx.fillStyle='#9aa1ad'; cx.font='italic 12px '+SANS;
+  cx.textAlign='left'; cx.fillText('N — cumulative vehicles', P.l+10, P.t+16);
+  cx.textAlign='right'; cx.fillText('time of day', P.l+pw-8, P.t+ph-10);
+  // delay area (only where shifted upstream exceeds downstream)
+  cx.fillStyle='rgba(239,83,80,0.16)';
+  cx.beginPath();
+  let started=false;
+  for(let i=0;i<s.ts.length;i++){
+    const y = s.up[i]>s.dn[i] ? Y(s.up[i]) : Y(s.dn[i]);
+    if(!started){ cx.moveTo(X(s.ts[i]), y); started=true; } else cx.lineTo(X(s.ts[i]), y);
+  }
+  for(let i=s.ts.length-1;i>=0;i--) cx.lineTo(X(s.ts[i]), Y(s.dn[i]));
+  cx.closePath(); cx.fill();
+  // curves
+  function curve(arr,color){
+    cx.strokeStyle=color; cx.lineWidth=2.5; cx.lineJoin='round';
+    cx.beginPath();
+    for(let i=0;i<arr.length;i++){
+      if(i===0) cx.moveTo(X(s.ts[i]), Y(arr[i])); else cx.lineTo(X(s.ts[i]), Y(arr[i]));
+    }
+    cx.stroke();
+  }
+  curve(s.up,'#42a5f5'); curve(s.dn,'#00c853');
+  cx.font='600 12px '+SANS; cx.textAlign='left';
+  cx.fillStyle='#42a5f5'; cx.fillText(`— upstream ${s.upF.station}_${s.upF.dir} (arrivals, +${Math.round(s.tau*60)} min shift)`, P.l+150, P.t+16);
+  cx.fillStyle='#00a844'; cx.fillText(`— downstream ${s.dnF.station}_${s.dnF.dir} (departures${el('normTot').checked?', ×'+s.scale.toFixed(2)+' normalized':''})`, P.l+150, P.t+34);
+  cx.fillStyle='#ef5350'; cx.fillText('■ delay (where upstream leads)', P.l+150, P.t+52);
+  // stats
+  let tot=0, maxAcc=0, maxAccT=0;
+  for(let i=0;i<s.ts.length;i++){
+    const gap=s.up[i]-s.dn[i];
+    if(gap>0){ tot += gap*GRID_DT; if(gap>maxAcc){ maxAcc=gap; maxAccT=s.ts[i]; } }
+  }
+  let maxD=0, maxDT=0;
+  const NTOT=s.up[s.up.length-1];
+  for(let n=NTOT*0.02; n<NTOT*0.99; n+=NTOT/150){
+    const ta=invOf(s.ts,s.up,n), td=invOf(s.ts,s.dn,n);
+    if(ta!==null && td!==null && td-ta>maxD){ maxD=td-ta; maxDT=ta; }
+  }
+  el('stVeh').textContent=Math.round(s.upF.total).toLocaleString()+' veh';
+  el('stTot').textContent=Math.round(tot).toLocaleString()+' veh·hr';
+  el('stMax').textContent=(maxD*60).toFixed(0)+' min (~'+(maxDT).toFixed(0)+':00)';
+  el('stAcc').textContent=Math.round(maxAcc).toLocaleString()+' veh (~'+maxAccT.toFixed(0)+':00)';
+  el('readout').textContent=
+    `${s.upF.dir} · ${s.upF.station} → ${s.dnF.station} · ${s.upF.date}  |  total delay ${Math.round(tot).toLocaleString()} veh·hr  |  max delay ${(maxD*60).toFixed(0)} min`;
+  // hover
+  if(hover && hover.x>P.l && hover.x<P.l+pw && hover.y>P.t && hover.y<P.t+ph){
+    const ht=(hover.x-P.l)/pw*24;
+    const i=Math.min(s.ts.length-1, Math.round(ht/GRID_DT));
+    cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+    cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+ph); cx.stroke();
+    cx.strokeStyle='#ef5350'; cx.lineWidth=2; cx.setLineDash([5,4]);
+    cx.beginPath(); cx.moveTo(hover.x, Y(s.up[i])); cx.lineTo(hover.x, Y(s.dn[i])); cx.stroke();
+    cx.setLineDash([]);
+    const nVal=(1-(hover.y-P.t)/ph)*yMax;
+    const ta=invOf(s.ts,s.up,nVal), td=invOf(s.ts,s.dn,nVal);
+    const rows=[
+      [`${Math.floor(ht)}:${String(Math.round((ht%1)*60)).padStart(2,'0')}`, '#1f2937', true],
+      [`up ${fmtK(s.up[i])} · down ${fmtK(s.dn[i])}`, '#4b5563', false],
+      [`excess accumulation = ${Math.max(0,Math.round(s.up[i]-s.dn[i])).toLocaleString()} veh`, '#ef5350', false]
+    ];
+    if(ta!==null && td!==null && td>ta){
+      cx.strokeStyle='#7c3aed'; cx.setLineDash([5,4]); cx.lineWidth=2;
+      cx.beginPath(); cx.moveTo(X(ta), Y(nVal)); cx.lineTo(X(td), Y(nVal)); cx.stroke();
+      cx.setLineDash([]);
+      rows.push([`vehicle #${fmtK(nVal)} delay ≈ ${((td-ta)*60).toFixed(0)} min`, '#7c3aed', false]);
+    }
+    cx.font='600 12px '+SANS;
+    const tw=Math.max(...rows.map(r=>cx.measureText(r[0]).width))+22, th=rows.length*19+12;
+    let bx=hover.x+14, by=Math.min(Math.max(hover.y-th/2,P.t+6),P.t+ph-th-6);
+    if(bx+tw>P.l+pw) bx=hover.x-tw-14;
+    cx.save(); cx.shadowColor='rgba(16,24,40,0.16)'; cx.shadowBlur=14; cx.shadowOffsetY=2;
+    cx.fillStyle='#fff'; cx.beginPath(); cx.roundRect(bx,by,tw,th,8); cx.fill(); cx.restore();
+    rows.forEach((r,k)=>{ cx.font=(r[2]?'600 12px ':'12px ')+SANS; cx.fillStyle=r[1]; cx.textAlign='left'; cx.fillText(r[0], bx+11, by+20+k*19); });
+  }
+  drawVol(s);
+}
+
+const VC=el('volChart'), vx=VC.getContext('2d');
+function drawVol(s){
+  vx.setTransform(1,0,0,1,0,0);
+  vx.clearRect(0,0,VC.width,VC.height);
+  vx.setTransform(2,0,0,2,0,0);
+  const w=260,h=150,L=30,R=8,T=18,B=20;
+  const pw=w-L-R, ph=h-T-B;
+  const vMax=Math.max(...s.upF.counts, ...s.dnF.counts)*1.05;
+  vx.font='600 8px '+SANS; vx.fillStyle='#9aa1ad'; vx.textAlign='left';
+  vx.fillText('HOURLY VOLUMES (veh/hr)', 8, 11);
+  vx.strokeStyle='#eef1f6'; vx.lineWidth=1;
+  vx.fillStyle='#7b8494'; vx.font='7px '+SANS;
+  for(let g=0; g<=vMax; g+=Math.ceil(vMax/4/500)*500){
+    const y=T+ph-(g/vMax)*ph;
+    vx.beginPath(); vx.moveTo(L,y); vx.lineTo(L+pw,y); vx.stroke();
+    vx.textAlign='right'; vx.fillText(fmtK(g), L-3, y+2);
+  }
+  vx.textAlign='center';
+  for(let g=0; g<=24; g+=6) vx.fillText(g+':00', L+(g/24)*pw, h-8);
+  const bw=pw/24;
+  s.upF.counts.forEach((v,i)=>{
+    vx.fillStyle='rgba(66,165,245,0.55)';
+    vx.fillRect(L+i*bw+1, T+ph-(v/vMax)*ph, bw/2-1, (v/vMax)*ph);
+  });
+  s.dnF.counts.forEach((v,i)=>{
+    vx.fillStyle='rgba(0,200,83,0.55)';
+    vx.fillRect(L+i*bw+bw/2, T+ph-(v/vMax)*ph, bw/2-1, (v/vMax)*ph);
+  });
+}
+
+C.addEventListener('pointermove', e=>{
+  const r=C.getBoundingClientRect();
+  hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+  render();
+});
+C.addEventListener('pointerleave', ()=>{ hover=null; render(); });
+</script>
+</body>
+</html>
