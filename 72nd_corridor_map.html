@@ -83,16 +83,17 @@ input:checked + .slider:before { transform: translateX(13px); }
 .ic-val { color: #ccd6f6; font-size: 10px; font-weight: 600; }
 .grade-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 900; background: rgba(100,255,218,0.15); color: #64ffda; border: 1px solid rgba(100,255,218,0.3); }
 
-/* ── Right panel (StreetLight) ── */
+/* ── StreetLight right dock: slides in and pushes the map to the left ── */
+#map-row { flex: 1; display: flex; min-height: 0; }
+#map-row #map { flex: 1; min-width: 0; height: auto; }
 #sl-panel {
-  position: absolute; right: 10px; top: 44px; z-index: 998;
-  width: 320px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
-  border-radius: 8px; box-shadow: -4px 4px 20px rgba(0,0,0,0.5);
-  /* sized against the MAP frame (not the viewport) so the open TCDS panel
-     shrinks it instead of covering its lower half */
-  max-height: calc(100% - 54px); display: none; flex-direction: column;
-  overflow: hidden;
+  flex: 0 0 auto; width: 0; overflow: hidden;
+  background: #16213e; border-left: 2px solid #0f3460;
+  display: flex; flex-direction: column;
+  transition: width 0.35s ease;
 }
+#sl-panel.open { width: 340px; }
+#sl-panel-header, #sl-panel-body { width: 340px; }
 #sl-panel-header {
   display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
   padding: 9px 12px; border-bottom: 1px solid #0f3460;
@@ -307,6 +308,7 @@ input:checked + .slider:before { transform: translateX(13px); }
 
 <!-- ═══ MAP AREA ═══ -->
 <div id="map-area">
+  <div id="map-row">
   <div id="map">
 
     <!-- Complete Streets banner -->
@@ -316,38 +318,6 @@ input:checked + .slider:before { transform: translateX(13px); }
         <div class="cs-tag"><span>72nd Ave</span><span class="cs-score">6</span><span>Regional Connector</span></div>
         <div class="cs-tag"><span>Oak/Simms</span><span class="cs-score">5&ndash;6</span><span>Neighborhood</span></div>
         <div class="cs-tag"><span>Kipling</span><span class="cs-score">0</span><span>Neighborhood</span></div>
-      </div>
-    </div>
-
-    <!-- StreetLight right panel -->
-    <div id="sl-panel">
-      <div id="sl-panel-header">
-        <span id="sl-panel-title">StreetLight Data</span>
-        <span id="sl-panel-toggle" onclick="toggleSlPanel()">&#8964;</span>
-      </div>
-      <div id="sl-panel-body">
-        <div class="metric-pills">
-          <span class="met-pill active" id="mpill-adt"   onclick="setMetric('adt')">ADT Volume</span>
-          <span class="met-pill"        id="mpill-speed" onclick="setMetric('speed')">Avg Speed</span>
-          <span class="met-pill"        id="mpill-tti"   onclick="setMetric('tti')">Travel Time Index</span>
-        </div>
-        <div style="display:flex;gap:5px;margin-bottom:10px">
-          <span class="dir-pill active" id="spill-BOTH" onclick="setSlDir('BOTH')">Both</span>
-          <span class="dir-pill"        id="spill-EAST" onclick="setSlDir('EAST')">&#9658; EB</span>
-          <span class="dir-pill"        id="spill-WEST" onclick="setSlDir('WEST')">&#9668; WB</span>
-        </div>
-        <div class="sl-tabs">
-          <div class="sl-tab active" id="sltab-profile" onclick="switchSlTab('profile')">Corridor Profile</div>
-          <div class="sl-tab"        id="sltab-segment" onclick="switchSlTab('segment')">Segment Detail</div>
-        </div>
-        <div id="slview-profile">
-          <div class="sl-chart-wrap"><div class="sl-chart-title">Avg Hourly Volume</div><canvas id="chartSlVol"></canvas></div>
-          <div class="sl-chart-wrap"><div class="sl-chart-title">Avg Hourly Speed</div><canvas id="chartSlSpd"></canvas></div>
-        </div>
-        <div id="slview-segment" style="display:none">
-          <div id="sl-seg-default" style="color:#8892b0;font-size:11px;text-align:center;padding:18px 0">Click a segment on the map</div>
-          <div id="sl-seg-content"></div>
-        </div>
       </div>
     </div>
 
@@ -412,6 +382,39 @@ input:checked + .slider:before { transform: translateX(13px); }
     </div>
 
   </div><!-- /map -->
+
+  <!-- StreetLight right dock: pushes the map to the left when open -->
+  <div id="sl-panel">
+    <div id="sl-panel-header">
+      <span id="sl-panel-title">StreetLight Data</span>
+      <span id="sl-panel-toggle" onclick="document.getElementById('tog-sl').checked=false; toggleLayer('streetlight',false);">&#10005;</span>
+    </div>
+    <div id="sl-panel-body">
+      <div class="metric-pills">
+        <span class="met-pill active" id="mpill-adt"   onclick="setMetric('adt')">ADT Volume</span>
+        <span class="met-pill"        id="mpill-speed" onclick="setMetric('speed')">Avg Speed</span>
+        <span class="met-pill"        id="mpill-tti"   onclick="setMetric('tti')">Travel Time Index</span>
+      </div>
+      <div style="display:flex;gap:5px;margin-bottom:10px">
+        <span class="dir-pill active" id="spill-BOTH" onclick="setSlDir('BOTH')">Both</span>
+        <span class="dir-pill"        id="spill-EAST" onclick="setSlDir('EAST')">&#9658; EB</span>
+        <span class="dir-pill"        id="spill-WEST" onclick="setSlDir('WEST')">&#9668; WB</span>
+      </div>
+      <div class="sl-tabs">
+        <div class="sl-tab active" id="sltab-profile" onclick="switchSlTab('profile')">Corridor Profile</div>
+        <div class="sl-tab"        id="sltab-segment" onclick="switchSlTab('segment')">Segment Detail</div>
+      </div>
+      <div id="slview-profile">
+        <div class="sl-chart-wrap"><div class="sl-chart-title">Avg Hourly Volume</div><canvas id="chartSlVol"></canvas></div>
+        <div class="sl-chart-wrap"><div class="sl-chart-title">Avg Hourly Speed</div><canvas id="chartSlSpd"></canvas></div>
+      </div>
+      <div id="slview-segment" style="display:none">
+        <div id="sl-seg-default" style="color:#8892b0;font-size:11px;text-align:center;padding:18px 0">Click a segment on the map</div>
+        <div id="sl-seg-content"></div>
+      </div>
+    </div>
+  </div>
+  </div><!-- /map-row -->
 
   <!-- TCDS bottom panel (2 cards only) -->
   <div id="tcds-panel">
@@ -693,17 +696,19 @@ function toggleLayer(name,on) {
     if (on) {
       buildLayer(); el.classList.add('active');
       document.getElementById('sl-dir-pills').style.display='flex';
-      document.getElementById('sl-panel').style.display='flex';
-      buildSlPanelCharts();
+      document.getElementById('sl-panel').classList.add('open');
       document.getElementById('leg-sl').style.display='block';
       updateSlLegend();
+      // rebuild charts + retile the map after the slide-in finishes
+      setTimeout(()=>{ map.invalidateSize(); buildSlPanelCharts(); }, 380);
     } else {
       if (streetlightOutline) {map.removeLayer(streetlightOutline);streetlightOutline=null;}
       if (streetlightLayer)   {map.removeLayer(streetlightLayer);streetlightLayer=null;}
       el.classList.remove('active');
       document.getElementById('sl-dir-pills').style.display='none';
-      document.getElementById('sl-panel').style.display='none';
+      document.getElementById('sl-panel').classList.remove('open');
       document.getElementById('leg-sl').style.display='none';
+      setTimeout(()=>map.invalidateSize(), 380);
     }
   }
   if (name==='tcds') {
