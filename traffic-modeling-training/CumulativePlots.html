@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daganzo Ch.2 — Cumulative Plots</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; background: #f7f8fa; color: #23272f; line-height: 1.6; padding: 12px; }
+  .container { max-width: none; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 14px; padding: 4px 10px 8px; border-bottom: 2px solid #d5dbe5; margin-bottom: 10px; }
+  h1 { color: #0f7b82; font-size: 1.25em; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { color: #6b7280; font-style: italic; font-size: 0.88em; }
+  .nav { font-size: 0.85em; }
+  .nav a { color: #0f7b82; text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; }
+  .tab { background: #f0f3f8; border: 1px solid #e2e6ee; color: #4b5563; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.9em; transition: all .2s; }
+  .tab:hover { background: #e3edf3; }
+  .tab.active { background: #14919b; border-color: #14919b; color: #fff; font-weight: bold; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
+  .panel-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 10px; align-items: stretch; }
+  .panel-grid .viz-container { margin-bottom: 0; }
+  @media (max-width: 900px){ .panel-grid { grid-template-columns: 1fr; } }
+  .pane-head { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2px; }
+  .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
+  .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 380px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
+  .big-canvas { background: #fff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
+  .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: min(400px, 100%); height: auto; display: block; margin: 8px auto 0; }
+  .road-mini { background: #eef0f4; border-radius: 6px; width: min(400px, 100%); height: auto; display: block; margin: 8px auto 0; touch-action: none; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 12px 0; align-items: center; }
+  .control-group { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 8px 14px; border-radius: 6px; }
+  .control-group label { font-size: 0.78em; color: #0f7b82; }
+  input[type="range"] { width: 110px; accent-color: #14919b; }
+  .val { font-size: 0.82em; color: #1f2937; font-weight: bold; }
+  button.action { background: #14919b; color: #fff; border: none; padding: 9px 18px; border-radius: 6px; font-family: inherit; font-weight: bold; cursor: pointer; font-size: 0.9em; transition: transform .08s ease, filter .15s ease; }
+  button.action:hover { filter: brightness(1.1); }
+  button.action:active { transform: scale(0.93); }
+  button.action.sec { background:#fff; color:#14919b; border:1px solid #14919b; }
+  .readout { text-align: center; font-family: 'Courier New', monospace; color: #0f6f76; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 7px; border-radius: 4px; margin-top: 8px; min-height: 22px; font-size: 0.85em; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .card { background: #f7f9fc; border: 1px solid #e2e6ee; border-radius: 8px; padding: 8px 10px; border-left: 4px solid #14919b; }
+  .card h3 { color: #0f7b82; font-size: 0.78em; margin-bottom: 2px; font-weight: 600; }
+  .card .value { font-family: 'Courier New', monospace; font-size: 1.05em; color: #1f2937; font-weight: bold; }
+  .card.warn { border-left-color: #c1121f; }
+  .card.warn .value { color: #c1121f; }
+  code { background: #eef1f5; padding: 1px 5px; border-radius: 3px; color: #b45309; font-size: 0.88em; }
+  @media (max-width: 640px){
+    body { padding: 6px; }
+    .viz-container { padding: 8px; }
+    .tab { padding: 8px 10px; font-size: 0.8em; }
+    input[type="range"] { width: 90px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Cumulative Plots</h1>
+    <span class="subtitle">Daganzo — Fundamentals of Transportation and Traffic Operations, Ch. 2</span>
+    <span class="nav"><a href="TimeSpaceDiagram.html">← Time-Space Diagram</a> · <a href="DilemmaZone.html">Dilemma Zone</a></span>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="ncurve">1. N-Curves at Two Detectors</button>
+    <button class="tab" data-tab="bneck">2. Bottleneck Queueing</button>
+    <button class="tab" data-tab="sig">3. Signal Queue (D/D/1)</button>
+  </div>
+
+  <!-- PANEL 1: N-CURVES -->
+  <div class="panel active" id="ncurve">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="ncChart" class="big-canvas" width="1200" height="560"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip"><b>N(x,t)</b> counts the cumulative number of vehicles that have passed location x by time t. Plot N at two locations: the <b>vertical distance</b> between the curves is the number of vehicles between the detectors (<b>accumulation</b>), and — with FIFO — the <b>horizontal distance</b> at height n is vehicle n's <b>trip time</b> from X₁ to X₂. Drag the two detector lines on the road; hover the chart to read accumulation and trip time anywhere.</span></span></div>
+      <canvas id="ncRoad" class="road-mini" width="520" height="560"></canvas>
+      <div class="readout" id="ncReadout">Press ▶ Play — vehicles cross detector X₁ (teal) then X₂ (amber)</div>
+      <div class="controls">
+        <button class="action" id="ncPlay">⏸ Pause</button>
+        <button class="action sec" id="ncReset">↺ Reset</button>
+        <div class="control-group">
+          <label>Mean arrival headway</label>
+          <input type="range" id="ncHead" min="1" max="4" step="0.25" value="2">
+          <span class="val" id="ncHeadVal">2.0 s</span>
+        </div>
+        <div class="control-group">
+          <label>Playback Speed</label>
+          <input type="range" id="ncSpd" min="0.3" max="3" step="0.1" value="1">
+          <span class="val" id="ncSpdVal">1.0×</span>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: BOTTLENECK -->
+  <div class="panel" id="bneck">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="bnChart" class="big-canvas" width="1200" height="560"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">The <b>queueing (input–output) diagram</b>: the blue curve is cumulative demand A(t); the green curve is what the bottleneck of capacity μ can discharge, D(t). While demand exceeds capacity a queue grows — the <b>vertical gap</b> is the queue, the <b>horizontal gap</b> at height n is vehicle n's <b>delay</b>, and the <b>shaded area</b> between the curves is <b>total delay</b> (veh·min). Push the peak demand above capacity and watch the triangle of delay grow; the queue keeps growing until demand falls back below μ, and clears where the curves rejoin.</span></span></div>
+      <div class="cards">
+        <div class="card"><h3>Max queue</h3><div class="value" id="bnMaxQ">—</div></div>
+        <div class="card"><h3>Max delay</h3><div class="value" id="bnMaxD">—</div></div>
+        <div class="card"><h3>Total delay</h3><div class="value" id="bnTotD">—</div></div>
+        <div class="card"><h3>Queue clears at</h3><div class="value" id="bnClear">—</div></div>
+      </div>
+      <canvas id="bnQChart" class="gauge-canvas" width="520" height="300"></canvas>
+      <div class="controls">
+        <div class="control-group"><label>Base demand</label><input type="range" id="bnL0" min="2" max="8" step="0.5" value="4"><span class="val" id="bnL0Val">4.0 veh/min</span></div>
+        <div class="control-group"><label>Peak demand</label><input type="range" id="bnL1" min="6" max="20" step="0.5" value="12"><span class="val" id="bnL1Val">12.0 veh/min</span></div>
+        <div class="control-group"><label>Peak starts</label><input type="range" id="bnT1" min="10" max="60" step="5" value="20"><span class="val" id="bnT1Val">20 min</span></div>
+        <div class="control-group"><label>Peak duration</label><input type="range" id="bnT2" min="10" max="60" step="5" value="30"><span class="val" id="bnT2Val">30 min</span></div>
+        <div class="control-group"><label>Capacity μ</label><input type="range" id="bnMu" min="4" max="16" step="0.5" value="8"><span class="val" id="bnMuVal">8.0 veh/min</span></div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: SIGNAL D/D/1 -->
+  <div class="panel" id="sig">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="sgChart" class="big-canvas" width="1200" height="560"></canvas>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip"><b>Deterministic signal queueing (D/D/1)</b>: vehicles arrive at steady rate λ; the stop line serves 0 during <b style="color:#c1121f">red</b> and at saturation flow s during <b style="color:#1d7a6f">green</b>. Each cycle the departure staircase falls behind by λ·r vehicles and catches up at rate s once green starts. The shaded triangles are <b>delay per cycle</b>; average (uniform) delay per vehicle is <code>d = r² / (2C(1−λ/s))</code>. If λ·C &gt; s·g the green can't clear what a cycle brings — <b>oversaturation</b>: a residual queue carries over and grows every cycle.</span></span></div>
+      <div class="cards">
+        <div class="card"><h3>Queue at end of red</h3><div class="value" id="sgQr">—</div></div>
+        <div class="card"><h3>Clears after green starts</h3><div class="value" id="sgTc">—</div></div>
+        <div class="card"><h3>Avg delay (uniform)</h3><div class="value" id="sgDu">—</div></div>
+        <div class="card" id="sgCapCard"><h3>Capacity check λC vs sg</h3><div class="value" id="sgCap">—</div></div>
+      </div>
+      <canvas id="sgQChart" class="gauge-canvas" width="520" height="300"></canvas>
+      <div class="controls">
+        <div class="control-group"><label>Arrival rate λ</label><input type="range" id="sgLam" min="2" max="14" step="0.5" value="6"><span class="val" id="sgLamVal">6.0 veh/min</span></div>
+        <div class="control-group"><label>Red time r</label><input type="range" id="sgRed" min="10" max="60" step="5" value="30"><span class="val" id="sgRedVal">30 s</span></div>
+        <div class="control-group"><label>Green time g</label><input type="range" id="sgGrn" min="10" max="60" step="5" value="30"><span class="val" id="sgGrnVal">30 s</span></div>
+        <div class="control-group"><label>Saturation flow s</label><input type="range" id="sgSat" min="1200" max="2400" step="100" value="1800"><span class="val" id="sgSatVal">1800 veh/hr</span></div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function el(id){ return document.getElementById(id); }
+const SANS='"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+
+// tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    el(tab.dataset.tab).classList.add('active');
+  });
+});
+
+// shared chart scaffold: white bg, horizontal grid, hairline axes
+function scaffold(ctx, W, H, P, xMax, yMax, xLab, yLab, xTick, yTick){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  const pw=W-P.l-P.r, ph=H-P.t-P.b;
+  ctx.strokeStyle='#f1f3f7'; ctx.lineWidth=1;
+  for(let g=yTick; g<=yMax; g+=yTick){
+    const y=P.t+ph-(g/yMax)*ph;
+    ctx.beginPath(); ctx.moveTo(P.l,y); ctx.lineTo(P.l+pw,y); ctx.stroke();
+  }
+  ctx.strokeStyle='#d6dae2';
+  ctx.beginPath(); ctx.moveTo(P.l, P.t+ph+0.5); ctx.lineTo(P.l+pw, P.t+ph+0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(P.l+0.5, P.t); ctx.lineTo(P.l+0.5, P.t+ph); ctx.stroke();
+  ctx.fillStyle='#7b8494'; ctx.font='12px '+SANS;
+  for(let g=0; g<=xMax; g+=xTick){ ctx.textAlign='center'; ctx.fillText(g, P.l+(g/xMax)*pw, P.t+ph+18); }
+  for(let g=0; g<=yMax; g+=yTick){ ctx.textAlign='right'; ctx.fillText(g, P.l-8, P.t+ph-(g/yMax)*ph+4); }
+  ctx.fillStyle='#9aa1ad'; ctx.font='italic 12px '+SANS;
+  ctx.textAlign='left';  ctx.fillText(yLab, P.l+10, P.t+16);
+  ctx.textAlign='right'; ctx.fillText(xLab, P.l+pw-8, P.t+ph-10);
+  return {pw, ph, X:t=>P.l+(t/xMax)*pw, Y:n=>P.t+ph-(n/yMax)*ph};
+}
+
+function tooltipCard(ctx, x, y, rows, P, pw, ph){
+  ctx.font='600 12px '+SANS;
+  const tw=Math.max(...rows.map(r=>ctx.measureText(r[0]).width))+22;
+  const th=rows.length*19+12;
+  let bx=x+14, by=Math.min(Math.max(y-th/2, P.t+6), P.t+ph-th-6);
+  if(bx+tw>P.l+pw) bx=x-tw-14;
+  ctx.save();
+  ctx.shadowColor='rgba(16,24,40,0.16)'; ctx.shadowBlur=14; ctx.shadowOffsetY=2;
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.roundRect(bx,by,tw,th,8); ctx.fill();
+  ctx.restore();
+  rows.forEach((r,i)=>{
+    ctx.font=(r[2]?'600 12px ':'12px ')+SANS;
+    ctx.fillStyle=r[1]; ctx.textAlign='left';
+    ctx.fillText(r[0], bx+11, by+20+i*19);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  PANEL 1 — N-CURVES AT TWO DETECTORS
+// ─────────────────────────────────────────────
+(function(){
+  const C = el('ncChart'), cx = C.getContext('2d');
+  const W=C.width, H=C.height, P={l:64,r:20,t:24,b:44};
+  const roadC = el('ncRoad'), rx = roadC.getContext('2d');
+  const DUR=40, S_MIN=0.03, VEHL=0.02;
+  let vehicles=[], t=0, playing=true, lastTs=null;
+  let d1=0.30, d2=0.70;         // detector positions (fraction of road)
+  let pass1=[], pass2=[];       // pass times per vehicle (vehicle order)
+  let hover=null;
+
+  function makeVehicles(){
+    const hbar=parseFloat(el('ncHead').value);
+    vehicles=[];
+    let tA=-25, leader=null;
+    while(tA < DUR-2){
+      const v={ t0:tA, v:0.05*(1+(Math.random()*0.2-0.1)), leader };
+      leader=v; vehicles.push(v);
+      tA += hbar*(0.5+Math.random());
+    }
+  }
+  function posOf(v, ts){
+    let x=(ts-v.t0)*v.v;
+    if(v.leader) x=Math.min(x, posOf(v.leader, ts)-S_MIN);
+    return x;
+  }
+  function getX(v, ts){
+    if(ts<v.t0) return null;
+    const x=posOf(v,ts);
+    return (x<0||x>1)?null:x;
+  }
+  function passTime(v, xT){
+    let lo=v.t0, hi=v.t0+3/v.v+15;
+    if(posOf(v,hi)<xT) return null;
+    if(posOf(v,lo)>=xT) return null;
+    for(let i=0;i<40;i++){ const m=(lo+hi)/2; if(posOf(v,m)<xT) lo=m; else hi=m; }
+    return (lo+hi)/2;
+  }
+  function recomputePasses(){
+    pass1=vehicles.map(v=>passTime(v,d1));
+    pass2=vehicles.map(v=>passTime(v,d2));
+  }
+  function countLE(arr, ts){ let n=0; for(const p of arr){ if(p!==null && p>=0 && p<=ts) n++; } return n; }
+
+  function drawChart(){
+    const NMAX=Math.max(5, Math.ceil(vehicles.length*0.9/5)*5);
+    const yTick=Math.max(5, Math.ceil(NMAX/6/5)*5);
+    const s=scaffold(cx,W,H,P,DUR,NMAX,'t (s)','N — cumulative vehicles',5,yTick);
+    // step curves
+    function stepCurve(passes, color){
+      const evs=passes.filter(p=>p!==null&&p>=0&&p<=t).sort((a,b)=>a-b);
+      cx.strokeStyle=color; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      let n=0; let py=s.Y(0);
+      cx.moveTo(s.X(0), py);
+      evs.forEach(pt=>{
+        cx.lineTo(s.X(pt), py);
+        n++; py=s.Y(Math.min(n,NMAX));
+        cx.lineTo(s.X(pt), py);
+      });
+      cx.lineTo(s.X(Math.min(t,DUR)), py);
+      cx.stroke();
+      return n;
+    }
+    const n1=stepCurve(pass1,'#0e7c86');
+    const n2=stepCurve(pass2,'#b45309');
+    // legend
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillStyle='#0e7c86'; cx.fillText('— N(X₁, t)  upstream detector', P.l+120, P.t+16);
+    cx.fillStyle='#b45309'; cx.fillText('— N(X₂, t)  downstream detector', P.l+120, P.t+34);
+    // hover: accumulation (vertical) + trip time (horizontal)
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
+      const ht=(hover.x-P.l)/s.pw*DUR;
+      const h1=countLE(pass1,Math.min(ht,t)), h2=countLE(pass2,Math.min(ht,t));
+      // vertical accumulation gap
+      cx.strokeStyle='#ef5350'; cx.lineWidth=2; cx.setLineDash([5,4]);
+      cx.beginPath(); cx.moveTo(hover.x, s.Y(h1)); cx.lineTo(hover.x, s.Y(h2)); cx.stroke();
+      cx.setLineDash([]);
+      // horizontal trip-time guide at the hovered N
+      const hN=Math.max(1, Math.round((1-(hover.y-P.t)/s.ph)*NMAX));
+      if(hN<=vehicles.length && pass1[hN-1]!==null && pass2[hN-1]!==null && pass2[hN-1]<=t){
+        cx.strokeStyle='#7c3aed'; cx.lineWidth=2; cx.setLineDash([5,4]);
+        cx.beginPath(); cx.moveTo(s.X(pass1[hN-1]), s.Y(hN)); cx.lineTo(s.X(pass2[hN-1]), s.Y(hN)); cx.stroke();
+        cx.setLineDash([]);
+      }
+      const rows=[
+        [`t = ${ht.toFixed(1)} s`, '#1f2937', true],
+        [`N₁ = ${h1} · N₂ = ${h2}`, '#4b5563', false],
+        [`accumulation = ${h1-h2} veh`, '#ef5350', false]
+      ];
+      if(hN<=vehicles.length && pass1[hN-1]!==null && pass2[hN-1]!==null && pass2[hN-1]<=t)
+        rows.push([`veh #${hN} trip = ${(pass2[hN-1]-pass1[hN-1]).toFixed(1)} s`, '#7c3aed', false]);
+      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+    }
+  }
+
+  function drawRoad(){
+    rx.setTransform(1,0,0,1,0,0);
+    rx.clearRect(0,0,roadC.width,roadC.height);
+    rx.setTransform(2,0,0,2,0,0);
+    const RW=260, RH=280, T=14, B=14, x0=105, x1=155;
+    const ph=RH-T-B;
+    const yOf=f=>T+ph-f*ph;
+    // road
+    rx.fillStyle='#aeb7c1'; rx.fillRect(x0, T, x1-x0, ph);
+    rx.strokeStyle='#fff'; rx.lineWidth=2;
+    rx.beginPath(); rx.moveTo(x0,T); rx.lineTo(x0,T+ph); rx.stroke();
+    rx.beginPath(); rx.moveTo(x1,T); rx.lineTo(x1,T+ph); rx.stroke();
+    rx.fillStyle='#4b5563'; rx.font='10px '+SANS; rx.textAlign='center';
+    rx.fillText('x = L', (x0+x1)/2, T-3);
+    rx.fillText('x = 0', (x0+x1)/2, T+ph+11);
+    // detectors
+    [[d1,'#0e7c86','X₁'],[d2,'#b45309','X₂']].forEach(([d,col,lab])=>{
+      const y=yOf(d);
+      rx.strokeStyle=col; rx.lineWidth=2; rx.setLineDash([5,4]);
+      rx.beginPath(); rx.moveTo(x0-14,y); rx.lineTo(x1+14,y); rx.stroke();
+      rx.setLineDash([]);
+      rx.fillStyle=col; rx.font='600 11px '+SANS; rx.textAlign='left';
+      rx.fillText(lab+' (drag)', x1+18, y+4);
+    });
+    // vehicles at true scale
+    const carH=VEHL*ph;
+    vehicles.forEach(v=>{
+      const x=getX(v,t);
+      if(x===null) return;
+      rx.fillStyle='#0e7c86';
+      rx.beginPath(); rx.roundRect((x0+x1)/2-5, yOf(x)-carH/2, 10, carH, 2); rx.fill();
+    });
+  }
+
+  function updateReadout(){
+    const n1=countLE(pass1,t), n2=countLE(pass2,t);
+    let trips=[], cnt=0;
+    for(let i=0;i<vehicles.length;i++){
+      if(pass2[i]!==null && pass2[i]<=t && pass1[i]!==null){ trips.push(pass2[i]-pass1[i]); }
+    }
+    const avg=trips.length?trips.reduce((a,b)=>a+b,0)/trips.length:0;
+    el('ncReadout').textContent=
+      `t=${t.toFixed(1)}s  |  N₁=${n1} · N₂=${n2}  |  accumulation = ${n1-n2} veh between detectors  |  avg trip X₁→X₂ = ${avg?avg.toFixed(1):'—'} s`;
+  }
+
+  function render(){ drawChart(); drawRoad(); updateReadout(); }
+  function reset(){
+    t=0; makeVehicles(); recomputePasses(); playing=true;
+    el('ncPlay').textContent='⏸ Pause';
+    render();
+  }
+
+  // chart hover
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    if(!playing) render();
+  });
+  C.addEventListener('pointerleave', ()=>{ hover=null; if(!playing) render(); });
+
+  // detector dragging on the road mini-canvas
+  let drag=null;
+  function roadXY(e){
+    const r=roadC.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*roadC.width/r.width/2, y:(e.clientY-r.top)*roadC.height/r.height/2};
+  }
+  function fOf(y){ const T=14, ph=280-28; return Math.min(0.97, Math.max(0.03, 1-(y-T)/ph)); }
+  roadC.addEventListener('pointerdown', e=>{
+    const {y}=roadXY(e);
+    const f=fOf(y);
+    drag = Math.abs(f-d1)<Math.abs(f-d2) ? 'd1':'d2';
+    roadC.setPointerCapture(e.pointerId);
+  });
+  roadC.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    const {y}=roadXY(e);
+    const f=fOf(y);
+    if(drag==='d1') d1=Math.min(f, d2-0.08); else d2=Math.max(f, d1+0.08);
+    recomputePasses();
+    if(!playing) render();
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>roadC.addEventListener(ev,()=>{ drag=null; }));
+
+  el('ncPlay').addEventListener('click',()=>{
+    if(t>=DUR){ reset(); return; }
+    playing=!playing;
+    el('ncPlay').textContent=playing?'⏸ Pause':'▶ Play';
+    if(playing) lastTs=null;
+  });
+  el('ncReset').addEventListener('click', reset);
+  el('ncHead').addEventListener('input', ()=>{ el('ncHeadVal').textContent=parseFloat(el('ncHead').value).toFixed(1)+' s'; reset(); });
+  el('ncSpd').addEventListener('input', ()=>{ el('ncSpdVal').textContent=parseFloat(el('ncSpd').value).toFixed(1)+'×'; });
+
+  function loop(ts){
+    if(!lastTs) lastTs=ts;
+    let dt=(ts-lastTs)/1000; lastTs=ts;
+    dt=Math.min(dt,0.05);
+    if(playing && t<DUR){
+      t=Math.min(DUR, t+dt*parseFloat(el('ncSpd').value));
+      if(t>=DUR){ playing=false; el('ncPlay').textContent='↺ Replay'; }
+      render();
+    }
+    requestAnimationFrame(loop);
+  }
+  reset();
+  requestAnimationFrame(loop);
+})();
+
+// ─────────────────────────────────────────────
+//  PANEL 2 — BOTTLENECK QUEUEING DIAGRAM
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('bnChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height, P={l:64,r:20,t:24,b:44};
+  const QC=el('bnQChart'), qx=QC.getContext('2d');
+  const T=120, DT=0.25;
+  let A=[], D=[], Q=[], hover=null;
+
+  function params(){
+    return { l0:parseFloat(el('bnL0').value), l1:parseFloat(el('bnL1').value),
+             t1:parseFloat(el('bnT1').value), du:parseFloat(el('bnT2').value),
+             mu:parseFloat(el('bnMu').value) };
+  }
+  function lam(p,ts){ return (ts>=p.t1 && ts<p.t1+p.du) ? p.l1 : p.l0; }
+
+  function compute(){
+    const p=params();
+    A=[0]; D=[0]; Q=[0];
+    let a=0,d=0,q=0;
+    for(let ts=DT; ts<=T+1e-9; ts+=DT){
+      a += lam(p,ts)*DT;
+      q = Math.max(0, q + (lam(p,ts)-p.mu)*DT);
+      d = a - q;
+      A.push(a); D.push(d); Q.push(q);
+    }
+    // stats
+    let maxQ=0, maxQt=0, tot=0, clearT=null;
+    for(let i=0;i<Q.length;i++){
+      if(Q[i]>maxQ){ maxQ=Q[i]; maxQt=i*DT; }
+      tot += Q[i]*DT;
+      if(clearT===null && i*DT>p.t1 && Q[i]<1e-6 && Q[Math.max(0,i-1)]>1e-6) clearT=i*DT;
+    }
+    // max delay: horizontal distance at the N where it's widest
+    let maxD=0;
+    for(let n=1; n<A[A.length-1]; n+=Math.max(1,Math.floor(A[A.length-1]/200))){
+      const ta=invOf(A,n), td=invOf(D,n);
+      if(ta!==null && td!==null) maxD=Math.max(maxD, td-ta);
+    }
+    el('bnMaxQ').textContent=Math.round(maxQ)+' veh';
+    el('bnMaxD').textContent=maxD.toFixed(1)+' min';
+    el('bnTotD').textContent=Math.round(tot).toLocaleString()+' veh·min';
+    el('bnClear').textContent=clearT? clearT.toFixed(0)+' min' : (maxQ>0.5?'not within window ⚠':'no queue ✓');
+    el('bnClear').parentElement.className='card'+((clearT===null&&maxQ>0.5)?' warn':'');
+  }
+  function invOf(arr,n){
+    for(let i=1;i<arr.length;i++){
+      if(arr[i]>=n){
+        const f=(n-arr[i-1])/(arr[i]-arr[i-1]+1e-12);
+        return (i-1+f)*DT;
+      }
+    }
+    return null;
+  }
+
+  function draw(){
+    const p=params();
+    const yMax=Math.ceil(A[A.length-1]/100)*100 || 100;
+    const s=scaffold(cx,W,H,P,T,yMax,'t (min)','N — cumulative vehicles',15,Math.ceil(yMax/6/50)*50||50);
+    // delay area
+    cx.fillStyle='rgba(239,83,80,0.16)';
+    cx.beginPath();
+    cx.moveTo(s.X(0), s.Y(A[0]));
+    for(let i=0;i<A.length;i++) cx.lineTo(s.X(i*DT), s.Y(A[i]));
+    for(let i=D.length-1;i>=0;i--) cx.lineTo(s.X(i*DT), s.Y(D[i]));
+    cx.closePath(); cx.fill();
+    // curves
+    function curve(arr, color){
+      cx.strokeStyle=color; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      for(let i=0;i<arr.length;i++){
+        const x=s.X(i*DT), y=s.Y(arr[i]);
+        if(i===0) cx.moveTo(x,y); else cx.lineTo(x,y);
+      }
+      cx.stroke();
+    }
+    curve(A,'#42a5f5'); curve(D,'#00c853');
+    // capacity + peak annotations
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillStyle='#42a5f5'; cx.fillText('— A(t) cumulative demand', P.l+150, P.t+16);
+    cx.fillStyle='#00a844'; cx.fillText('— D(t) bottleneck output (capacity μ)', P.l+150, P.t+34);
+    cx.fillStyle='#ef5350'; cx.fillText('■ delay (area between curves)', P.l+150, P.t+52);
+    // peak band on the time axis
+    const bx1=s.X(p.t1), bx2=s.X(Math.min(T,p.t1+p.du));
+    cx.fillStyle='rgba(66,165,245,0.10)';
+    cx.fillRect(bx1, P.t, bx2-bx1, s.ph);
+    cx.fillStyle='#42a5f5'; cx.font='11px '+SANS; cx.textAlign='center';
+    cx.fillText('peak demand', (bx1+bx2)/2, P.t+s.ph-6);
+    // hover
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
+      const ht=(hover.x-P.l)/s.pw*T;
+      const i=Math.min(A.length-1, Math.round(ht/DT));
+      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+s.ph); cx.stroke();
+      cx.strokeStyle='#ef5350'; cx.lineWidth=2; cx.setLineDash([5,4]);
+      cx.beginPath(); cx.moveTo(hover.x, s.Y(A[i])); cx.lineTo(hover.x, s.Y(D[i])); cx.stroke();
+      cx.setLineDash([]);
+      // delay of the vehicle at hovered height
+      const hN=(1-(hover.y-P.t)/s.ph)*(s.Y? 1:1);
+      const nVal=Math.max(1, Math.round((1-(hover.y-P.t)/s.ph)* (Math.ceil(A[A.length-1]/100)*100 || 100)));
+      const ta=invOf(A,nVal), td=invOf(D,nVal);
+      const rows=[
+        [`t = ${ht.toFixed(0)} min`, '#1f2937', true],
+        [`A = ${Math.round(A[i])} · D = ${Math.round(D[i])}`, '#4b5563', false],
+        [`queue = ${Math.round(Q[i])} veh`, '#ef5350', false]
+      ];
+      if(ta!==null && td!==null){
+        cx.strokeStyle='#7c3aed'; cx.setLineDash([5,4]); cx.lineWidth=2;
+        cx.beginPath(); cx.moveTo(s.X(ta), s.Y(nVal)); cx.lineTo(s.X(td), s.Y(nVal)); cx.stroke();
+        cx.setLineDash([]);
+        rows.push([`veh #${nVal} delay = ${(td-ta).toFixed(1)} min`, '#7c3aed', false]);
+      }
+      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+    }
+    drawQ();
+  }
+
+  function drawQ(){
+    qx.setTransform(1,0,0,1,0,0);
+    qx.clearRect(0,0,QC.width,QC.height);
+    qx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150,L=30,R=8,Tt=18,B=20;
+    const pw=w-L-R, ph=h-Tt-B;
+    const qMax=Math.max(1, Math.ceil(Math.max(...Q)/10)*10);
+    qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
+    qx.fillText('QUEUE LENGTH Q(t)', 8, 11);
+    qx.strokeStyle='#eef1f6'; qx.lineWidth=1;
+    qx.fillStyle='#7b8494'; qx.font='7px '+SANS;
+    for(let g=0; g<=qMax; g+=Math.max(10,Math.ceil(qMax/4/10)*10)){
+      const y=Tt+ph-(g/qMax)*ph;
+      qx.beginPath(); qx.moveTo(L,y); qx.lineTo(L+pw,y); qx.stroke();
+      qx.textAlign='right'; qx.fillText(g, L-3, y+2);
+    }
+    qx.textAlign='center';
+    for(let g=0; g<=T; g+=30) qx.fillText(g, L+(g/T)*pw, h-8);
+    qx.strokeStyle='#ef5350'; qx.lineWidth=2; qx.lineJoin='round';
+    qx.beginPath();
+    for(let i=0;i<Q.length;i++){
+      const x=L+(i*DT/T)*pw, y=Tt+ph-(Q[i]/qMax)*ph;
+      if(i===0) qx.moveTo(x,y); else qx.lineTo(x,y);
+    }
+    qx.stroke();
+  }
+
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    draw();
+  });
+  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+
+  [['bnL0',v=>parseFloat(v).toFixed(1)+' veh/min'],['bnL1',v=>parseFloat(v).toFixed(1)+' veh/min'],
+   ['bnT1',v=>v+' min'],['bnT2',v=>v+' min'],['bnMu',v=>parseFloat(v).toFixed(1)+' veh/min']].forEach(([id,fmt])=>{
+    el(id).addEventListener('input', ()=>{ el(id+'Val').textContent=fmt(el(id).value); compute(); draw(); });
+  });
+  compute(); draw();
+})();
+
+// ─────────────────────────────────────────────
+//  PANEL 3 — SIGNAL QUEUE (D/D/1)
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('sgChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height, P={l:64,r:20,t:24,b:44};
+  const QC=el('sgQChart'), qx=QC.getContext('2d');
+  const DT=0.2;
+  let A=[], D=[], Q=[], hover=null;
+
+  function params(){
+    return { lam:parseFloat(el('sgLam').value)/60, r:parseFloat(el('sgRed').value),
+             g:parseFloat(el('sgGrn').value), s:parseFloat(el('sgSat').value)/3600 };
+  }
+  function compute(){
+    const p=params(), Cyc=p.r+p.g, T=4*Cyc;
+    A=[0]; D=[0]; Q=[0];
+    let a=0,d=0,q=0;
+    for(let ts=DT; ts<=T+1e-9; ts+=DT){
+      a += p.lam*DT;
+      const green = (ts % Cyc) >= p.r;
+      const rate = green ? (q>1e-9 ? p.s : Math.min(p.lam, p.s)) : 0;
+      q = Math.max(0, q + (p.lam - rate)*DT);
+      d = a - q;
+      A.push(a); D.push(d); Q.push(q);
+    }
+    const qr=p.lam*p.r;
+    const tc=(p.s>p.lam)? qr/(p.s-p.lam) : Infinity;
+    const undersat = p.lam*Cyc <= p.s*p.g + 1e-9;
+    const du = undersat ? (p.r*p.r)/(2*Cyc*(1-p.lam/p.s)) : null;
+    el('sgQr').textContent=qr.toFixed(1)+' veh';
+    el('sgTc').textContent=isFinite(tc)? tc.toFixed(1)+' s'+(tc>p.g?' ⚠ > green':'') : '∞';
+    el('sgDu').textContent=du!==null? du.toFixed(1)+' s/veh' : '— (oversaturated)';
+    el('sgCap').textContent=(p.lam*Cyc).toFixed(1)+' vs '+(p.s*p.g).toFixed(1)+(undersat?' ✓':' ⚠ OVERSAT');
+    el('sgCapCard').className='card'+(undersat?'':' warn');
+    return {p, Cyc, T};
+  }
+
+  function draw(){
+    const {p,Cyc,T}=compute();
+    const yMax=Math.max(10, Math.ceil(A[A.length-1]/10)*10);
+    const s=scaffold(cx,W,H,P,Math.round(T),yMax,'t (s)','N — cumulative vehicles',Math.round(Cyc/2),Math.max(5,Math.ceil(yMax/6/5)*5));
+    // red bands
+    for(let k=0;k<4;k++){
+      const x1=s.X(k*Cyc), x2=s.X(k*Cyc+p.r);
+      cx.fillStyle='rgba(214,69,69,0.08)';
+      cx.fillRect(x1, P.t, x2-x1, s.ph);
+    }
+    // delay area
+    cx.fillStyle='rgba(239,83,80,0.18)';
+    cx.beginPath();
+    cx.moveTo(s.X(0), s.Y(A[0]));
+    for(let i=0;i<A.length;i++) cx.lineTo(s.X(i*DT), s.Y(A[i]));
+    for(let i=D.length-1;i>=0;i--) cx.lineTo(s.X(i*DT), s.Y(D[i]));
+    cx.closePath(); cx.fill();
+    function curve(arr,color){
+      cx.strokeStyle=color; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      for(let i=0;i<arr.length;i++){
+        const x=s.X(i*DT), y=s.Y(arr[i]);
+        if(i===0) cx.moveTo(x,y); else cx.lineTo(x,y);
+      }
+      cx.stroke();
+    }
+    curve(A,'#42a5f5'); curve(D,'#00c853');
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillStyle='#42a5f5'; cx.fillText('— arrivals (rate λ)', P.l+130, P.t+16);
+    cx.fillStyle='#00a844'; cx.fillText('— departures (0 on red, s on green)', P.l+130, P.t+34);
+    cx.fillStyle='#c1121f'; cx.fillText('■ red intervals', P.l+130, P.t+52);
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
+      const ht=(hover.x-P.l)/s.pw*T;
+      const i=Math.min(A.length-1, Math.round(ht/DT));
+      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+s.ph); cx.stroke();
+      cx.strokeStyle='#ef5350'; cx.lineWidth=2; cx.setLineDash([5,4]);
+      cx.beginPath(); cx.moveTo(hover.x, s.Y(A[i])); cx.lineTo(hover.x, s.Y(D[i])); cx.stroke();
+      cx.setLineDash([]);
+      tooltipCard(cx, hover.x, hover.y, [
+        [`t = ${ht.toFixed(0)} s`, '#1f2937', true],
+        [`arrived ${A[i].toFixed(1)} · departed ${D[i].toFixed(1)}`, '#4b5563', false],
+        [`queue = ${Q[i].toFixed(1)} veh`, '#ef5350', false]
+      ], P, s.pw, s.ph);
+    }
+    drawQ(T);
+  }
+
+  function drawQ(T){
+    qx.setTransform(1,0,0,1,0,0);
+    qx.clearRect(0,0,QC.width,QC.height);
+    qx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150,L=26,R=8,Tt=18,B=20;
+    const pw=w-L-R, ph=h-Tt-B;
+    const qMax=Math.max(1, Math.ceil(Math.max(...Q)));
+    qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
+    qx.fillText('QUEUE Q(t) — sawtooth per cycle', 8, 11);
+    qx.strokeStyle='#eef1f6'; qx.lineWidth=1;
+    qx.fillStyle='#7b8494'; qx.font='7px '+SANS;
+    const step=Math.max(1,Math.ceil(qMax/4));
+    for(let g=0; g<=qMax; g+=step){
+      const y=Tt+ph-(g/qMax)*ph;
+      qx.beginPath(); qx.moveTo(L,y); qx.lineTo(L+pw,y); qx.stroke();
+      qx.textAlign='right'; qx.fillText(g, L-3, y+2);
+    }
+    qx.strokeStyle='#ef5350'; qx.lineWidth=2; qx.lineJoin='round';
+    qx.beginPath();
+    for(let i=0;i<Q.length;i++){
+      const x=L+(i*DT/T)*pw, y=Tt+ph-(Q[i]/qMax)*ph;
+      if(i===0) qx.moveTo(x,y); else qx.lineTo(x,y);
+    }
+    qx.stroke();
+  }
+
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    draw();
+  });
+  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+
+  [['sgLam',v=>parseFloat(v).toFixed(1)+' veh/min'],['sgRed',v=>v+' s'],
+   ['sgGrn',v=>v+' s'],['sgSat',v=>v+' veh/hr']].forEach(([id,fmt])=>{
+    el(id).addEventListener('input', ()=>{ el(id+'Val').textContent=fmt(el(id).value); draw(); });
+  });
+  draw();
+})();
+</script>
+</body>
+</html>
