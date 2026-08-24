@@ -750,21 +750,30 @@ document.querySelectorAll('.tab').forEach(tab => {
   // Each vehicle defined by: speed (0-1 per DUR), startOffset (time offset of entry)
   const FAST_COLOR = '#a4161a';
   const SLOW_COLOR = '#2c5378';
+  // spacing is measured point-to-point on the diagram, but physically two
+  // same-lane vehicles can never be closer than a vehicle length + minimum gap
+  const VEH_LEN = 0.012;              // vehicle length (fraction of L)
+  const MIN_GAP = 0.006;              // minimum bumper-to-bumper gap
+  const S_MIN  = VEH_LEN + MIN_GAP;   // minimum front-to-front spacing
 
   function makeVehicles(){
     // continuous stream: random arrivals from before t=0 until the end of the
-    // window, each randomly fast or slow with a little speed jitter
+    // window, each randomly fast or slow with a little speed jitter.
+    // Each vehicle remembers the previous vehicle in ITS lane — its leader.
     const vehicles = [];
-    let tA = -8;
+    let tA = -8, lastFast = null, lastSlow = null;
     while(tA < DUR - 0.3){
       const fast = Math.random() < 0.5;
       const base = fast ? 0.085 : 0.038;
-      vehicles.push({
+      const veh = {
         speed: base*(1 + (Math.random()*0.2 - 0.1)),
         offset: tA,
         color: fast ? FAST_COLOR : SLOW_COLOR,
-        lane: fast ? 0.3 : 0.7
-      });
+        lane: fast ? 0.3 : 0.7,
+        leader: fast ? lastFast : lastSlow
+      };
+      if(fast) lastFast = veh; else lastSlow = veh;
+      vehicles.push(veh);
       tA += 0.4 + Math.random()*1.0;
     }
     return vehicles;
@@ -772,13 +781,42 @@ document.querySelectorAll('.tab').forEach(tab => {
 
   let vehicles = makeVehicles();
 
-  // Get x position of vehicle at time t (in seconds), returns null if not on road yet or past end
-  function getVehX(veh, tSec){
-    const entry = veh.offset; // time vehicle enters road
-    if(tSec < entry) return null;
-    const x = (tSec - entry) * veh.speed;
-    if(x > 1) return null;
+  // constrained position: free-flow, but never closer than S_MIN to the
+  // same-lane leader (no overlapping / passing within a lane)
+  function posOf(veh, tSec){
+    let x = (tSec - veh.offset) * veh.speed;
+    if(veh.leader){
+      const xl = posOf(veh.leader, tSec);
+      x = Math.min(x, xl - S_MIN);
+    }
     return x;
+  }
+
+  // Get x position of vehicle at time t, null if not on road yet or already exited
+  function getVehX(veh, tSec){
+    if(tSec < veh.offset) return null;
+    const x = posOf(veh, tSec);
+    if(x < 0 || x > 1) return null;
+    return x;
+  }
+
+  // time at which a vehicle's (constrained) position crosses xTarget — positions
+  // are monotone increasing, so bisection is exact enough
+  function passTime(veh, xTarget){
+    let lo = veh.offset, hi = veh.offset + 3/veh.speed + 10;
+    if(posOf(veh, hi) < xTarget) return null;
+    if(posOf(veh, lo) >= xTarget) return null;
+    for(let i=0;i<40;i++){
+      const mid = (lo+hi)/2;
+      if(posOf(veh, mid) < xTarget) lo = mid; else hi = mid;
+    }
+    return (lo+hi)/2;
+  }
+
+  // actual instantaneous speed (followers move at their leader's pace)
+  function speedAt(veh, tSec){
+    const e = 0.05;
+    return (posOf(veh, tSec+e) - posOf(veh, tSec-e))/(2*e);
   }
 
   function drawRoadStrip(tSec){
@@ -848,25 +886,32 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.fillText('0',PAD.l-4,PAD.t+plotH+4);
     tctx.fillText('L',PAD.l-4,PAD.t+4);
 
-    // draw full trajectory lines for each vehicle (up to current time)
+    // draw trajectories as sampled polylines (car-following caps create kinks:
+    // a fast car catches its same-lane leader and follows at minimum spacing)
     vehicles.forEach(veh => {
-      const tStart = Math.max(0, veh.offset);
-      const tEnd   = Math.min(tSec, veh.offset + 1/veh.speed);
-      if(tEnd <= tStart) return;
-      const x0 = getVehX(veh, tStart) || 0;
-      const x1 = getVehX(veh, tEnd)   || 0;
-      const px0 = PAD.l + (tStart/DUR)*plotW;
-      const py0 = PAD.t + plotH - x0*plotH;
-      const px1 = PAD.l + (tEnd/DUR)*plotW;
-      const py1 = PAD.t + plotH - x1*plotH;
       tctx.strokeStyle = veh.color;
       tctx.lineWidth = 2.5;
       tctx.globalAlpha = 0.45;   // translucent so crossings & headways stay readable
-      tctx.beginPath(); tctx.moveTo(px0,py0); tctx.lineTo(px1,py1); tctx.stroke();
+      tctx.beginPath();
+      let started = false, exited = false;
+      for(let ts = Math.max(0, veh.offset); ts <= tSec + 1e-6 && !exited; ts += 0.12){
+        const x = getVehX(veh, Math.min(ts, tSec));
+        if(x === null){
+          if(started) exited = true;
+          continue;
+        }
+        const px = PAD.l + (Math.min(ts, tSec)/DUR)*plotW;
+        const py = PAD.t + plotH - x*plotH;
+        if(!started){ tctx.moveTo(px,py); started = true; } else tctx.lineTo(px,py);
+      }
+      const xNow = getVehX(veh, tSec);
+      if(started && !exited && xNow !== null){
+        tctx.lineTo(PAD.l+(tSec/DUR)*plotW, PAD.t+plotH-xNow*plotH);
+      }
+      if(started) tctx.stroke();
       tctx.globalAlpha = 1;
 
       // dot at current position
-      const xNow = getVehX(veh, tSec);
       if(xNow !== null){
         const dpx = PAD.l+(tSec/DUR)*plotW;
         const dpy = PAD.t+plotH-xNow*plotH;
@@ -888,9 +933,9 @@ document.querySelectorAll('.tab').forEach(tab => {
       const obsX01 = 1 - (obsY - PAD.t)/plotH;
       let lastFastT = null, lastSlowT = null;
       vehicles.forEach(veh => {
-        // find time vehicle passes obsX01
-        const tPass = veh.offset + obsX01/veh.speed;
-        if(tPass < 0 || tPass > DUR) return;
+        // find time vehicle passes obsX01 (numeric — trajectories have kinks)
+        const tPass = passTime(veh, obsX01);
+        if(tPass === null || tPass < 0 || tPass > DUR) return;
         if(tPass > tSec) return;
         const px = PAD.l + (tPass/DUR)*plotW;
         tctx.strokeStyle = veh.color; tctx.lineWidth=2;
@@ -973,8 +1018,8 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // average headway (observer) and average spacing (photo) along the bottom
     const obsX01s = 1 - obsFrac;
-    const passTimes = vehicles.map(v => v.offset + obsX01s/v.speed)
-                              .filter(tp => tp >= 0 && tp <= tSec)
+    const passTimes = vehicles.map(v => passTime(v, obsX01s))
+                              .filter(tp => tp !== null && tp >= 0 && tp <= tSec)
                               .sort((a,b) => a-b);
     let hbar = 0;
     if(passTimes.length > 1){
@@ -991,7 +1036,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.font='600 12px sans-serif'; tctx.fillStyle='#0f7b82'; tctx.textAlign='left';
     tctx.fillText(hbar ? `avg headway h̄ = ${hbar.toFixed(2)} s  →  q = 1/h̄ = ${(1/hbar).toFixed(2)} veh/s` : 'avg headway h̄ = — (no passings yet)', PAD.l, TH-4);
     tctx.textAlign='right';
-    tctx.fillText(sbar ? `avg spacing s̄ = ${(sbar*100).toFixed(1)} %L  →  k = 1/s̄ = ${(1/sbar).toFixed(1)} veh/L` : 'avg spacing s̄ = —', PAD.l+plotW, TH-4);
+    tctx.fillText(sbar ? `avg spacing s̄ = ${(sbar*100).toFixed(1)} %L (min ${(S_MIN*100).toFixed(1)})  ·  bumper gap = s̄−L = ${((sbar-VEH_LEN)*100).toFixed(1)} %L  →  k = ${(1/sbar).toFixed(1)} veh/L` : 'avg spacing s̄ = —', PAD.l+plotW, TH-4);
 
     drawHover(tctx, tsdC, PAD, plotW, plotH, DUR, f => (f*100).toFixed(0)+'% of L');
   }
@@ -1073,11 +1118,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     const obsX01 = 1 - obsFrac;
     const passed = [];
     vehicles.forEach(veh => {
-      const tPass = veh.offset + obsX01/veh.speed;
-      if(tPass >= 0 && tPass <= t) passed.push(veh.speed);
+      const tPass = passTime(veh, obsX01);
+      if(tPass !== null && tPass >= 0 && tPass <= t) passed.push(speedAt(veh, tPass));
     });
     const pT = photoT===null ? t : Math.min(photoT, t);
-    const onRoad = vehicles.filter(v => getVehX(v, pT) !== null).map(v => v.speed);
+    const onRoad = vehicles.filter(v => getVehX(v, pT) !== null).map(v => speedAt(v, pT));
     const mean = arr => arr.length ? arr.reduce((s,x)=>s+x,0)/arr.length : 0;
     const Vt = mean(passed)*100, Vs = mean(onRoad)*100;
     el('manyReadout').textContent =
