@@ -86,9 +86,10 @@ input:checked + .slider:before { transform: translateX(13px); }
 /* ── Right panel (StreetLight) ── */
 #sl-panel {
   position: absolute; right: 10px; top: 44px; z-index: 998;
-  width: 268px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
+  width: 320px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
   border-radius: 8px; box-shadow: -4px 4px 20px rgba(0,0,0,0.5);
   max-height: calc(100vh - 120px); display: none; flex-direction: column;
+  overflow: hidden;
 }
 #sl-panel-header {
   display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
@@ -118,11 +119,11 @@ input:checked + .slider:before { transform: translateX(13px); }
 .stat-lbl { color: #8892b0; font-size: 9px; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
 .seg-name { color: #e2e8f0; font-size: 11px; font-weight: 700; margin-bottom: 10px; line-height: 1.4; }
 
-/* ── Population panel (bottom-right) ── */
+/* ── Population panel (top of the frame, clear of the StreetLight panel) ── */
 #pop-panel {
-  position: absolute; right: 10px; bottom: 40px; z-index: 997;
+  position: absolute; left: 54px; top: 10px; z-index: 997;
   width: 268px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
-  border-radius: 8px; box-shadow: -4px 4px 20px rgba(0,0,0,0.5); display: none;
+  border-radius: 8px; box-shadow: 4px 4px 20px rgba(0,0,0,0.5); display: none;
 }
 #pop-panel-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -522,6 +523,8 @@ function setSlDir(dir) {
   if (streetlightLayer) buildLayer();
   updateSlLegend();
   buildSlPanelCharts();
+  // re-render the open segment detail so it follows the direction filter too
+  if (lastSegProps && document.getElementById('slview-segment').style.display!=='none') showSegmentInfo(lastSegProps);
 }
 
 function updateSlLegend() {
@@ -756,14 +759,18 @@ function switchSlTab(tab) {
   document.getElementById('sltab-segment').classList.toggle('active',tab==='segment');
   document.getElementById('slview-profile').style.display=tab==='profile'?'block':'none';
   document.getElementById('slview-segment').style.display=tab==='segment'?'block':'none';
+  // charts created while their canvas was hidden have zero size — fix on reveal
+  if (tab==='profile'){ if(chartSlVol)chartSlVol.resize(); if(chartSlSpd)chartSlSpd.resize(); }
 }
 
-// ── Segment info ──────────────────────────────────────────────────────
-var chartVol=null,chartSpd=null;
+// ── Segment info (respects the EB/WB direction filter) ────────────────
+var chartVol=null,chartSpd=null,lastSegProps=null;
 function showSegmentInfo(p) {
+  lastSegProps=p;
   switchSlTab('segment');
   document.getElementById('sl-seg-default').style.display='none';
   const el=document.getElementById('sl-seg-content'); el.style.display='block';
+  const showE = currentSlDir!=='WEST', showW = currentSlDir!=='EAST';
   function dirBlock(dir,adt,spd,ff,tti,p85,cong) {
     if (!adt) return '';
     return '<div class="dir-section"><div class="dir-title">'+(dir==='EAST'?'&#9658; Eastbound':'&#9668; Westbound')+'</div>'+
@@ -774,21 +781,32 @@ function showSegmentInfo(p) {
       '<div class="dir-row"><span class="dir-key">85th Pct Speed</span><span class="dir-val">'+(p85||'N/A')+' mph</span></div>'+
       '<div class="dir-row"><span class="dir-key">Congested?</span><span class="dir-val '+(cong?'congested-yes':'congested-no')+'">'+(cong?'&#9888; Yes':'&#10003; No')+'</span></div></div>';
   }
+  const adtVal = currentSlDir==='EAST'?(p.ADT_EAST||0) : currentSlDir==='WEST'?(p.ADT_WEST||0) : (p.Total_ADT||0);
+  const adtLbl = currentSlDir==='EAST'?'EB ADT' : currentSlDir==='WEST'?'WB ADT' : 'Total ADT';
   el.innerHTML='<div class="seg-name">'+p.name+'</div>'+
     '<div class="stats-grid">'+
-      '<div class="stat-card"><div class="stat-val">'+(p.Total_ADT||0).toLocaleString()+'</div><div class="stat-lbl">Total ADT</div></div>'+
+      '<div class="stat-card"><div class="stat-val">'+adtVal.toLocaleString()+'</div><div class="stat-lbl">'+adtLbl+'</div></div>'+
       '<div class="stat-card"><div class="stat-val">'+(p.length_mi?p.length_mi.toFixed(3):'?')+'</div><div class="stat-lbl">Length (mi)</div></div>'+
     '</div>'+
-    dirBlock('EAST',p.ADT_EAST,p.speed_EAST,p.freeflow_EAST,p.tti_EAST,p.p85spd_EAST,p.congested_EAST)+
-    dirBlock('WEST',p.ADT_WEST,p.speed_WEST,p.freeflow_WEST,p.tti_WEST,p.p85spd_WEST,p.congested_WEST)+
+    (showE?dirBlock('EAST',p.ADT_EAST,p.speed_EAST,p.freeflow_EAST,p.tti_EAST,p.p85spd_EAST,p.congested_EAST):'')+
+    (showW?dirBlock('WEST',p.ADT_WEST,p.speed_WEST,p.freeflow_WEST,p.tti_WEST,p.p85spd_WEST,p.congested_WEST):'')+
     '<div class="sl-chart-wrap"><div class="sl-chart-title">Hourly Volume</div><canvas id="chartSegVol"></canvas></div>'+
     '<div class="sl-chart-wrap"><div class="sl-chart-title">Hourly Speed</div><canvas id="chartSegSpd"></canvas></div>';
   const h=p.hourly||{},eastH=h['EAST']||[],westH=h['WEST']||[];
   const labels=(eastH.length?eastH:westH).map(r=>r.h);
   if(chartVol){chartVol.destroy();chartVol=null;} if(chartSpd){chartSpd.destroy();chartSpd=null;}
   const o={animation:false,responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:9}}}},scales:{x:{ticks:{color:'#8892b0',font:{size:8},maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8892b0',font:{size:8}},grid:{color:'rgba(255,255,255,0.04)'}}} };
-  chartVol=new Chart(document.getElementById('chartSegVol'),{type:'line',options:o,data:{labels,datasets:[{label:'EB',data:eastH.map(r=>r.v),borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:2,borderWidth:2},{label:'WB',data:westH.map(r=>r.v),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,0.08)',tension:0.4,pointRadius:2,borderWidth:2}]}});
-  chartSpd=new Chart(document.getElementById('chartSegSpd'),{type:'line',options:o,data:{labels,datasets:[{label:'EB',data:eastH.map(r=>r.s),borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:2,borderWidth:2},{label:'WB',data:westH.map(r=>r.s),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,0.08)',tension:0.4,pointRadius:2,borderWidth:2}]}});
+  const dsV=[], dsS=[];
+  if(showE && eastH.length){
+    dsV.push({label:'EB',data:eastH.map(r=>r.v),borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:2,borderWidth:2});
+    dsS.push({label:'EB',data:eastH.map(r=>r.s),borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:2,borderWidth:2});
+  }
+  if(showW && westH.length){
+    dsV.push({label:'WB',data:westH.map(r=>r.v),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,0.08)',tension:0.4,pointRadius:2,borderWidth:2});
+    dsS.push({label:'WB',data:westH.map(r=>r.s),borderColor:'#ffb74d',backgroundColor:'rgba(255,183,77,0.08)',tension:0.4,pointRadius:2,borderWidth:2});
+  }
+  chartVol=new Chart(document.getElementById('chartSegVol'),{type:'line',options:o,data:{labels,datasets:dsV}});
+  chartSpd=new Chart(document.getElementById('chartSegSpd'),{type:'line',options:o,data:{labels,datasets:dsS}});
 }
 
 // ── TCDS Charts ───────────────────────────────────────────────────────
