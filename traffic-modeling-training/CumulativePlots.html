@@ -95,11 +95,15 @@
           <span class="val" id="ncSpdVal">1.0×</span>
         </div>
         <div class="control-group">
-          <label>Slowdown (t = 12–20 s)</label>
-          <div style="display:flex; align-items:center; gap:8px; font-size:0.82em">
+          <label id="ncSlowLbl">Slowdown (t = 12–20 s)</label>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.82em; flex-wrap:wrap; justify-content:center">
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ncSlow" checked> on</label>
-            <input type="range" id="ncSev" min="25" max="90" step="5" value="35" style="width:80px">
+            <span style="color:#0f7b82">severity</span>
+            <input type="range" id="ncSev" min="25" max="90" step="5" value="35" style="width:70px">
             <span class="val" id="ncSevVal">35%</span>
+            <span style="color:#0f7b82">length</span>
+            <input type="range" id="ncDur" min="4" max="24" step="2" value="8" style="width:70px">
+            <span class="val" id="ncDurVal">8 s</span>
           </div>
         </div>
       </div>
@@ -223,7 +227,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const roadC = el('ncRoad'), rx = roadC.getContext('2d');
   const dC = el('ncDelay'), dxx = dC.getContext('2d');
   const DUR=40, DT=0.05, S_MIN=0.03, VEHL=0.02;
-  const Z1=0.48, Z2=0.55, TS1=12, TS2=20;   // slow zone (space) and its active window (time)
+  const Z1=0.48, Z2=0.55, TS1=12;           // slow zone (space); window starts at TS1
+  let TS2=20;                                // window end — set by the duration slider
   const LANE_COL=['#0e7c86','#8c3a4c'];
   let vehicles=[], t=0, playing=true, lastTs=null;
   let d1=0.25, d2=0.80;
@@ -578,6 +583,13 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('ncSpd').addEventListener('input', ()=>{ el('ncSpdVal').textContent=parseFloat(el('ncSpd').value).toFixed(1)+'×'; });
   el('ncSlow').addEventListener('change', ()=>{ simulate(); render(); });
   el('ncSev').addEventListener('input', ()=>{ el('ncSevVal').textContent=el('ncSev').value+'%'; simulate(); render(); });
+  el('ncDur').addEventListener('input', ()=>{
+    const du=parseFloat(el('ncDur').value);
+    TS2=TS1+du;
+    el('ncDurVal').textContent=du+' s';
+    el('ncSlowLbl').textContent=`Slowdown (t = ${TS1}–${TS2} s)`;
+    simulate(); render();
+  });
 
   function loop(ts){
     if(!lastTs) lastTs=ts;
