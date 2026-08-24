@@ -13,7 +13,7 @@ body { font-family: Arial, sans-serif; display: flex; flex-direction: column; he
 
 /* ── Layout ── */
 #main-wrap { display: flex; flex: 1; min-height: 0; }
-#map-area  { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+#map-area  { display: flex; flex-direction: row; flex: 1; min-width: 0; }
 #map       { flex: 1; position: relative; }
 
 /* ── Sidebar ── */
@@ -83,9 +83,11 @@ input:checked + .slider:before { transform: translateX(13px); }
 .ic-val { color: #ccd6f6; font-size: 10px; font-weight: 600; }
 .grade-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 900; background: rgba(100,255,218,0.15); color: #64ffda; border: 1px solid rgba(100,255,218,0.3); }
 
-/* ── StreetLight right dock: slides in and pushes the map to the left ── */
-#map-row { flex: 1; display: flex; min-height: 0; }
-#map-row #map { flex: 1; min-width: 0; height: auto; }
+/* ── StreetLight right dock: full height, slides in and pushes the map left.
+     TCDS lives INSIDE the left column, so it only pushes the map up — the two
+     docks never overlap each other. ── */
+#map-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#map-col #map { flex: 1; min-height: 0; height: auto; }
 #sl-panel {
   flex: 0 0 auto; width: 0; overflow: hidden;
   background: #16213e; border-left: 2px solid #0f3460;
@@ -308,7 +310,7 @@ input:checked + .slider:before { transform: translateX(13px); }
 
 <!-- ═══ MAP AREA ═══ -->
 <div id="map-area">
-  <div id="map-row">
+  <div id="map-col">
   <div id="map">
 
     <!-- Complete Streets banner -->
@@ -383,7 +385,28 @@ input:checked + .slider:before { transform: translateX(13px); }
 
   </div><!-- /map -->
 
-  <!-- StreetLight right dock: pushes the map to the left when open -->
+  <!-- TCDS bottom panel (2 cards only) — inside the left column so it only pushes the MAP up -->
+  <div id="tcds-panel">
+    <div class="tcds-card">
+      <div class="tcds-card-header">
+        <div>
+          <div class="tcds-card-title">AADT by Year &mdash; Station 203149</div>
+          <div class="tcds-card-sub">72nd Ave E/O Oak St &nbsp;|&nbsp; Growth since 2011</div>
+        </div>
+      </div>
+      <canvas id="chartAadt"></canvas>
+    </div>
+    <div class="tcds-card">
+      <div class="tcds-card-header">
+        <div class="tcds-card-title">Hourly Volume Distribution</div>
+        <select id="date-filter" onchange="updateHourlyChart()"></select>
+      </div>
+      <canvas id="chartHourly"></canvas>
+    </div>
+  </div>
+  </div><!-- /map-col -->
+
+  <!-- StreetLight right dock: full height, pushes the map to the left when open -->
   <div id="sl-panel">
     <div id="sl-panel-header">
       <span id="sl-panel-title">StreetLight Data</span>
@@ -412,27 +435,6 @@ input:checked + .slider:before { transform: translateX(13px); }
         <div id="sl-seg-default" style="color:#8892b0;font-size:11px;text-align:center;padding:18px 0">Click a segment on the map</div>
         <div id="sl-seg-content"></div>
       </div>
-    </div>
-  </div>
-  </div><!-- /map-row -->
-
-  <!-- TCDS bottom panel (2 cards only) -->
-  <div id="tcds-panel">
-    <div class="tcds-card">
-      <div class="tcds-card-header">
-        <div>
-          <div class="tcds-card-title">AADT by Year &mdash; Station 203149</div>
-          <div class="tcds-card-sub">72nd Ave E/O Oak St &nbsp;|&nbsp; Growth since 2011</div>
-        </div>
-      </div>
-      <canvas id="chartAadt"></canvas>
-    </div>
-    <div class="tcds-card">
-      <div class="tcds-card-header">
-        <div class="tcds-card-title">Hourly Volume Distribution</div>
-        <select id="date-filter" onchange="updateHourlyChart()"></select>
-      </div>
-      <canvas id="chartHourly"></canvas>
     </div>
   </div>
 
