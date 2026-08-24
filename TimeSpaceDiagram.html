@@ -752,8 +752,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   const SLOW_COLOR = '#2c5378';
   // spacing is measured point-to-point on the diagram, but physically two
   // same-lane vehicles can never be closer than a vehicle length + minimum gap
-  const VEH_LEN = 0.012;              // vehicle length (fraction of L)
-  const MIN_GAP = 0.006;              // minimum bumper-to-bumper gap
+  const VEH_LEN = 0.025;              // vehicle length (fraction of L)
+  const MIN_GAP = 0.008;              // minimum bumper-to-bumper gap
   const S_MIN  = VEH_LEN + MIN_GAP;   // minimum front-to-front spacing
 
   function makeVehicles(){
@@ -826,13 +826,16 @@ document.querySelectorAll('.tab').forEach(tab => {
     tctx.fillStyle = '#4b5563'; tctx.font = '11px sans-serif'; tctx.textAlign = 'center';
     tctx.fillText('x = L', (ROAD.x0+ROAD.x1)/2, PAD.t+13);
     tctx.fillText('x = 0', (ROAD.x0+ROAD.x1)/2, PAD.t+plotH-5);
-    // two lanes: fast on the left, slow on the right of the divider
+    // two lanes: fast on the left, slow on the right of the divider.
+    // Cars are drawn at their TRUE physical length (VEH_LEN of the road), so
+    // vehicles at minimum legal spacing render with a visible gap, never overlapping
+    const carScale = (VEH_LEN*plotH)/34;
     vehicles.forEach(veh => {
       const x01 = getVehX(veh, tSec);
       if(x01 === null) return;
       const cx = ROAD.x0 + veh.lane*(ROAD.x1-ROAD.x0);
       const cy = PAD.t + plotH - x01*plotH;
-      drawCarV(tctx, cx, cy, veh.color, 0.48);
+      drawCarV(tctx, cx, cy, veh.color, carScale);
     });
 
     // observer standing at the roadside (same height as the draggable line)
