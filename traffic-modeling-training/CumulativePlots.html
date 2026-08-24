@@ -78,14 +78,14 @@
       <canvas id="ncChart" class="big-canvas" width="1200" height="560"></canvas>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip"><b>N(x,t)</b> counts the cumulative number of vehicles that have passed location x by time t. Plot N at two locations: the <b>vertical distance</b> between the curves is the number of vehicles between the detectors (<b>accumulation</b>), and — with FIFO — the <b>horizontal distance</b> at height n is vehicle n's <b>trip time</b> from X₁ to X₂. Drag the two detector lines on the road; hover the chart to read accumulation and trip time anywhere.</span></span></div>
-      <canvas id="ncRoad" class="road-mini" width="520" height="560"></canvas>
+      <div class="pane-head"><span class="help">i<span class="tip"><b>N(x,t)</b> counts the cumulative vehicles past location x by time t, here on a <b>two-lane</b> road. The <b>vertical gap</b> between the curves is the accumulation between the detectors; with FIFO the <b>horizontal gap</b> at height n is vehicle n's trip time. A mid-road <b>slowdown</b> (orange zone, active t = 12–26 s) creates a queue: N₂ flattens then recovers at capacity. Steps show the true counts; the <b>smooth overlays</b> are monotone-cubic fits. The dashed <b>virtual arrival curve</b> is N₁ shifted by the free-flow trip time — its gap to N₂ (shaded) is pure <b>delay</b>. Drag the detector lines; when the run finishes, every vehicle's delay is charted below.</span></span></div>
+      <canvas id="ncRoad" class="road-mini" width="520" height="420"></canvas>
       <div class="readout" id="ncReadout">Press ▶ Play — vehicles cross detector X₁ (teal) then X₂ (amber)</div>
       <div class="controls">
         <button class="action" id="ncPlay">⏸ Pause</button>
         <button class="action sec" id="ncReset">↺ Reset</button>
         <div class="control-group">
-          <label>Mean arrival headway</label>
+          <label>Mean arrival headway (both lanes)</label>
           <input type="range" id="ncHead" min="1" max="4" step="0.25" value="2">
           <span class="val" id="ncHeadVal">2.0 s</span>
         </div>
@@ -94,7 +94,16 @@
           <input type="range" id="ncSpd" min="0.3" max="3" step="0.1" value="1">
           <span class="val" id="ncSpdVal">1.0×</span>
         </div>
+        <div class="control-group">
+          <label>Slowdown (t = 12–26 s)</label>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.82em">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="ncSlow" checked> on</label>
+            <input type="range" id="ncSev" min="10" max="90" step="5" value="35" style="width:80px">
+            <span class="val" id="ncSevVal">35%</span>
+          </div>
+        </div>
       </div>
+      <canvas id="ncDelay" class="gauge-canvas" width="520" height="300"></canvas>
     </div>
     </div>
   </div>
@@ -212,93 +221,210 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const C = el('ncChart'), cx = C.getContext('2d');
   const W=C.width, H=C.height, P={l:64,r:20,t:24,b:44};
   const roadC = el('ncRoad'), rx = roadC.getContext('2d');
-  const DUR=40, S_MIN=0.03, VEHL=0.02;
+  const dC = el('ncDelay'), dxx = dC.getContext('2d');
+  const DUR=40, DT=0.05, S_MIN=0.03, VEHL=0.02;
+  const Z1=0.45, Z2=0.58, TS1=12, TS2=26;   // slow zone (space) and its active window (time)
+  const LANE_COL=['#0e7c86','#8c3a4c'];
   let vehicles=[], t=0, playing=true, lastTs=null;
-  let d1=0.30, d2=0.70;         // detector positions (fraction of road)
-  let pass1=[], pass2=[];       // pass times per vehicle (vehicle order)
+  let d1=0.25, d2=0.80;
+  let pass1=[], pass2=[];
   let hover=null;
+
+  // monotone cubic (Fritsch–Carlson) — used for the smooth N-curve overlays
+  function pchip(xs, ys){
+    const n=xs.length;
+    if(n<3) return x=>ys[n-1]||0;
+    const h=[], dd=[];
+    for(let i=0;i<n-1;i++){ h.push(Math.max(1e-6,xs[i+1]-xs[i])); dd.push((ys[i+1]-ys[i])/h[i]); }
+    const m=new Array(n);
+    m[0]=dd[0]; m[n-1]=dd[n-2];
+    for(let i=1;i<n-1;i++){
+      if(dd[i-1]*dd[i]<=0) m[i]=0;
+      else { const w1=2*h[i]+h[i-1], w2=h[i]+2*h[i-1]; m[i]=(w1+w2)/(w1/dd[i-1]+w2/dd[i]); }
+    }
+    return function(x){
+      if(x<=xs[0]) return ys[0];
+      if(x>=xs[n-1]) return ys[n-1];
+      let i=0; while(i<n-2 && x>xs[i+1]) i++;
+      const tt=(x-xs[i])/h[i];
+      const h00=(1+2*tt)*(1-tt)*(1-tt), h10=tt*(1-tt)*(1-tt), h01=tt*tt*(3-2*tt), h11=tt*tt*(tt-1);
+      return h00*ys[i]+h10*h[i]*m[i]+h01*ys[i+1]+h11*h[i]*m[i+1];
+    };
+  }
 
   function makeVehicles(){
     const hbar=parseFloat(el('ncHead').value);
     vehicles=[];
-    let tA=-25, leader=null;
+    const lastInLane=[null,null];
+    let tA=-25;
     while(tA < DUR-2){
-      const v={ t0:tA, v:0.05*(1+(Math.random()*0.2-0.1)), leader };
-      leader=v; vehicles.push(v);
-      tA += hbar*(0.5+Math.random());
+      const lane = Math.random()<0.5 ? 0 : 1;
+      const v={ t0:tA, v0:0.05*(1+(Math.random()*0.2-0.1)), lane, leader:lastInLane[lane], hist:[] };
+      lastInLane[lane]=v;
+      vehicles.push(v);
+      tA += (hbar/2)*(0.5+Math.random());   // slider = combined two-lane headway
     }
   }
-  function posOf(v, ts){
-    let x=(ts-v.t0)*v.v;
-    if(v.leader) x=Math.min(x, posOf(v.leader, ts)-S_MIN);
-    return x;
+
+  // step simulation: desired speed, capped by the slow zone and the same-lane leader
+  function simulate(){
+    const slowOn=el('ncSlow').checked;
+    const sev=parseFloat(el('ncSev').value)/100;
+    vehicles.forEach(v=>{
+      v.hist=[];
+      let x=0;
+      const steps=Math.ceil((DUR-v.t0)/DT);
+      for(let k=0;k<=steps;k++){
+        const ts=v.t0+k*DT;
+        v.hist.push(x);
+        if(x>1.15) break;
+        let vmax=v.v0;
+        if(slowOn && ts>=TS1 && ts<=TS2 && x>=Z1 && x<=Z2) vmax=v.v0*sev;
+        let nx=x+vmax*DT;
+        if(v.leader){
+          const li=Math.round((ts+DT-v.leader.t0)/DT);
+          if(li>=0){
+            const lx=v.leader.hist[Math.min(li, v.leader.hist.length-1)];
+            nx=Math.min(nx, lx-S_MIN);
+          }
+        }
+        x=Math.max(x,nx);
+      }
+    });
+    computePasses();
   }
-  function getX(v, ts){
+  function xAt(v, ts){
     if(ts<v.t0) return null;
-    const x=posOf(v,ts);
-    return (x<0||x>1)?null:x;
+    const k=(ts-v.t0)/DT;
+    const i=Math.floor(k);
+    if(i>=v.hist.length-1) return v.hist[v.hist.length-1];
+    return v.hist[i]+(v.hist[i+1]-v.hist[i])*(k-i);
   }
-  function passTime(v, xT){
-    let lo=v.t0, hi=v.t0+3/v.v+15;
-    if(posOf(v,hi)<xT) return null;
-    if(posOf(v,lo)>=xT) return null;
-    for(let i=0;i<40;i++){ const m=(lo+hi)/2; if(posOf(v,m)<xT) lo=m; else hi=m; }
-    return (lo+hi)/2;
+  function passOf(v, d){
+    for(let i=1;i<v.hist.length;i++){
+      if(v.hist[i]>=d){
+        const f=(d-v.hist[i-1])/(v.hist[i]-v.hist[i-1]+1e-12);
+        return v.t0+(i-1+f)*DT;
+      }
+    }
+    return null;
   }
-  function recomputePasses(){
-    pass1=vehicles.map(v=>passTime(v,d1));
-    pass2=vehicles.map(v=>passTime(v,d2));
+  function computePasses(){
+    pass1=vehicles.map(v=>passOf(v,d1));
+    pass2=vehicles.map(v=>passOf(v,d2));
   }
   function countLE(arr, ts){ let n=0; for(const p of arr){ if(p!==null && p>=0 && p<=ts) n++; } return n; }
 
+  // per-vehicle delay: trip time minus own free-flow trip time
+  function delays(){
+    const out=[];
+    for(let i=0;i<vehicles.length;i++){
+      if(pass1[i]!==null && pass1[i]>=0 && pass2[i]!==null && pass2[i]<=t){
+        const ff=(d2-d1)/vehicles[i].v0;
+        out.push({ lane:vehicles[i].lane, delay:Math.max(0,(pass2[i]-pass1[i])-ff) });
+      }
+    }
+    return out;
+  }
+
+  function smoothCurveOf(passes){
+    const evs=passes.filter(p=>p!==null&&p>=0).sort((a,b)=>a-b);
+    if(evs.length<3) return null;
+    const xs=[Math.max(0,evs[0]-0.5)], ys=[0];
+    evs.forEach((p,k)=>{ xs.push(Math.max(p, xs[xs.length-1]+1e-4)); ys.push(k+1); });
+    return pchip(xs,ys);
+  }
+
   function drawChart(){
-    const NMAX=Math.max(5, Math.ceil(vehicles.length*0.9/5)*5);
+    const NMAX=Math.max(10, Math.ceil(vehicles.length/10)*10);
     const yTick=Math.max(5, Math.ceil(NMAX/6/5)*5);
     const s=scaffold(cx,W,H,P,DUR,NMAX,'t (s)','N — cumulative vehicles',5,yTick);
-    // step curves
-    function stepCurve(passes, color){
-      const evs=passes.filter(p=>p!==null&&p>=0&&p<=t).sort((a,b)=>a-b);
-      cx.strokeStyle=color; cx.lineWidth=2.5; cx.lineJoin='round';
+    const tNow=Math.min(t,DUR);
+    // slowdown window band
+    if(el('ncSlow').checked){
+      cx.fillStyle='rgba(255,152,0,0.09)';
+      cx.fillRect(s.X(TS1), P.t, s.X(TS2)-s.X(TS1), s.ph);
+      cx.fillStyle='#c77700'; cx.font='11px '+SANS; cx.textAlign='center';
+      cx.fillText('slowdown active', (s.X(TS1)+s.X(TS2))/2, P.t+s.ph-6);
+    }
+    // smooth curves (fitted) + virtual arrivals + delay shading
+    const f1=smoothCurveOf(pass1), f2=smoothCurveOf(pass2);
+    const ffMean=(d2-d1)/0.05;
+    if(f1 && f2){
+      // delay area: virtual arrivals (N1 shifted by free-flow trip) vs N2
+      cx.fillStyle='rgba(239,83,80,0.15)';
       cx.beginPath();
-      let n=0; let py=s.Y(0);
+      let started=false;
+      for(let x=0; x<=tNow; x+=0.25){
+        const v1=f1(Math.max(0,x-ffMean)), v2=f2(x);
+        const y=v1>v2 ? s.Y(Math.min(v1,NMAX)) : s.Y(Math.min(v2,NMAX));
+        if(!started){ cx.moveTo(s.X(x),y); started=true; } else cx.lineTo(s.X(x),y);
+      }
+      for(let x=tNow; x>=0; x-=0.25) cx.lineTo(s.X(x), s.Y(Math.min(f2(x),NMAX)));
+      cx.closePath(); cx.fill();
+    }
+    // step curves (light)
+    function stepCurve(passes, color){
+      const evs=passes.filter(p=>p!==null&&p>=0&&p<=tNow).sort((a,b)=>a-b);
+      cx.strokeStyle=color; cx.lineWidth=1.5; cx.lineJoin='round'; cx.globalAlpha=0.4;
+      cx.beginPath();
+      let n=0, py=s.Y(0);
       cx.moveTo(s.X(0), py);
       evs.forEach(pt=>{
         cx.lineTo(s.X(pt), py);
         n++; py=s.Y(Math.min(n,NMAX));
         cx.lineTo(s.X(pt), py);
       });
-      cx.lineTo(s.X(Math.min(t,DUR)), py);
+      cx.lineTo(s.X(tNow), py);
       cx.stroke();
+      cx.globalAlpha=1;
       return n;
     }
     const n1=stepCurve(pass1,'#0e7c86');
     const n2=stepCurve(pass2,'#b45309');
+    // smooth overlays (strong) + virtual arrival curve (dashed)
+    function smoothPlot(f, color, dash, shift){
+      if(!f) return;
+      cx.strokeStyle=color; cx.lineWidth=2.5; cx.lineJoin='round';
+      if(dash) cx.setLineDash([7,5]);
+      cx.beginPath();
+      let started=false;
+      for(let x=0; x<=tNow; x+=0.25){
+        const v=f(Math.max(0,x-(shift||0)));
+        const y=s.Y(Math.min(v,NMAX));
+        if(!started){ cx.moveTo(s.X(x),y); started=true; } else cx.lineTo(s.X(x),y);
+      }
+      cx.stroke();
+      cx.setLineDash([]);
+    }
+    smoothPlot(f1,'#0e7c86',false,0);
+    smoothPlot(f2,'#b45309',false,0);
+    smoothPlot(f1,'#0e7c86',true,ffMean);
     // legend
     cx.font='600 12px '+SANS; cx.textAlign='left';
-    cx.fillStyle='#0e7c86'; cx.fillText('— N(X₁, t)  upstream detector', P.l+120, P.t+16);
-    cx.fillStyle='#b45309'; cx.fillText('— N(X₂, t)  downstream detector', P.l+120, P.t+34);
-    // hover: accumulation (vertical) + trip time (horizontal)
+    cx.fillStyle='#0e7c86'; cx.fillText('— N(X₁,t) upstream · – – virtual arrivals (+free-flow trip)', P.l+120, P.t+16);
+    cx.fillStyle='#b45309'; cx.fillText('— N(X₂,t) downstream', P.l+120, P.t+34);
+    cx.fillStyle='#ef5350'; cx.fillText('■ delay (virtual arrivals vs N₂)', P.l+120, P.t+52);
+    // hover
     if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
-      const ht=(hover.x-P.l)/s.pw*DUR;
-      const h1=countLE(pass1,Math.min(ht,t)), h2=countLE(pass2,Math.min(ht,t));
-      // vertical accumulation gap
+      const ht=Math.min((hover.x-P.l)/s.pw*DUR, tNow);
+      const h1=countLE(pass1,ht), h2=countLE(pass2,ht);
       cx.strokeStyle='#ef5350'; cx.lineWidth=2; cx.setLineDash([5,4]);
-      cx.beginPath(); cx.moveTo(hover.x, s.Y(h1)); cx.lineTo(hover.x, s.Y(h2)); cx.stroke();
+      cx.beginPath(); cx.moveTo(s.X(ht), s.Y(Math.min(h1,NMAX))); cx.lineTo(s.X(ht), s.Y(Math.min(h2,NMAX))); cx.stroke();
       cx.setLineDash([]);
-      // horizontal trip-time guide at the hovered N
       const hN=Math.max(1, Math.round((1-(hover.y-P.t)/s.ph)*NMAX));
-      if(hN<=vehicles.length && pass1[hN-1]!==null && pass2[hN-1]!==null && pass2[hN-1]<=t){
-        cx.strokeStyle='#7c3aed'; cx.lineWidth=2; cx.setLineDash([5,4]);
-        cx.beginPath(); cx.moveTo(s.X(pass1[hN-1]), s.Y(hN)); cx.lineTo(s.X(pass2[hN-1]), s.Y(hN)); cx.stroke();
-        cx.setLineDash([]);
-      }
       const rows=[
         [`t = ${ht.toFixed(1)} s`, '#1f2937', true],
         [`N₁ = ${h1} · N₂ = ${h2}`, '#4b5563', false],
         [`accumulation = ${h1-h2} veh`, '#ef5350', false]
       ];
-      if(hN<=vehicles.length && pass1[hN-1]!==null && pass2[hN-1]!==null && pass2[hN-1]<=t)
-        rows.push([`veh #${hN} trip = ${(pass2[hN-1]-pass1[hN-1]).toFixed(1)} s`, '#7c3aed', false]);
+      if(hN<=vehicles.length && pass1[hN-1]!==null && pass2[hN-1]!==null && pass2[hN-1]<=tNow){
+        cx.strokeStyle='#7c3aed'; cx.lineWidth=2; cx.setLineDash([5,4]);
+        cx.beginPath(); cx.moveTo(s.X(pass1[hN-1]), s.Y(hN)); cx.lineTo(s.X(pass2[hN-1]), s.Y(hN)); cx.stroke();
+        cx.setLineDash([]);
+        const ffh=(d2-d1)/vehicles[hN-1].v0;
+        rows.push([`veh #${hN} trip = ${(pass2[hN-1]-pass1[hN-1]).toFixed(1)} s (delay ${Math.max(0,pass2[hN-1]-pass1[hN-1]-ffh).toFixed(1)} s)`, '#7c3aed', false]);
+      }
       tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
     }
   }
@@ -307,55 +433,111 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     rx.setTransform(1,0,0,1,0,0);
     rx.clearRect(0,0,roadC.width,roadC.height);
     rx.setTransform(2,0,0,2,0,0);
-    const RW=260, RH=280, T=14, B=14, x0=105, x1=155;
+    const RH=210, T=14, B=14, x0=100, x1=160;
     const ph=RH-T-B;
     const yOf=f=>T+ph-f*ph;
-    // road
+    // road (two lanes)
     rx.fillStyle='#aeb7c1'; rx.fillRect(x0, T, x1-x0, ph);
     rx.strokeStyle='#fff'; rx.lineWidth=2;
     rx.beginPath(); rx.moveTo(x0,T); rx.lineTo(x0,T+ph); rx.stroke();
     rx.beginPath(); rx.moveTo(x1,T); rx.lineTo(x1,T+ph); rx.stroke();
+    rx.strokeStyle='#f0c040'; rx.lineWidth=1.2; rx.setLineDash([8,7]);
+    rx.beginPath(); rx.moveTo((x0+x1)/2,T); rx.lineTo((x0+x1)/2,T+ph); rx.stroke();
+    rx.setLineDash([]);
     rx.fillStyle='#4b5563'; rx.font='10px '+SANS; rx.textAlign='center';
     rx.fillText('x = L', (x0+x1)/2, T-3);
     rx.fillText('x = 0', (x0+x1)/2, T+ph+11);
+    // slow zone
+    if(el('ncSlow').checked){
+      const active = t>=TS1 && t<=TS2;
+      rx.fillStyle = active ? 'rgba(255,120,0,0.4)' : 'rgba(255,152,0,0.16)';
+      rx.fillRect(x0, yOf(Z2), x1-x0, yOf(Z1)-yOf(Z2));
+      rx.fillStyle = active ? '#c74e00' : '#c77700';
+      rx.font='600 9px '+SANS; rx.textAlign='left';
+      rx.fillText(active?'⚠ SLOW':'slow zone', x1+4, yOf((Z1+Z2)/2)+3);
+    }
     // detectors
     [[d1,'#0e7c86','X₁'],[d2,'#b45309','X₂']].forEach(([d,col,lab])=>{
       const y=yOf(d);
       rx.strokeStyle=col; rx.lineWidth=2; rx.setLineDash([5,4]);
-      rx.beginPath(); rx.moveTo(x0-14,y); rx.lineTo(x1+14,y); rx.stroke();
+      rx.beginPath(); rx.moveTo(x0-12,y); rx.lineTo(x1+12,y); rx.stroke();
       rx.setLineDash([]);
-      rx.fillStyle=col; rx.font='600 11px '+SANS; rx.textAlign='left';
-      rx.fillText(lab+' (drag)', x1+18, y+4);
+      rx.fillStyle=col; rx.font='600 10px '+SANS; rx.textAlign='right';
+      rx.fillText(lab+' ↕', x0-15, y+3);
     });
-    // vehicles at true scale
-    const carH=VEHL*ph;
+    // vehicles at true scale, one column per lane
+    const carH=Math.max(4, VEHL*ph);
     vehicles.forEach(v=>{
-      const x=getX(v,t);
-      if(x===null) return;
-      rx.fillStyle='#0e7c86';
-      rx.beginPath(); rx.roundRect((x0+x1)/2-5, yOf(x)-carH/2, 10, carH, 2); rx.fill();
+      const x=xAt(v,t);
+      if(x===null || x<0 || x>1) return;
+      const lx = v.lane===0 ? (x0+(x0+x1)/2)/2 : ((x0+x1)/2+x1)/2;
+      rx.fillStyle=LANE_COL[v.lane];
+      rx.beginPath(); rx.roundRect(lx-5, yOf(x)-carH/2, 10, carH, 2); rx.fill();
     });
+  }
+
+  function drawDelayChart(){
+    dxx.setTransform(1,0,0,1,0,0);
+    dxx.clearRect(0,0,dC.width,dC.height);
+    dxx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150,L=26,R=8,T=18,B=20;
+    const pw=w-L-R, ph=h-T-B;
+    const ds=delays();
+    dxx.font='600 8px '+SANS; dxx.fillStyle='#9aa1ad'; dxx.textAlign='left';
+    dxx.fillText('DELAY PER VEHICLE (s)'+(t>=DUR?' — RUN COMPLETE':''), 8, 11);
+    if(!ds.length){
+      dxx.fillStyle='#b9c2cf'; dxx.font='9px '+SANS; dxx.textAlign='center';
+      dxx.fillText('vehicles appear here as they finish the trip', w/2, h/2);
+      return;
+    }
+    const dMax=Math.max(2, Math.ceil(Math.max(...ds.map(d=>d.delay))));
+    dxx.strokeStyle='#eef1f6'; dxx.lineWidth=1;
+    dxx.fillStyle='#7b8494'; dxx.font='7px '+SANS;
+    const step=Math.max(1,Math.ceil(dMax/4));
+    for(let g=0; g<=dMax; g+=step){
+      const y=T+ph-(g/dMax)*ph;
+      dxx.beginPath(); dxx.moveTo(L,y); dxx.lineTo(L+pw,y); dxx.stroke();
+      dxx.textAlign='right'; dxx.fillText(g, L-3, y+2);
+    }
+    const bw=Math.max(2, pw/ds.length);
+    ds.forEach((d,i)=>{
+      dxx.fillStyle=LANE_COL[d.lane];
+      dxx.globalAlpha=0.75;
+      dxx.fillRect(L+i*bw, T+ph-(d.delay/dMax)*ph, Math.max(1.5,bw-1), (d.delay/dMax)*ph);
+      dxx.globalAlpha=1;
+    });
+    const avg=ds.reduce((a,b)=>a+b.delay,0)/ds.length;
+    const yAvg=T+ph-(avg/dMax)*ph;
+    dxx.strokeStyle='#ef5350'; dxx.lineWidth=1.5; dxx.setLineDash([4,3]);
+    dxx.beginPath(); dxx.moveTo(L,yAvg); dxx.lineTo(L+pw,yAvg); dxx.stroke();
+    dxx.setLineDash([]);
+    dxx.fillStyle='#ef5350'; dxx.font='700 8px '+SANS; dxx.textAlign='right';
+    dxx.fillText('avg '+avg.toFixed(1)+' s', L+pw-2, Math.max(T+8,yAvg-3));
   }
 
   function updateReadout(){
     const n1=countLE(pass1,t), n2=countLE(pass2,t);
-    let trips=[], cnt=0;
-    for(let i=0;i<vehicles.length;i++){
-      if(pass2[i]!==null && pass2[i]<=t && pass1[i]!==null){ trips.push(pass2[i]-pass1[i]); }
+    const ds=delays();
+    if(t>=DUR && ds.length){
+      const avg=ds.reduce((a,b)=>a+b.delay,0)/ds.length;
+      const mx=Math.max(...ds.map(d=>d.delay));
+      const tot=ds.reduce((a,b)=>a+b.delay,0);
+      el('ncReadout').textContent=
+        `✓ run complete — ${ds.length} vehicles made the trip  |  avg delay ${avg.toFixed(1)} s/veh  |  max ${mx.toFixed(1)} s  |  total ${tot.toFixed(0)} veh·s`;
+    } else {
+      el('ncReadout').textContent=
+        `t=${t.toFixed(1)}s  |  N₁=${n1} · N₂=${n2}  |  accumulation = ${n1-n2} veh  |  ${ds.length} trips done`+
+        (el('ncSlow').checked && t>=TS1 && t<=TS2 ? '  |  ⚠ SLOWDOWN ACTIVE' : '');
     }
-    const avg=trips.length?trips.reduce((a,b)=>a+b,0)/trips.length:0;
-    el('ncReadout').textContent=
-      `t=${t.toFixed(1)}s  |  N₁=${n1} · N₂=${n2}  |  accumulation = ${n1-n2} veh between detectors  |  avg trip X₁→X₂ = ${avg?avg.toFixed(1):'—'} s`;
   }
 
-  function render(){ drawChart(); drawRoad(); updateReadout(); }
+  function render(){ drawChart(); drawRoad(); drawDelayChart(); updateReadout(); }
   function reset(){
-    t=0; makeVehicles(); recomputePasses(); playing=true;
+    t=0; makeVehicles(); simulate(); playing=true;
     el('ncPlay').textContent='⏸ Pause';
     render();
   }
 
-  // chart hover
   C.addEventListener('pointermove', e=>{
     const r=C.getBoundingClientRect();
     hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
@@ -363,13 +545,13 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   });
   C.addEventListener('pointerleave', ()=>{ hover=null; if(!playing) render(); });
 
-  // detector dragging on the road mini-canvas
+  // detector dragging
   let drag=null;
   function roadXY(e){
     const r=roadC.getBoundingClientRect();
     return {x:(e.clientX-r.left)*roadC.width/r.width/2, y:(e.clientY-r.top)*roadC.height/r.height/2};
   }
-  function fOf(y){ const T=14, ph=280-28; return Math.min(0.97, Math.max(0.03, 1-(y-T)/ph)); }
+  function fOf(y){ const T=14, ph=210-28; return Math.min(0.97, Math.max(0.03, 1-(y-T)/ph)); }
   roadC.addEventListener('pointerdown', e=>{
     const {y}=roadXY(e);
     const f=fOf(y);
@@ -378,10 +560,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   });
   roadC.addEventListener('pointermove', e=>{
     if(!drag) return;
-    const {y}=roadXY(e);
-    const f=fOf(y);
+    const f=fOf(roadXY(e).y);
     if(drag==='d1') d1=Math.min(f, d2-0.08); else d2=Math.max(f, d1+0.08);
-    recomputePasses();
+    computePasses();
     if(!playing) render();
   });
   ['pointerup','pointercancel','pointerleave'].forEach(ev=>roadC.addEventListener(ev,()=>{ drag=null; }));
@@ -395,6 +576,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('ncReset').addEventListener('click', reset);
   el('ncHead').addEventListener('input', ()=>{ el('ncHeadVal').textContent=parseFloat(el('ncHead').value).toFixed(1)+' s'; reset(); });
   el('ncSpd').addEventListener('input', ()=>{ el('ncSpdVal').textContent=parseFloat(el('ncSpd').value).toFixed(1)+'×'; });
+  el('ncSlow').addEventListener('change', ()=>{ simulate(); render(); });
+  el('ncSev').addEventListener('input', ()=>{ el('ncSevVal').textContent=el('ncSev').value+'%'; simulate(); render(); });
 
   function loop(ts){
     if(!lastTs) lastTs=ts;
