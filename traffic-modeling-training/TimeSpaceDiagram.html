@@ -1660,6 +1660,7 @@ document.querySelectorAll('.tab').forEach(tab => {
   const DUR = 60;          // seconds shown on TSD (a full minute)
   const LOOP_SPEED = 0.12; // mean desired speed (loop lengths per second)
   const BUS_LEN = 0.015;   // bus length as a fraction of the loop
+  const BUS_GAP = 0.005;   // minimum bumper-to-bumper gap on the ring
   const GM_A = 0.25;       // GM-3 sensitivity on the ring
   const COLORS = ['#a4161a','#2c5378','#14655c','#b8860b','#b45309','#5b4a7a'];
 
@@ -1888,8 +1889,8 @@ document.querySelectorAll('.tab').forEach(tab => {
         for(let i=0;i<n;i++){
           const j = (i+1) % n;
           const gap = ((nx[j] - nx[i]) % 1 + 1) % 1;
-          if(gap < BUS_LEN){
-            nx[i] = ((nx[j] - BUS_LEN) % 1 + 1) % 1;
+          if(gap < BUS_LEN + BUS_GAP){
+            nx[i] = ((nx[j] - BUS_LEN - BUS_GAP) % 1 + 1) % 1;
             nv[i] = Math.min(nv[i], nv[j]);
           }
         }
