@@ -276,6 +276,21 @@ function scaffold(ctx, W, H, P, xMin, xMax, yMin, yMax, xLab, yLab, xTick, yTick
   ctx.textAlign='right'; ctx.fillText(xLab, P.l+pw-8, P.t+ph-10);
   return {pw, ph, X, Y};
 }
+// top-down vehicle sprite: colored body, white border, windshield + rear window
+function drawVeh(ctx, x, y, color, s=1){
+  const L=18*s, Wd=12*s;
+  ctx.save();
+  ctx.shadowColor='rgba(16,24,40,0.35)'; ctx.shadowBlur=3*s; ctx.shadowOffsetY=1;
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.roundRect(x-L/2, y-Wd/2, L, Wd, 3*s); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=1.6*s;
+  ctx.beginPath(); ctx.roundRect(x-L/2, y-Wd/2, L, Wd, 3*s); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  ctx.fillRect(x+L*0.08, y-Wd*0.3, L*0.2, Wd*0.6);   // windshield (front)
+  ctx.fillRect(x-L*0.3,  y-Wd*0.3, L*0.16, Wd*0.6);  // rear window
+}
+
 function tooltipCard(ctx, x, y, rows, P, pw, ph){
   ctx.font='600 12px '+SANS;
   const tw=Math.max(...rows.map(r=>ctx.measureText(r[0]).width))+22;
@@ -711,10 +726,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     // pass 2: moving vehicles (colored by O-D pair)
     odCars.forEach(c=>{
       const [x,y]=carXY2(c);
-      cx.fillStyle=OD_COL[c.od];
-      cx.beginPath(); cx.roundRect(x-7,y-5,14,10,3); cx.fill();
-      cx.strokeStyle='rgba(255,255,255,0.7)'; cx.lineWidth=1;
-      cx.strokeRect(x-7,y-5,14,10);
+      drawVeh(cx, x, y, OD_COL[c.od], 1.1);
     });
     // pass 3: label chips on top
     Object.keys(LINKS).forEach(l=>{
@@ -1259,8 +1271,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     // vehicles: gray until they pass the choice node, then route-colored
     cars2.forEach(c=>{
       const [x,y]=carXY(c);
-      scx.fillStyle = c.phase===0 ? '#6b7280' : RCOLS[c.route];
-      scx.beginPath(); scx.roundRect(x-6,y-4,12,8,2); scx.fill();
+      drawVeh(scx, x, y, c.phase===0 ? '#6b7280' : RCOLS[c.route], 0.95);
     });
     scx.fillStyle='#1f2937'; scx.font='600 12px '+SANS; scx.textAlign='right';
     scx.fillText(`iteration ${Math.min(k,len)} · ${NAMES[el('ueSel').value]}`, SW-16, 24);
