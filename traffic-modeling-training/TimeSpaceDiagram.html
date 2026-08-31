@@ -660,6 +660,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     const pw=W-L-Rm, ph=H-T-B;
     vtx.font='600 8px sans-serif'; vtx.fillStyle='#9aa1ad'; vtx.textAlign='left';
     vtx.fillText('SPEED PROFILE v(t)', 8, 11);
+    vtx.fillStyle='#9aa1ad'; vtx.font='italic 7px '+SANS;
+    vtx.textAlign='left'; vtx.fillText('y: v (u/s)', L+4, T+9);
+    vtx.textAlign='right'; vtx.fillText('x: t (s) →', L+pw-4, T+ph-4);
     vtx.strokeStyle='#eef1f6'; vtx.lineWidth=1;
     vtx.fillStyle='#7b8494'; vtx.font='7px sans-serif';
     for(let g=0; g<=VMAX; g+=50){
@@ -1081,6 +1084,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     const W=260, H=130, base=100, maxH=64;
     bctx.font='600 8px sans-serif'; bctx.fillStyle='#9aa1ad'; bctx.textAlign='left';
     bctx.fillText('MEAN SPEEDS (% of L per s)', 8, 11);
+    bctx.fillStyle='#9aa1ad'; bctx.font='italic 7px '+SANS; bctx.textAlign='left';
+    bctx.fillText('bar height = mean speed (%L/s)', 8, 21);
     if(Vt>0 && Vs>0){
       bctx.fillStyle = Vt >= Vs-0.01 ? '#1d7a6f' : '#c1121f';
       bctx.textAlign='right';
@@ -1111,6 +1116,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     const KMAX = Math.max(1, vehicles.length);
     dctx.font='600 8px sans-serif'; dctx.fillStyle='#9aa1ad'; dctx.textAlign='left';
     dctx.fillText('DENSITY k(t) — vehicles on road', 8, 11);
+    dctx.fillStyle='#9aa1ad'; dctx.font='italic 7px '+SANS;
+    dctx.textAlign='left'; dctx.fillText('y: k (veh on road)', L+4, T+9);
+    dctx.textAlign='right'; dctx.fillText('x: t (s) →', L+pw-4, T+ph-4);
     dctx.strokeStyle='#eef1f6'; dctx.lineWidth=1;
     dctx.fillStyle='#7b8494'; dctx.font='7px sans-serif';
     const kStep = Math.max(1, Math.ceil(KMAX/4));
@@ -1531,6 +1539,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     const N = Math.max(1, vehicles.length);
     thx.font='600 8px sans-serif'; thx.fillStyle='#9aa1ad'; thx.textAlign='left';
     thx.fillText('THROUGHPUT — cumulative vehicles', 8, 11);
+    thx.fillStyle='#9aa1ad'; thx.font='italic 7px '+SANS;
+    thx.textAlign='left'; thx.fillText('y: N (veh)', L+4, T+9);
+    thx.textAlign='right'; thx.fillText('x: t (s) →', L+pw-4, T+ph-4);
     // grid + ticks
     thx.strokeStyle='#eef1f6'; thx.lineWidth=1;
     thx.fillStyle='#7b8494'; thx.font='7px sans-serif';
@@ -1586,6 +1597,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     const QMAX = Math.max(1, ...qHist.map(q=>q[1]));
     qcx.font='600 8px sans-serif'; qcx.fillStyle='#9aa1ad'; qcx.textAlign='left';
     qcx.fillText('QUEUE — stopped vehicles', 8, 11);
+    qcx.fillStyle='#9aa1ad'; qcx.font='italic 7px '+SANS;
+    qcx.textAlign='left'; qcx.fillText('y: stopped (veh)', L+4, T+9);
+    qcx.textAlign='right'; qcx.fillText('x: t (s) →', L+pw-4, T+ph-4);
     qcx.strokeStyle='#eef1f6'; qcx.lineWidth=1;
     qcx.fillStyle='#7b8494'; qcx.font='7px sans-serif';
     const yStep = Math.max(1, Math.ceil(QMAX/4));

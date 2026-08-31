@@ -469,6 +469,9 @@ function drawVol(s){
   const vMax=Math.max(...s.upF.counts, ...s.dnF.counts)*1.05;
   vx.font='600 8px '+SANS; vx.fillStyle='#9aa1ad'; vx.textAlign='left';
   vx.fillText('HOURLY VOLUMES (veh/hr)', 8, 11);
+  vx.fillStyle='#9aa1ad'; vx.font='italic 7px '+SANS;
+  vx.textAlign='left'; vx.fillText('y: veh/hr', L+4, T+9);
+  vx.textAlign='right'; vx.fillText('x: time of day →', L+pw-4, T+ph-4);
   vx.strokeStyle='#eef1f6'; vx.lineWidth=1;
   vx.fillStyle='#7b8494'; vx.font='7px '+SANS;
   for(let g=0; g<=vMax; g+=Math.ceil(vMax/4/500)*500){

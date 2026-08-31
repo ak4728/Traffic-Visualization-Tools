@@ -837,6 +837,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const maxR=Math.max(5, Math.ceil(Math.max(...rmseHist)/5)*5);
     qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
     qx.fillText('CONVERGENCE — %RMSE vs iteration', 8, 11);
+    qx.fillStyle='#9aa1ad'; qx.font='italic 7px '+SANS;
+    qx.textAlign='left'; qx.fillText('y: %RMSE', L+4, T+9);
+    qx.textAlign='right'; qx.fillText('x: iteration →', L+pw-4, T+ph-4);
     qx.strokeStyle='#eef1f6'; qx.lineWidth=1;
     qx.fillStyle='#7b8494'; qx.font='7px '+SANS;
     for(let g=0; g<=maxR; g+=Math.max(5,Math.ceil(maxR/4/5)*5)){
@@ -1397,6 +1400,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const w=260;
     spx.font='600 8px '+SANS; spx.fillStyle='#9aa1ad'; spx.textAlign='left';
     spx.fillText('TWO-ROUTE EXAMPLE — UE vs SUE FLOWS', 8, 11);
+    spx.fillStyle='#9aa1ad'; spx.font='italic 7px '+SANS; spx.textAlign='right';
+    spx.fillText('bar length ∝ flow (veh/hr) · times at right', w-8, 11);
     const L=64, maxW=130;
     const rows=[
       ['R1 · UE',  ue.v1,  '#b9c2cf', ue.t1],
@@ -1486,6 +1491,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const th=theta();
     dx.font='600 8px '+SANS; dx.fillStyle='#9aa1ad'; dx.textAlign='left';
     dx.fillText('PERCEPTION ERROR ε — density (equal variance)', 8, 11);
+    dx.fillStyle='#9aa1ad'; dx.font='italic 7px '+SANS;
+    dx.textAlign='left'; dx.fillText('y: density', L+4, T+9);
+    dx.textAlign='right'; dx.fillText('x: ε (min) →', L+pw-4, T+ph-4);
     const xr=3.5*th;
     const fG=e=>{ const b=th*Math.sqrt(6)/Math.PI, mu=-0.5772*b; const z=(e-mu)/b; return Math.exp(-(z+Math.exp(-z)))/b; };
     const fN=e=>Math.exp(-e*e/(2*th*th))/(th*Math.sqrt(2*Math.PI));
@@ -1808,7 +1816,12 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
     cx.fillText('2D contour — click to set the start point', P2.l, P2.t-28);
     cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
-    cx.fillText('x₁ demand (veh/hr) →   ·   x₂ demand ↑', P2.l, P2.t-10);
+    cx.fillText('colour = total sim-vs-obs mismatch F (light = close to 0)', P2.l, P2.t-10);
+    cx.fillStyle='#7b8494'; cx.font='italic 12px '+SANS; cx.textAlign='center';
+    cx.fillText('x₁ = demand route 1 (veh/hr)', P2.l+P2.w/2, P2.t+P2.h+34);
+    cx.save(); cx.translate(P2.l-44, P2.t+P2.h/2); cx.rotate(-Math.PI/2);
+    cx.fillText('x₂ = demand route 2 (veh/hr)', 0, 0); cx.restore();
+    cx.textAlign='left';
     // earlier attempts: faded perturb trails + multi-start paths
     history.forEach(hst=>{
       cx.strokeStyle='rgba(164,22,26,0.28)'; cx.lineWidth=1.5; cx.setLineDash([5,4]);

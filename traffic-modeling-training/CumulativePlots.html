@@ -516,6 +516,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const ds=delays();
     dxx.font='600 8px '+SANS; dxx.fillStyle='#9aa1ad'; dxx.textAlign='left';
     dxx.fillText('DELAY PER VEHICLE (s)'+(t>=DUR?' — RUN COMPLETE':''), 8, 11);
+    dxx.fillStyle='#9aa1ad'; dxx.font='italic 7px '+SANS;
+    dxx.textAlign='left'; dxx.fillText('y: delay (s)', L+4, T+9);
+    dxx.textAlign='right'; dxx.fillText('x: vehicle (finish order) →', L+pw-4, T+ph-4);
     if(!ds.length){
       dxx.fillStyle='#b9c2cf'; dxx.font='9px '+SANS; dxx.textAlign='center';
       dxx.fillText('vehicles appear here as they finish the trip', w/2, h/2);
@@ -759,6 +762,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const qMax=Math.max(1, Math.ceil(Math.max(...Q)/10)*10);
     qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
     qx.fillText('QUEUE LENGTH Q(t)', 8, 11);
+    qx.fillStyle='#9aa1ad'; qx.font='italic 7px '+SANS;
+    qx.textAlign='left'; qx.fillText('y: Q (veh)', L+4, Tt+9);
+    qx.textAlign='right'; qx.fillText('x: t (min) →', L+pw-4, Tt+ph-4);
     qx.strokeStyle='#eef1f6'; qx.lineWidth=1;
     qx.fillStyle='#7b8494'; qx.font='7px '+SANS;
     for(let g=0; g<=qMax; g+=Math.max(10,Math.ceil(qMax/4/10)*10)){
@@ -886,6 +892,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const qMax=Math.max(1, Math.ceil(Math.max(...Q)));
     qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
     qx.fillText('QUEUE Q(t) — sawtooth per cycle', 8, 11);
+    qx.fillStyle='#9aa1ad'; qx.font='italic 7px '+SANS;
+    qx.textAlign='left'; qx.fillText('y: Q (veh)', L+4, Tt+9);
+    qx.textAlign='right'; qx.fillText('x: t (s) →', L+pw-4, Tt+ph-4);
     qx.strokeStyle='#eef1f6'; qx.lineWidth=1;
     qx.fillStyle='#7b8494'; qx.font='7px '+SANS;
     const step=Math.max(1,Math.ceil(qMax/4));
