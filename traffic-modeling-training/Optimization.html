@@ -242,7 +242,7 @@
       <div class="readout" id="fwReadout">Objective: match observed volumes, speeds (and optionally times) — click the 2D map to choose a start point</div>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip">A <b>calibration objective surface</b>, the optimization at the heart of ODME: the decision variables are the two route demands (x₁, x₂); the <b>VDF turns them into simulated volumes, speeds and travel times</b>; and the objective F is the mismatch against field observations — a volume term, a speed term, and an optional travel-time term. The observations are deliberately <b>inconsistent</b> (counts from one day, speeds from another — exactly what real calibration data looks like), so with the <b>robust loss</b> (each term saturates, as robust estimators do to resist outliers) the surface has <b>two local optima</b>: one fitting the counts, one fitting the speeds. <b>Frank-Wolfe</b> over the box feasible set picks a <b>corner</b> each iteration (the linear subproblem's answer) and line-searches toward it; <b>N-conjugate</b> blends previous directions. On a non-convex surface FW only finds a <i>stationary point</i> — <b>click different start points on the 2D map</b> and watch it land in different valleys; switch to the squared loss to make the surface single-valley again. Drag the rotation slider to inspect the 3D mesh.</span></span></div>
+      <div class="pane-head"><span class="help">i<span class="tip">A <b>calibration objective surface</b>, the optimization at the heart of ODME: the decision variables are the two route demands (x₁, x₂); the <b>VDF turns them into simulated volumes, speeds and travel times</b>; and the objective F is the mismatch against field observations — a volume term, a speed term, and an optional travel-time term. The observations are deliberately <b>inconsistent</b> (counts from one day, speeds from another — exactly what real calibration data looks like), so with the <b>robust loss</b> (each term saturates, as robust estimators do to resist outliers) the surface has <b>two local optima</b>: one fitting the counts, one fitting the speeds. <b>Frank-Wolfe</b> over the box feasible set picks a <b>corner</b> each iteration (the linear subproblem's answer) and line-searches toward it; <b>N-conjugate</b> blends previous directions. On a non-convex surface FW only finds a <i>stationary point</i> — the default start is deliberately in the pull of the shallower <b>speeds valley</b>, so plain FW gets <b>trapped in a local optimum</b> (the card turns red). The escape tools are the real-world remedies: <b>⚡ Perturb &amp; retry</b> kicks the converged point randomly and re-runs (sometimes it hops the ridge, sometimes it falls back — that's the honest behavior of perturbation restarts), and <b>🎲 Multi-start ×8</b> runs FW from 8 random starts, shows every path, reports how many landed in each valley, and keeps the best — the standard cure for local optima. Click anywhere on the map to try your own start; switch to the squared loss to make the surface single-valley again.</span></span></div>
       <div class="controls">
         <div class="control-group"><label>N (conjugate directions)</label>
           <select id="fwN">
@@ -270,6 +270,8 @@
         <button class="action" id="fwPlay">▶ Play</button>
         <button class="action sec" id="fwStep">Step ▸</button>
         <button class="action sec" id="fwRst">↺</button>
+        <button class="action warn" id="fwKick" style="background:#e9a71f">⚡ Perturb &amp; retry</button>
+        <button class="action" id="fwMulti">🎲 Multi-start ×8</button>
         <div class="control-group"><label>Iteration speed</label><input type="range" id="fwSpd" min="1" max="8" step="1" value="2"><span class="val" id="fwSpdVal">2 it/s</span></div>
       </div>
       <div class="readout" id="fwNarr">press ▶ Play — or click the 2D map to move the start point</div>
@@ -1538,14 +1540,14 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const OBS_T=simOf([900,1300]).map(s=>s.time);
 
   function lossFn(e){
-    return el('fwLoss').value==='robust' ? 1-Math.exp(-(e*e)/(2*0.22*0.22)) : (e*e)/(0.22*0.22);
+    return el('fwLoss').value==='robust' ? 1-Math.exp(-(e*e)/(2*0.16*0.16)) : (e*e)/(0.16*0.16);
   }
   function F(x){
     const sim=simOf(x);
     let f=0;
     for(let i=0;i<2;i++){
-      f+=lossFn((sim[i].vol-OBS_V[i])/OBS_V[i]);
-      f+=lossFn((sim[i].spd-OBS_S[i])/OBS_S[i]);
+      f+=1.35*lossFn((sim[i].vol-OBS_V[i])/OBS_V[i]);   // counts weighted higher →
+      f+=lossFn((sim[i].spd-OBS_S[i])/OBS_S[i]);        // the count valley is the GLOBAL min
       if(el('fwWt').checked) f+=lossFn((sim[i].time-OBS_T[i])/OBS_T[i]);
     }
     return f;
@@ -1674,7 +1676,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const P2={l:700, t:70, w:470, h:480};
   const to2=(x1,x2)=>[P2.l+x1/XMAX*P2.w, P2.t+P2.h-x2/XMAX*P2.h];
 
-  let st=null, k=0, timer=null, start=[150,150];
+  let st=null, k=0, timer=null, start=[1750,420];   // default start sits in the speed valley's pull → FW gets TRAPPED
+  let history=[], multi=null;                        // perturb trail & multi-start results
   function recompute(){
     buildMesh();
     st=runFW(start, parseInt(el('fwN').value), 60);
@@ -1767,6 +1770,32 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     cx.fillText('2D contour — click to set the start point', P2.l, P2.t-28);
     cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
     cx.fillText('x₁ demand (veh/hr) →   ·   x₂ demand ↑', P2.l, P2.t-10);
+    // earlier attempts: faded perturb trails + multi-start paths
+    history.forEach(hst=>{
+      cx.strokeStyle='rgba(164,22,26,0.28)'; cx.lineWidth=1.5; cx.setLineDash([5,4]);
+      cx.beginPath();
+      hst.forEach((s2,i)=>{
+        const [px,py]=to2(s2.x[0], s2.x[1]);
+        if(i===0) cx.moveTo(px,py); else cx.lineTo(px,py);
+      });
+      cx.stroke(); cx.setLineDash([]);
+    });
+    if(multi){
+      multi.runs.forEach((r,i)=>{
+        if(i===multi.best) return;
+        cx.strokeStyle='rgba(120,130,145,0.4)'; cx.lineWidth=1.3;
+        cx.beginPath();
+        r.st.forEach((s2,j)=>{
+          const [px,py]=to2(s2.x[0], s2.x[1]);
+          if(j===0) cx.moveTo(px,py); else cx.lineTo(px,py);
+        });
+        cx.stroke();
+        const e=r.st[r.st.length-1].x;
+        const [ex,ey]=to2(e[0],e[1]);
+        cx.fillStyle='#7b8494';
+        cx.beginPath(); cx.arc(ex,ey,4,0,Math.PI*2); cx.fill();
+      });
+    }
     // 2D path + arrows
     cx.strokeStyle='#a4161a'; cx.lineWidth=2; cx.lineJoin='round';
     cx.beginPath();
@@ -1817,9 +1846,19 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     el('fwLocCard').className='card'+((stuck&&k>=st.length-2)?' warn':'');
     el('fwFlows').textContent=
       `${Math.round(s.x[0])}/${Math.round(s.x[1])} veh · ${sim.map(r2=>r2.spd.toFixed(0)).join('/')} mph · ${sim.map(r2=>r2.time.toFixed(1)).join('/')} min`;
-    el('fwNarr').textContent = s.corner
-      ? `it ${k}: LMO corner (${s.corner[0]}, ${s.corner[1]}) · λ=${s.lam.toFixed(3)} · F ${s.F.toFixed(4)} → surface has ${el('fwLoss').value==='robust'?'TWO valleys (counts vs speeds)':'one valley'}`
-      : `finished — F ${s.F.toFixed(4)}${stuck?' (local optimum — click elsewhere on the map and rerun)':' ≈ global best ✓'}`;
+    const kickPfx = history.length ? `kick #${history.length} · ` : '';
+    if(multi){
+      const nearCounts=multi.runs.filter(r=>{
+        const e2=r.st[r.st.length-1].x;
+        return Math.hypot(e2[0]-900,e2[1]-1300) < Math.hypot(e2[0]-1500,e2[1]-700);
+      }).length;
+      el('fwNarr').textContent=
+        `🎲 8 random starts: ${nearCounts} reached the COUNTS valley, ${8-nearCounts} got stuck near the SPEEDS valley — showing the best (F = ${st[st.length-1].F.toFixed(3)})`;
+    } else {
+      el('fwNarr').textContent = s.corner
+        ? kickPfx+`it ${k}: LMO corner (${s.corner[0]}, ${s.corner[1]}) · λ=${s.lam.toFixed(3)} · F ${s.F.toFixed(4)}`
+        : kickPfx+`finished — F ${s.F.toFixed(4)}${stuck?' — LOCAL optimum. Try ⚡ Perturb, 🎲 Multi-start, or click a new start':' ≈ global best ✓'}`;
+    }
     el('fwReadout').textContent=
       `F(x₁,x₂) = Σ loss(vol error) + loss(spd error)${el('fwWt').checked?' + loss(time error)':''} — VDF links demand → volume/speed/time · box 0–${XMAX} veh/hr`;
   }
@@ -1839,14 +1878,43 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const mx=(e.clientX-r.left)*C.width/r.width, my=(e.clientY-r.top)*C.height/r.height;
     if(mx>=P2.l && mx<=P2.l+P2.w && my>=P2.t && my<=P2.t+P2.h){
       start=[(mx-P2.l)/P2.w*XMAX, (P2.t+P2.h-my)/P2.h*XMAX];
-      stopPlay(); k=0;
+      stopPlay(); k=0; history=[]; multi=null;
       st=runFW(start, parseInt(el('fwN').value), 60);
       draw();
     }
   });
-  el('fwN').addEventListener('change', ()=>{ stopPlay(); k=0; st=runFW(start, parseInt(el('fwN').value), 60); draw(); });
-  el('fwLoss').addEventListener('change', ()=>{ stopPlay(); k=0; recompute(); draw(); });
-  el('fwWt').addEventListener('change', ()=>{ stopPlay(); k=0; recompute(); draw(); });
+  // escape heuristics: FW is a LOCAL method on a non-convex surface
+  el('fwKick').addEventListener('click', ()=>{
+    stopPlay();
+    const cur=st[st.length-1].x;
+    history.push(st);
+    if(history.length>4) history.shift();
+    multi=null;
+    start=cur.map(v=>Math.min(XMAX,Math.max(0,v+(Math.random()*2-1)*450)));
+    st=runFW(start, parseInt(el('fwN').value), 60);
+    k=0;
+    draw(); play();
+  });
+  el('fwMulti').addEventListener('click', ()=>{
+    stopPlay();
+    const N=parseInt(el('fwN').value);
+    const runs=[];
+    for(let m=0;m<8;m++){
+      const s0=[Math.random()*XMAX, Math.random()*XMAX];
+      runs.push({start:s0, st:runFW(s0,N,60)});
+    }
+    let best=0;
+    runs.forEach((r,i)=>{ if(r.st[r.st.length-1].F<runs[best].st[runs[best].st.length-1].F) best=i; });
+    multi={runs, best};
+    history=[];
+    start=runs[best].start;
+    st=runs[best].st;
+    k=st.length-1;
+    draw();
+  });
+  el('fwN').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; st=runFW(start, parseInt(el('fwN').value), 60); draw(); });
+  el('fwLoss').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; recompute(); draw(); });
+  el('fwWt').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; recompute(); draw(); });
   el('fwRot').addEventListener('input', ()=>{ el('fwRotVal').textContent=el('fwRot').value+'°'; draw(); });
   el('fwPlay').addEventListener('click', play);
   el('fwStep').addEventListener('click', ()=>{ stopPlay(); if(k<st.length-1) k++; draw(); });
