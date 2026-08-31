@@ -309,8 +309,9 @@ def main():
           f"demand v/c [{con['xd'].min():.2f}-{con['xd'].max():.2f}] "
           f"(median shift +{shift.median():.2f})")
     print("    NOTE: a single station sees only ~1 mi of the queue, so the")
-    print("    reconstruction cannot recover corridor demand — congested hours")
-    print("    are shown at the reconstructed position but stay out of the fits.")
+    print("    reconstruction cannot recover corridor demand. Charts therefore")
+    print("    plot congested hours at their OBSERVED throughput v/c, and those")
+    print("    hours stay out of the fits.")
     print(f"  free-flow travel time t0 ({args.length} mi)   : {t0:6.2f} min")
     print(f"  BPR, both params free (uncongested)  : a = {a_unc:.3f}, b = {b_unc:.2f}   R2 = {r2u:.3f}")
     print(f"  BPR, beta fixed at 4 (headline)      : a = {a_b4:.3f}, b = {B_FIX:.2f}   R2 = {r2b4:.3f}")
@@ -388,10 +389,16 @@ def main():
         return uf * np.exp(-k / kc)
 
     SD = {}
-    print("\n──── speed-density models (fitted on all hours, u vs k) ────")
+    print("\n──── speed-density models (all hours, u vs k) ────")
+    # Greenshields with engineering values pinned: uf = 68 mph (observed
+    # free-flow), kj = 450 veh/mi (~112/lane over 4 lanes) — no free params
+    GS_UF, GS_KJ = 68.0, 450.0
+    gs_p = (GS_UF, GS_KJ)
+    SD["Greenshields"] = (gs_u, gs_p, r2_of(gs_u, gs_p, kv, uv))
+    print(f"  {'Greenshields':<13} uf = {GS_UF:7.1f}, kj = {GS_KJ:7.1f}   "
+          f"R2(u|k) = {SD['Greenshields'][2]:.3f}   "
+          f"implied capacity = {GS_UF * GS_KJ / 4:5.0f} veh/hr  (uf, kj pinned)")
     for name, fn, p0, bnd, capfun in [
-        ("Greenshields", gs_u, [70, 600],  ([30, 100], [100, 3000]),
-         lambda p: p[0] * p[1] / 4),                 # qmax = uf·kj/4
         ("Greenberg",    gb_u, [35, 600],  ([5, 100], [200, 5000]),
          lambda p: p[0] * p[1] / np.e),              # qmax = uc·kj/e
         ("Underwood",    uw_u, [70, 200],  ([30, 20], [100, 3000]),
@@ -478,15 +485,16 @@ def main():
     a4 = ax[1, 1]
     a4.scatter(unc["xc"], unc["ratio"], s=16, alpha=0.55, color=BLUE,
                edgecolors="none", label="uncongested branch")
-    a4.scatter(con["xd"], con["ratio"], s=16, alpha=0.55, color=RED,
-               edgecolors="none", label="congested @ reconstructed demand")
-    xg = np.linspace(0, max(1.4, df["xd"].max()), 200)
+    a4.scatter(con["xc"], con["ratio"], s=16, alpha=0.55, color=RED,
+               edgecolors="none",
+               label="congested (x = throughput; demand unobservable)")
+    xg = np.linspace(0, max(1.4, df["xc"].max()), 200)
     a4.plot(xg, bpr(xg, a_fit, b_fit), color=TEAL, lw=2.5,
             label=f"fitted BPR (a={a_fit:.2f}, b={b_fit:.1f}, R2={r2:.2f})")
     a4.plot(xg, bpr(xg, 0.15, 4.0), color=AMBER, lw=1.8, ls="--",
             label="classic BPR (0.15, 4)")
     a4.axvline(1.0, color=GRAY, ls=":", lw=1)
-    a4.set_xlabel("v/c ratio (demand-based)"); a4.set_ylabel("t / t0 (travel-time ratio)")
+    a4.set_xlabel("v/c ratio"); a4.set_ylabel("t / t0 (travel-time ratio)")
     a4.set_title("The volume-delay function — β = 4 fixed, α calibrated")
     a4.legend(fontsize=8)
 
@@ -498,14 +506,15 @@ def main():
     fig2, a = plt.subplots(figsize=(8, 5.5))
     a.scatter(unc["xc"], unc["ratio"], s=18, alpha=0.55, color=BLUE,
               edgecolors="none", label="uncongested hours (t/t0 from speed)")
-    a.scatter(con["xd"], con["ratio"], s=18, alpha=0.55, color=RED,
-              edgecolors="none", label="congested hours @ reconstructed demand")
+    a.scatter(con["xc"], con["ratio"], s=18, alpha=0.55, color=RED,
+              edgecolors="none",
+              label="congested hours (x = throughput; demand unobservable)")
     a.plot(xg, bpr(xg, a_fit, b_fit), color=TEAL, lw=3,
            label=f"fitted BPR: 1 + {a_fit:.3f}*(v/c)^{b_fit:.2f}")
     a.plot(xg, bpr(xg, 0.15, 4.0), color=AMBER, lw=2, ls="--",
            label="classic BPR (0.15, 4)")
     a.axvline(1.0, color=GRAY, ls=":", lw=1)
-    a.set_xlabel("v/c ratio (demand-based)"); a.set_ylabel("t / t0")
+    a.set_xlabel("v/c ratio"); a.set_ylabel("t / t0")
     a.set_title(f"I-25 NB volume-delay function (β = 4 fixed) — R2 = {r2:.3f}")
     a.legend()
     fig2.tight_layout()
@@ -520,9 +529,9 @@ def main():
     fig3, a = plt.subplots(figsize=(10, 6.5))
     a.scatter(unc["xc"], unc["ratio"], s=18, alpha=0.5, color="#7d8da0",
               edgecolors="none", label="uncongested hours")
-    a.scatter(con["xd"], con["ratio"], s=18, alpha=0.35, color="#d9a0a3",
-              edgecolors="none", label="congested hours @ reconstructed demand")
-    xg2 = np.linspace(0.01, max(1.4, df["xd"].max()), 300)
+    a.scatter(con["xc"], con["ratio"], s=18, alpha=0.35, color="#d9a0a3",
+              edgecolors="none", label="congested hours (x = throughput)")
+    xg2 = np.linspace(0.01, max(1.4, df["xc"].max()), 300)
     for name, (fn, popt, fr2, capwall) in fitted.items():
         note = ", fit on v/c≤1" if capwall else ""
         a.plot(xg2, fn(xg2, *popt), color=VDF_COLS.get(name, "#333"), lw=2.2,
@@ -537,15 +546,15 @@ def main():
     fig3.savefig(p3, dpi=140)
 
     # compiled observations as a JS array, ready to embed in the Chapter 3
-    # VDF explorer. x is the DEMAND-based v/c (congested hours at their
-    # reconstructed demand), r = t/t0, c = congested flag.
+    # VDF explorer. x = observed throughput v/c, r = t/t0, c = congested flag
+    # (demand during congestion is unobservable from a single station).
     pts = ",".join(
-        f"[{r.xd:.3f},{r.ratio:.3f},{1 if r.congested else 0}]"
-        for r in df.sort_values(["xd"]).itertuples()
+        f"[{r.xc:.3f},{r.ratio:.3f},{1 if r.congested else 0}]"
+        for r in df.sort_values(["xc"]).itertuples()
     )
     js = (f"// I-25 NB, CDOT station 000501, {len(df)} hourly obs, "
-          f"cap={cap:.0f} veh/hr, ffs={ffs:.1f} mph  "
-          f"[demand v/c, t/t0, congested] (congested at reconstructed demand)\n"
+          f"cap={cap:.0f} veh/hr, ffs={ffs:.1f} mph  [v/c, t/t0, congested] "
+          f"(congested at throughput v/c — demand unobservable)\n"
           f"const I25_OBS=[{pts}];\n")
     pjs = os.path.join(out_dir, "i25_points.js")
     with open(pjs, "w", encoding="utf-8") as f:

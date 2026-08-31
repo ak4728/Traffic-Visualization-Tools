@@ -44,12 +44,13 @@ python analysis\i25_speed_flow.py --demo          # synthetic data, pipeline tes
   hypercongestion). Since BPR is a demand-based function, observations below
   0.72·ffs are classified as the congested branch and **excluded from the
   fit** — they are still plotted (in red) so the two branches are visible.
-- **Demand reconstruction (shown, not fitted):** congested hours are also
-  placed at a reconstructed demand v/c — the median volume for the same
-  hour-of-day and day type on days that hour flowed freely, never less than
-  the hour's own throughput. A single station only sees ~1 mile of a queue
-  that extends miles upstream, so this shifts points by only ≈ +0.06 v/c —
-  it cannot recover corridor demand, and those hours stay out of the fits.
+- **Demand reconstruction (console diagnostic only):** a reconstructed demand
+  v/c is computed for congested hours (hour-of-day median on free days, never
+  less than own throughput). A single station only sees ~1 mile of a queue
+  that extends miles upstream, so this shifts points by only ≈ +0.06 v/c and
+  clusters them at synthetic x values — it cannot recover corridor demand.
+  All charts therefore plot congested hours at their OBSERVED throughput v/c
+  (labeled as such), and those hours stay out of the fits.
 - **BPR** `t = t0·(1 + α(v/c)^β)`: two fits are reported — both parameters
   free, and the headline calibration with **β fixed at the engineering
   standard 4** and α calibrated. Sub-capacity data identifies β only weakly
@@ -69,21 +70,21 @@ families (R²): Combined 0.76 > Logit 0.75 > Generalized cost 0.73 ≫
 Akçelik 0.22 > Conical (negative; it forces t = 2·t0 exactly at capacity
 while the data sits near 1.25 there).
 
-- **Speed-density models** (fitted on u vs k across BOTH regimes — their
-  whole point is one curve through free flow and congestion): Greenshields
+- **Speed-density models** (on u vs k across BOTH regimes — their whole
+  point is one curve through free flow and congestion): Greenshields
   u = uf(1−k/kj), Greenberg u = uc·ln(kj/k), Underwood u = uf·e^(−k/kc).
   Their implied speed-flow curves q = k·u(k) are overlaid on the speed-flow
-  and fundamental-diagram panels. With the August data: **Greenshields
-  uf = 74.7 mph, kj = 388 veh/mi, R² = 0.93, implied capacity = 7,254 veh/hr**
-  (independently confirming the 7,200 engineering estimate); Underwood 0.86
-  (capacity 7,678); Greenberg 0.64 (its u→∞ behavior at low density makes it
-  calibrate poorly on freeway data without deep-jam observations).
+  and fundamental-diagram panels. **Greenshields uses engineering-pinned
+  values uf = 68 mph, kj = 450 veh/mi (~112/lane): R² = 0.87, implied
+  capacity = 7,650 veh/hr** (a free fit gives uf 74.7 / kj 388, R² 0.93, but
+  overshoots the observed free-flow speed). Underwood fits R² 0.86 (capacity
+  7,678); Greenberg 0.64 (its u→∞ behavior at low density makes it calibrate
+  poorly on freeway data without deep-jam observations).
 
-Note on axes: the travel-time panel plots OBSERVED volume (it is the exact
-inverse of the speed-flow panel, tt = length/speed). The reconstructed-demand
-x-axis appears only in the VDF panels — there the congested hours form
-vertical stacks because the demand proxy assigns the same hour-of-day median
-to every congested occurrence of that hour.
+Note on axes: every panel plots OBSERVED quantities — the travel-time panel
+is the exact inverse of the speed-flow panel (tt = length/speed), and the
+VDF panels place congested hours at their observed throughput v/c, labeled
+"demand unobservable".
 
 These fitted values are the default slider positions in the Chapter 3 VDF
 explorer (`Optimization.html` Part 1), which also embeds the 672 compiled
