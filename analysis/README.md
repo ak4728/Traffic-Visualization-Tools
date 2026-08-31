@@ -30,7 +30,9 @@ python analysis\i25_speed_flow.py --demo          # synthetic data, pipeline tes
 ```
 
 - `--length` — travel time = length / speed (default 1 mile)
-- `--capacity` — veh/hr for the v/c ratio (default: max observed flow)
+- `--capacity` — veh/hr for the v/c ratio (default: 95th percentile of hourly
+  volume — a sustainable rate; using the max observed hour would force every
+  v/c ≤ 1 by construction)
 - `--lanes` — divides volume to get per-lane flow
 - `--demo` — synthetic I-25-like data to verify the pipeline
 
@@ -48,12 +50,15 @@ python analysis\i25_speed_flow.py --demo          # synthetic data, pipeline tes
   uncongested observations: BPR, Akçelik (HCM 2000, J), Combined link+node
   (k₄ and g/C, node capacity tied to link capacity), Conical (Spiess, α),
   Generalized cost (constant money term over classic BPR), and Logit VDF
-  (c₁, c₂, c₃).
+  (c₁, c₂, c₃). Akçelik and Conical treat v/c = 1 as a hard wall, so they are
+  fitted on v/c ≤ 1 only.
 
-With the Aug 23–29, 2026 week of data: ffs ≈ 69 mph, capacity ≈ 8,360 veh/hr
-(all lanes), 104 uncongested / 64 congested hours. Fits (R²): Logit 0.84 >
-Combined 0.82 ≈ BPR 0.82 (α≈0.36, β≈3.3) > Conical 0.81 ≈ Akçelik 0.80 >
-Generalized cost 0.56.
+With the Aug 23–29, 2026 week of data: ffs ≈ 69 mph, capacity ≈ 7,590 veh/hr
+(95th pct, all lanes), 104 uncongested / 64 congested hours, throughput up to
+v/c ≈ 1.10. Fits (R²): Combined 0.84 > Logit 0.83 > BPR 0.82 (α≈0.26, β≈3.3)
+≫ Akçelik 0.39 > Conical (negative). The last two fail honestly: Akçelik stays
+flat until v/c ≈ 1 and Spiess's conical forces t = 2·t0 exactly at capacity,
+while the observed near-capacity hours sit at only t/t0 ≈ 1.2–1.35.
 
 ## Outputs
 

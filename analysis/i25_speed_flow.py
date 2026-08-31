@@ -227,7 +227,10 @@ def main():
     # 85th percentile of speeds in the lowest-volume quartile
     low = df[df["volume"] <= df["volume"].quantile(0.25)]
     ffs = low["speed"].quantile(0.85)
-    cap = args.capacity or df["volume"].max()        # max observed throughput
+    # capacity: 95th percentile of hourly volumes — a sustainable rate, not
+    # the single best hour ever seen (using max observed would force every
+    # v/c <= 1 by construction and hide the oversaturated hours)
+    cap = args.capacity or df["volume"].quantile(0.95)
     t0 = args.length / ffs * 60                      # free-flow time (min)
 
     df["tt"] = args.length / df["speed"] * 60        # travel time (min)
@@ -261,7 +264,7 @@ def main():
     print("\n──── results ─────────────────────────────────────")
     print(f"  free-flow speed  (85th pct, low flow): {ffs:6.1f} mph")
     print(f"  capacity used                        : {cap:6.0f} veh/hr"
-          + ("" if args.capacity else "  (max observed flow — override with --capacity)"))
+          + ("" if args.capacity else "  (95th pct of volume — override with --capacity)"))
     print(f"  regime split at {s_crit:.0f} mph        : "
           f"{len(unc)} uncongested / {len(con)} congested hours "
           f"(BPR fitted to uncongested only)")
@@ -297,27 +300,33 @@ def main():
     def logit_vdf(x, c1, c2, c3):
         return 1 + c1 / (1 + np.exp(c3 * (c2 - x)))
 
+    # capwall=True: the function treats v/c = 1 as a hard wall (it goes
+    # near-vertical there), so it is fitted only on v/c <= 1 — beyond 1 it
+    # describes demand, which throughput counts cannot measure.
     FITS = [
-        ("BPR (1964)",           bpr,       [0.15, 4.0],      ([0.005, 0.5], [5, 15]),          ["a", "b"]),
-        ("Akçelik (HCM 2000)",   akcelik,   [0.8],            ([0.001], [500]),                  ["J"]),
-        ("Combined link+node",   combined,  [1.0, 0.8],       ([0.5, 0.1], [2.0, 0.98]),         ["k4", "g/C"]),
-        ("Conical (Spiess 1990)", conical,  [4.0],            ([1.01], [40]),                    ["alpha"]),
-        ("Generalized cost",     gencost,   [0.05],           ([0.0], [5.0]),                    ["money (min)"]),
-        ("Logit VDF",            logit_vdf, [1.5, 1.05, 6.0], ([0.05, 0.5, 0.5], [6, 2.5, 40]),  ["c1", "c2", "c3"]),
+        ("BPR (1964)",           bpr,       [0.15, 4.0],      ([0.005, 0.5], [5, 15]),          ["a", "b"],        False),
+        ("Akçelik (HCM 2000)",   akcelik,   [0.8],            ([0.001], [500]),                  ["J"],             True),
+        ("Combined link+node",   combined,  [1.0, 0.8],       ([0.5, 0.1], [2.0, 0.98]),         ["k4", "g/C"],     False),
+        ("Conical (Spiess 1990)", conical,  [4.0],            ([1.01], [40]),                    ["alpha"],         True),
+        ("Generalized cost",     gencost,   [0.05],           ([0.0], [5.0]),                    ["money (min)"],   False),
+        ("Logit VDF",            logit_vdf, [1.5, 1.05, 6.0], ([0.05, 0.5, 0.5], [6, 2.5, 40]),  ["c1", "c2", "c3"], False),
     ]
-    y = fit_df["ratio"].values
+    sub1 = fit_df[fit_df["xc"] <= 1.0]
     fitted = {}
     print("\n──── all VDF families, fitted to the uncongested branch ────")
-    for name, fn, p0, bounds, labels in FITS:
+    for name, fn, p0, bounds, labels, capwall in FITS:
+        d = sub1 if capwall else fit_df
+        yv = d["ratio"].values
         try:
-            popt, _ = curve_fit(fn, fit_df["xc"].values, y, p0=p0,
+            popt, _ = curve_fit(fn, d["xc"].values, yv, p0=p0,
                                 bounds=bounds, maxfev=40000)
-            res = y - fn(fit_df["xc"].values, *popt)
-            fr2 = 1 - np.sum(res ** 2) / ss_tot
+            res = yv - fn(d["xc"].values, *popt)
+            fr2 = 1 - np.sum(res ** 2) / np.sum((yv - yv.mean()) ** 2)
             rmse = np.sqrt(np.mean(res ** 2))
-            fitted[name] = (fn, popt, fr2)
+            fitted[name] = (fn, popt, fr2, capwall)
             ptxt = ", ".join(f"{l} = {v:.3f}" for l, v in zip(labels, popt))
-            print(f"  {name:<24} {ptxt:<44} R2 = {fr2:6.3f}   RMSE = {rmse:.4f}")
+            note = "  (fit on v/c<=1 only)" if capwall else ""
+            print(f"  {name:<24} {ptxt:<44} R2 = {fr2:6.3f}   RMSE = {rmse:.4f}{note}")
         except Exception as e:
             print(f"  {name:<24} fit failed: {e}")
 
@@ -421,9 +430,10 @@ def main():
     a.scatter(con["xc"], con["ratio"], s=18, alpha=0.35, color="#d9a0a3",
               edgecolors="none", label="congested hours (excluded from fits)")
     xg2 = np.linspace(0.01, max(1.4, df["xc"].max()), 300)
-    for name, (fn, popt, fr2) in fitted.items():
+    for name, (fn, popt, fr2, capwall) in fitted.items():
+        note = ", fit on v/c≤1" if capwall else ""
         a.plot(xg2, fn(xg2, *popt), color=VDF_COLS.get(name, "#333"), lw=2.2,
-               label=f"{name}  (R2={fr2:.2f})")
+               label=f"{name}  (R2={fr2:.2f}{note})")
     a.axvline(1.0, color=GRAY, ls=":", lw=1)
     a.set_xlabel("v/c ratio"); a.set_ylabel("t / t0 (travel-time ratio)")
     a.set_ylim(0.9, min(3.0, float(np.nanmax(unc["ratio"])) + 1.2))
