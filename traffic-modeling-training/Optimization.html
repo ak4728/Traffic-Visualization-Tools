@@ -116,7 +116,8 @@
         </div>
         <div class="control-group"><label>Max iterations</label><input type="range" id="odIter" min="5" max="60" step="5" value="30"><span class="val" id="odIterVal">30</span></div>
         <div class="control-group"><label>Convergence %RMSE</label><input type="range" id="odConv" min="0.5" max="10" step="0.5" value="2"><span class="val" id="odConvVal">2.0%</span></div>
-        <div class="control-group"><label>Animation speed</label><input type="range" id="odSpd" min="0.5" max="5" step="0.5" value="1.5"><span class="val" id="odSpdVal">1.5 it/s</span></div>
+        <div class="control-group"><label>Iteration speed</label><input type="range" id="odSpd" min="0.5" max="5" step="0.5" value="1.5"><span class="val" id="odSpdVal">1.5 it/s</span></div>
+        <div class="control-group"><label>Vehicle speed</label><input type="range" id="odVSpd" min="1" max="10" step="1" value="3"><span class="val" id="odVSpdVal">3×</span></div>
         <button class="action" id="odStep">Step ▸</button>
         <button class="action" id="odRun">▶ Run</button>
         <button class="action sec" id="odReset">↺ Reset</button>
@@ -159,7 +160,8 @@
         <button class="action" id="uePlay">▶ Play</button>
         <button class="action sec" id="ueStep">Step ▸</button>
         <button class="action sec" id="ueRst">↺</button>
-        <div class="control-group"><label>Speed</label><input type="range" id="ueSpd" min="1" max="10" step="1" value="3"><span class="val" id="ueSpdVal">3 it/s</span></div>
+        <div class="control-group"><label>Iteration speed</label><input type="range" id="ueSpd" min="1" max="10" step="1" value="3"><span class="val" id="ueSpdVal">3 it/s</span></div>
+        <div class="control-group"><label>Vehicle speed</label><input type="range" id="ueVSpd" min="1" max="10" step="1" value="3"><span class="val" id="ueVSpdVal">3×</span></div>
       </div>
       <canvas id="ueRoutes" class="gauge-canvas" width="520" height="300"></canvas>
       <div class="readout" id="ueNarr">press ▶ Play to watch the algorithm iterate</div>
@@ -748,7 +750,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.fillStyle=col; cx.textAlign='center';
       cx.fillText(txt, mid[0], mid[1]+off+1);
       cx.fillStyle='#6b7280'; cx.font='600 11px '+SANS;
-      cx.fillText(L.name+(counted?' — vol / count':' — no count'), mid[0], mid[1]+off+19);
+      const tSfx = l==='LN' ? ' · t = '+a.tN.toFixed(2)+' min' : l==='LS' ? ' · t = '+a.tS.toFixed(2)+' min' : '';
+      cx.fillText(L.name+(counted?' — vol / count':' — no count')+tSfx, mid[0], mid[1]+off+19);
     });
     // O-D colour legend
     let lx=20;
@@ -861,10 +864,11 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     el('odSpdVal').textContent=parseFloat(el('odSpd').value).toFixed(1)+' it/s';
     if(timer){ stopRun(); run(); }   // apply new pace mid-run
   });
+  el('odVSpd').addEventListener('input', ()=>{ el('odVSpdVal').textContent=el('odVSpd').value+'×'; });
 
   // ── micro vehicle animation on the ODME network: spawn rates follow the
   //    CURRENT O-D estimate; N/S choice at node a follows the live UE split ──
-  const SIMSPEED2=6, NB_R2=3;
+  const NB_R2=3;
   function gauss2(){
     let u=0,v2=0;
     while(u===0) u=Math.random();
@@ -904,7 +908,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     if(lastSim2===null) lastSim2=ts;
     let dtR=(ts-lastSim2)/1000; lastSim2=ts;
     dtR=Math.min(dtR,0.05);
-    const sdt=dtR*SIMSPEED2;
+    const sdt=dtR*parseFloat(el('odVSpd').value);
     const a=assign(X);
     // spawn per O-D pair at the CURRENT estimated rate (NegBin, bursty)
     Object.keys(X).forEach(od=>{
@@ -1152,6 +1156,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('ueStep').addEventListener('click', ()=>{ stopPlay(); if(k<parseInt(el('ueN').value)) k++; renderAll(); });
   el('ueRst').addEventListener('click', ()=>{ stopPlay(); k=1; renderAll(); });
   el('ueSpd').addEventListener('input', ()=>{ el('ueSpdVal').textContent=el('ueSpd').value+' it/s'; if(timer){ stopPlay(); play(); } });
+  el('ueVSpd').addEventListener('input', ()=>{ el('ueVSpdVal').textContent=el('ueVSpd').value+'×'; });
 
   // ── micro-level vehicle animation: NegBin arrivals choosing routes at a
   //    diverge node, color-coded by chosen route, speeds from current times ──
@@ -1159,7 +1164,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const SW=SIMC.width, SH=SIMC.height;
   const O=[70,150], DV=[230,150], M=[1030,150], DEST=[1140,150];
   const WPS2=[[620,56],[620,150],[620,240]];
-  const NB_R=3, SIMSPEED=5;    // sim-seconds per real second
+  const NB_R=3;                // NegBin dispersion; vehicle pace via its own slider
   let cars2=[], tally=[0,0,0], stateKey='', lastSim=null;
 
   function gauss(){
@@ -1203,7 +1208,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     if(lastSim===null) lastSim=ts;
     let dtR=(ts-lastSim)/1000; lastSim=ts;
     dtR=Math.min(dtR,0.05);
-    const sdt=dtR*SIMSPEED;
+    const sdt=dtR*parseFloat(el('ueVSpd').value);
     const D=parseFloat(el('ueDem').value);
     const arr=res.st[el('ueSel').value];
     const stt=arr[Math.min(k,arr.length)-1];
