@@ -560,6 +560,19 @@ def main():
     with open(pjs, "w", encoding="utf-8") as f:
         f.write(js)
 
+    # raw (flow, speed) pairs for the Chapter X fundamental-diagram page
+    # (density follows as k = q/u)
+    qu = ",".join(
+        f"[{r.volume:.0f},{r.speed:.1f},{1 if r.congested else 0}]"
+        for r in df.sort_values(["volume"]).itertuples()
+    )
+    js2 = (f"// I-25 NB, CDOT station 000501, {len(df)} hourly obs, Aug 2026  "
+           f"[flow veh/hr, speed mph, congested]\n"
+           f"const I25_QU=[{qu}];\n")
+    pjs2 = os.path.join(out_dir, "i25_qu.js")
+    with open(pjs2, "w", encoding="utf-8") as f:
+        f.write(js2)
+
     print(f"\n  plots saved:\n    {p1}\n    {p2}\n    {p3}\n  JS points:\n    {pjs}")
 
 
