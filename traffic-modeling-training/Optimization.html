@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.3 — Optimization &amp; Assignment</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; background: #f7f8fa; color: #23272f; line-height: 1.6; padding: 12px; }
+  .container { max-width: none; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 14px; padding: 4px 10px 8px; border-bottom: 2px solid #d5dbe5; margin-bottom: 10px; }
+  h1 { color: #0f7b82; font-size: 1.25em; font-weight: 600; }
+  .subtitle { color: #6b7280; font-style: italic; font-size: 0.88em; }
+  .nav { font-size: 0.85em; }
+  .nav a { color: #0f7b82; text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; }
+  .tab { background: #f0f3f8; border: 1px solid #e2e6ee; color: #4b5563; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.9em; transition: all .2s; }
+  .tab:hover { background: #e3edf3; }
+  .tab.active { background: #14919b; border-color: #14919b; color: #fff; font-weight: bold; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .viz-container { background: #fff; border: 1px solid #e2e6ee; border-radius: 10px; padding: 10px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(30,40,60,.06); }
+  .panel-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 10px; align-items: stretch; }
+  .panel-grid .viz-container { margin-bottom: 0; }
+  @media (max-width: 900px){ .panel-grid { grid-template-columns: 1fr; } }
+  .pane-head { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 2px; }
+  .help { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e2e6ee; color: #0f7b82; font-weight: 700; font-size: 12px; cursor: help; }
+  .help .tip { display: none; position: absolute; top: 22px; right: 0; z-index: 10; width: 420px; max-width: 80vw; background: #fff; border: 1px solid #e2e6ee; border-radius: 8px; box-shadow: 0 8px 24px rgba(16,24,40,.15); padding: 10px 12px; font-size: 12px; font-weight: 400; color: #4b5563; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  canvas { border-radius: 6px; display: block; margin: 0 auto; width: 100%; height: auto; }
+  .big-canvas { background: #fff; border: 1px solid #eceff4; cursor: crosshair; touch-action: none; }
+  .gauge-canvas { background: #fff; border: 1px solid #eceff4; border-radius: 6px; width: min(400px, 100%); height: auto; display: block; margin: 8px auto 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 10px 0; align-items: center; }
+  .control-group { display: flex; flex-direction: column; align-items: center; gap: 3px; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 7px 12px; border-radius: 6px; }
+  .control-group label { font-size: 0.76em; color: #0f7b82; }
+  input[type="range"] { width: 100px; accent-color: #14919b; }
+  select { background:#fff; color:#1f2937; border:1px solid #14919b; padding:4px 6px; border-radius:4px; font-family:inherit; font-size:0.85em; }
+  .val { font-size: 0.8em; color: #1f2937; font-weight: bold; }
+  button.action { background: #14919b; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-family: inherit; font-weight: bold; cursor: pointer; font-size: 0.88em; transition: transform .08s ease, filter .15s ease; }
+  button.action:hover { filter: brightness(1.1); }
+  button.action:active { transform: scale(0.93); }
+  button.action.sec { background:#fff; color:#14919b; border:1px solid #14919b; }
+  .vdf-pill { display:flex; align-items:center; gap:5px; padding: 4px 10px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer; border: 1.5px solid #d6dae2; color: #6b7280; background: #fff; user-select: none; }
+  .vdf-pill.on { color: #fff; border-color: transparent; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .card { background: #f7f9fc; border: 1px solid #e2e6ee; border-radius: 8px; padding: 8px 10px; border-left: 4px solid #14919b; }
+  .card h3 { color: #0f7b82; font-size: 0.76em; margin-bottom: 2px; font-weight: 600; }
+  .card .value { font-family: 'Courier New', monospace; font-size: 1.0em; color: #1f2937; font-weight: bold; }
+  .card.warn { border-left-color: #c1121f; }
+  .card.warn .value { color: #c1121f; }
+  .readout { text-align: center; font-family: 'Courier New', monospace; color: #0f6f76; background: #f0f3f8; border: 1px solid #e2e6ee; padding: 6px; border-radius: 4px; margin-top: 8px; font-size: 0.82em; }
+  table.od { border-collapse: collapse; margin: 8px auto; font-size: 0.82em; }
+  table.od th, table.od td { border: 1px solid #e2e6ee; padding: 5px 10px; text-align: center; }
+  table.od th { background: #f0f3f8; color: #0f7b82; }
+  table.od td b { font-family: 'Courier New', monospace; font-size: 1.05em; }
+  table.od td small { color: #8a94a3; display: block; font-size: 0.85em; }
+  code { background: #eef1f5; padding: 1px 5px; border-radius: 3px; color: #b45309; font-size: 0.88em; }
+  @media (max-width: 640px){ body { padding: 6px; } input[type="range"] { width: 88px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Optimization &amp; Assignment</h1>
+    <span class="subtitle">Ch. 3 — VDFs, ODME, equilibrium convergence &amp; SUE (TransModeler concepts)</span>
+    <span class="nav"><a href="CumulativePlots.html">← Ch.2 Cumulative Plots</a> · <a href="DetectorCumulatives.html">I-70 Data</a> · <a href="TimeSpaceDiagram.html">Ch.1</a></span>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="vdf">1. Volume-Delay Functions</button>
+    <button class="tab" data-tab="odme">2. ODME Sandbox</button>
+    <button class="tab" data-tab="ue">3. UE Convergence &amp; Rel Gap</button>
+    <button class="tab" data-tab="sue">4. SUE Perception Error</button>
+  </div>
+
+  <!-- ═══ TAB 1: VDF EXPLORER ═══ -->
+  <div class="panel active" id="vdf">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="vdfChart" class="big-canvas" width="1200" height="600"></canvas>
+      <div class="readout" id="vdfReadout">Travel time on the sample link vs v/c — hover to compare functions</div>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip"><b>Volume-delay functions</b> map a link's volume/capacity ratio to congested travel time — they are what UE/SUE assignment iterates on. <b>BPR</b> (1964) is the planning workhorse: cheap, flexible via α,β (defaults 0.15, 4; see NCHRP 365) — best for uninterrupted freeway/highway links. <b>Akcelik</b> (HCM 2000) is time-dependent: the analysis-period length T lets it stay finite and meaningful when demand exceeds capacity (X&gt;1) — good for oversaturated corridors and arterials with control delay D₀. <b>Combined link+node</b> (Aashtiani et al.) adds Webster-type signalized and unsignalized intersection delay to a BPR link time — for urban networks where node delay dominates (shown here with a representative Webster form; TransModeler's exact k₁…k₄ formulation follows the same shape). <b>Conical</b> (Spiess 1990) mimics BPR but with bounded derivative and strictly increasing form — numerically better behaved in equilibrium algorithms than high-β BPR. <b>Generalized cost</b> adds tolls and operating cost via a value of time — for toll roads and multi-criteria routing. <b>Logit VDF</b> (Israel ITPR, representative sigmoid) caps runaway times with an S-shape including intersection delay. </span></span></div>
+      <div class="controls" id="vdfPills"></div>
+      <div class="controls">
+        <div class="control-group"><label>Link length</label><input type="range" id="vLen" min="0.5" max="5" step="0.5" value="1"><span class="val" id="vLenVal">1.0 mi</span></div>
+        <div class="control-group"><label>Free-flow speed</label><input type="range" id="vFfs" min="20" max="70" step="5" value="40"><span class="val" id="vFfsVal">40 mph</span></div>
+        <div class="control-group"><label>Capacity</label><input type="range" id="vCap" min="600" max="2400" step="100" value="1800"><span class="val" id="vCapVal">1800 veh/hr</span></div>
+        <div class="control-group"><label>Edit parameters of…</label><select id="vdfSel"></select></div>
+      </div>
+      <div class="controls" id="vdfParams"></div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 2: ODME ═══ -->
+  <div class="panel" id="odme">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="odChart" class="big-canvas" width="1200" height="600"></canvas>
+      <div class="readout" id="odReadout">A toy network: 2 origins, 2 destinations, two competing middle routes. Counted links show volume vs count.</div>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip"><b>O-D Matrix Estimation</b> (Nielsen's bi-level method, as in TransModeler): iterate between a <b>traffic assignment</b> (here UE between the two middle routes, BPR times) and a <b>matrix adjustment</b> that nudges O-D flows toward consistency with the link counts. <b>Single Path</b> compares volumes to counts only along each pair's current shortest path; <b>Multiple Paths</b> uses all used paths weighted by their flows (usually more accurate); <b>Gradient</b> descends the least-squares count-error objective — best when you trust the seed matrix. Counts exist on 4 of 6 links (gray links are uncounted — flows there are only pinned down indirectly, which is why the estimate need not equal the hidden truth). Convergence is tracked as <b>%RMSE</b> between assigned volumes and counts.</span></span></div>
+      <div class="controls">
+        <div class="control-group"><label>Estimation method</label>
+          <select id="odMethod">
+            <option value="single">Single Path</option>
+            <option value="multi" selected>Multiple Paths</option>
+            <option value="grad">Gradient</option>
+          </select>
+        </div>
+        <div class="control-group"><label>Max iterations</label><input type="range" id="odIter" min="5" max="60" step="5" value="30"><span class="val" id="odIterVal">30</span></div>
+        <div class="control-group"><label>Convergence %RMSE</label><input type="range" id="odConv" min="0.5" max="10" step="0.5" value="2"><span class="val" id="odConvVal">2.0%</span></div>
+        <button class="action" id="odStep">Step ▸</button>
+        <button class="action" id="odRun">▶ Run</button>
+        <button class="action sec" id="odReset">↺ Reset</button>
+      </div>
+      <div id="odTable"></div>
+      <div class="cards">
+        <div class="card"><h3>Iteration</h3><div class="value" id="odItC">0</div></div>
+        <div class="card"><h3>%RMSE (vol vs count)</h3><div class="value" id="odRmse">—</div></div>
+        <div class="card"><h3>Worst counted link error</h3><div class="value" id="odWorst">—</div></div>
+        <div class="card"><h3>Route split N / S</h3><div class="value" id="odSplit">—</div></div>
+      </div>
+      <canvas id="odConvChart" class="gauge-canvas" width="520" height="300"></canvas>
+    </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 3: UE CONVERGENCE ═══ -->
+  <div class="panel" id="ue">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="ueChart" class="big-canvas" width="1200" height="600"></canvas>
+      <div class="readout" id="ueReadout">Relative gap vs iteration (log scale) on a 3-route network</div>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip"><b>Relative gap</b> measures how far an assignment is from user equilibrium: <code>gap = (TSTT − SPTT)/TSTT</code>, where TSTT is total travel time at current flows and SPTT is the total if every trip used its current shortest path. At perfect UE nobody can improve → gap = 0. <b>MSA</b> (step 1/k) converges but slowly — it's what SUE uses. <b>Frank-Wolfe</b> adds an optimal line search toward the all-or-nothing solution but zigzags near the optimum. <b>N-conjugate FW</b> (Daneva &amp; Lindberg 2003, Mitradjieva &amp; Lindberg 2013) combines the FW direction with previous direction(s) forced to be Hessian-conjugate — shown here for N=2 (bi-conjugate). It reaches roughly an order of magnitude lower gap in the same iterations, which is why it's TransModeler's most-used method; N&gt;2 can do even better. Path-based methods (Dial's Algorithm B) go further still for very tight gaps (10⁻⁵ and below).</span></span></div>
+      <div class="controls">
+        <div class="control-group"><label>Demand</label><input type="range" id="ueDem" min="1500" max="4500" step="250" value="3000"><span class="val" id="ueDemVal">3000 veh/hr</span></div>
+        <div class="control-group"><label>Iterations shown</label><input type="range" id="ueN" min="10" max="80" step="5" value="50"><span class="val" id="ueNVal">50</span></div>
+      </div>
+      <div class="cards">
+        <div class="card"><h3>Iters to gap ≤ 10⁻³ (MSA / FW / BiCFW)</h3><div class="value" id="ueTo3">—</div></div>
+        <div class="card"><h3>Iters to gap ≤ 10⁻⁵ (MSA / FW / BiCFW)</h3><div class="value" id="ueTo5">—</div></div>
+        <div class="card"><h3>UE route times (should be equal)</h3><div class="value" id="ueTimes">—</div></div>
+        <div class="card"><h3>UE route flows</h3><div class="value" id="ueFlows">—</div></div>
+      </div>
+      <div class="readout" style="margin-top:8px">Routes: t₁=10(1+0.15x⁴) c=1000 · t₂=12(1+0.15x⁴) c=1200 · t₃=15(1+0.15x⁴) c=1500 (min)</div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 4: SUE ═══ -->
+  <div class="panel" id="sue">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="sueChart" class="big-canvas" width="1200" height="600"></canvas>
+      <div class="readout" id="sueReadout">P(driver chooses route 1) vs cost difference Δc = c₂ − c₁, for each perception-error distribution</div>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip"><b>Stochastic User Equilibrium</b> assumes drivers perceive costs with error: perceived cost = c + ε. The <b>Function</b> you pick in TransModeler's SUE settings is the distribution of ε, and the <b>Error</b> box is its scale θ. With <b>Gumbel</b> errors the route-choice probability has the closed-form <b>logit</b> model — P₁ = 1/(1+e^(−Δc/θ)) — which is why Gumbel is the standard choice. <b>Normal</b> errors give the probit model (no closed form; the S-curve is slightly different in the tails). <b>Uniform</b> errors give a piecewise-linear choice curve that assigns exactly 0 or 1 beyond a finite cost difference — a hard cutoff unlike the other two. Larger θ → flatter curves → more flow on less-attractive routes; as θ→0 all three collapse to deterministic UE. SUE is solved with MSA (provably convergent, slow) — use many iterations.</span></span></div>
+      <canvas id="sueDens" class="gauge-canvas" width="520" height="300"></canvas>
+      <div class="controls">
+        <div class="control-group"><label>Perception error θ (std dev, min)</label><input type="range" id="sueTheta" min="0.5" max="6" step="0.25" value="2"><span class="val" id="sueThetaVal">2.0 min</span></div>
+      </div>
+      <div class="cards">
+        <div class="card"><h3>Gumbel → logit</h3><div class="value" style="font-size:0.85em">P₁ = 1/(1+e^(−Δc/β)), β=θ√6/π</div></div>
+        <div class="card"><h3>Normal → probit</h3><div class="value" style="font-size:0.85em">P₁ = Φ(Δc/(θ√2))</div></div>
+        <div class="card"><h3>Uniform → linear</h3><div class="value" style="font-size:0.85em">triangular CDF, hard 0/1 cutoff</div></div>
+        <div class="card"><h3>At Δc = 2 min (P₁ G / N / U)</h3><div class="value" id="sueP2">—</div></div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function el(id){ return document.getElementById(id); }
+const SANS='"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    el(tab.dataset.tab).classList.add('active');
+  });
+});
+
+function scaffold(ctx, W, H, P, xMin, xMax, yMin, yMax, xLab, yLab, xTick, yTick, yFmt){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  const pw=W-P.l-P.r, ph=H-P.t-P.b;
+  const X=x=>P.l+(x-xMin)/(xMax-xMin)*pw;
+  const Y=y=>P.t+ph-(y-yMin)/(yMax-yMin)*ph;
+  ctx.strokeStyle='#f1f3f7'; ctx.lineWidth=1;
+  for(let g=yMin; g<=yMax+1e-9; g+=yTick){
+    ctx.beginPath(); ctx.moveTo(P.l,Y(g)); ctx.lineTo(P.l+pw,Y(g)); ctx.stroke();
+  }
+  ctx.strokeStyle='#d6dae2';
+  ctx.beginPath(); ctx.moveTo(P.l,P.t+ph+0.5); ctx.lineTo(P.l+pw,P.t+ph+0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(P.l+0.5,P.t); ctx.lineTo(P.l+0.5,P.t+ph); ctx.stroke();
+  ctx.fillStyle='#7b8494'; ctx.font='12px '+SANS;
+  for(let g=xMin; g<=xMax+1e-9; g+=xTick){ ctx.textAlign='center'; ctx.fillText(Math.round(g*100)/100, X(g), P.t+ph+18); }
+  for(let g=yMin; g<=yMax+1e-9; g+=yTick){ ctx.textAlign='right'; ctx.fillText(yFmt?yFmt(g):Math.round(g*100)/100, P.l-8, Y(g)+4); }
+  ctx.fillStyle='#9aa1ad'; ctx.font='italic 12px '+SANS;
+  ctx.textAlign='left';  ctx.fillText(yLab, P.l+10, P.t+16);
+  ctx.textAlign='right'; ctx.fillText(xLab, P.l+pw-8, P.t+ph-10);
+  return {pw, ph, X, Y};
+}
+function tooltipCard(ctx, x, y, rows, P, pw, ph){
+  ctx.font='600 12px '+SANS;
+  const tw=Math.max(...rows.map(r=>ctx.measureText(r[0]).width))+22;
+  const th=rows.length*19+12;
+  let bx=x+14, by=Math.min(Math.max(y-th/2, P.t+6), P.t+ph-th-6);
+  if(bx+tw>P.l+pw) bx=x-tw-14;
+  ctx.save();
+  ctx.shadowColor='rgba(16,24,40,0.16)'; ctx.shadowBlur=14; ctx.shadowOffsetY=2;
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.roundRect(bx,by,tw,th,8); ctx.fill();
+  ctx.restore();
+  rows.forEach((r,i)=>{
+    ctx.font=(r[2]?'600 12px ':'12px ')+SANS;
+    ctx.fillStyle=r[1]; ctx.textAlign='left';
+    ctx.fillText(r[0], bx+11, by+20+i*19);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  TAB 1 — VDF EXPLORER
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('vdfChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height, P={l:64,r:20,t:24,b:44};
+  let hover=null;
+
+  // parameter definitions per function
+  const FN = {
+    bpr:     { name:'BPR (1964)', col:'#2c5378', on:true,
+               params:{ alpha:{lbl:'α',min:0.05,max:1,step:0.05,val:0.15}, beta:{lbl:'β',min:1,max:10,step:0.5,val:4} } },
+    akcelik: { name:'Akçelik (HCM 2000)', col:'#a4161a', on:true,
+               params:{ T:{lbl:'period T (hr)',min:0.25,max:2,step:0.25,val:1}, J:{lbl:'J',min:0.1,max:2,step:0.1,val:0.8}, D0:{lbl:'D₀ (s)',min:0,max:30,step:5,val:10} } },
+    combined:{ name:'Combined link+node*', col:'#b45309', on:false,
+               params:{ g:{lbl:'green g (s)',min:15,max:60,step:5,val:30}, Cc:{lbl:'cycle C (s)',min:60,max:150,step:10,val:90}, sat:{lbl:'sat flow (veh/hr)',min:1200,max:2200,step:100,val:1800}, k4:{lbl:'k₄ (link factor)',min:1,max:1.5,step:0.05,val:1.15} } },
+    conical: { name:'Conical (Spiess 1990)', col:'#0e7c86', on:true,
+               params:{ ca:{lbl:'α (>1)',min:2,max:12,step:0.5,val:4} } },
+    gencost: { name:'Generalized cost', col:'#4f3f5c', on:false,
+               params:{ toll:{lbl:'toll k ($)',min:0,max:2,step:0.25,val:0.5}, dpm:{lbl:'op. cost δ ($/mi)',min:0,max:1,step:0.05,val:0.2}, vot:{lbl:'VOT φ ($/hr)',min:5,max:50,step:5,val:15} } },
+    logit:   { name:'Logit VDF*', col:'#8c3a4c', on:false,
+               params:{ c1:{lbl:'c₁ (max ×tf)',min:0.5,max:4,step:0.25,val:1.5}, c2:{lbl:'c₂ (inflection v/c)',min:0.7,max:1.5,step:0.05,val:1.05}, c3:{lbl:'c₃ (steepness)',min:2,max:12,step:1,val:6} } }
+  };
+  function pv(f,k){ return FN[f].params[k].val; }
+  function tf(){ return parseFloat(el('vLen').value)/parseFloat(el('vFfs').value)*60; } // min
+  function cap(){ return parseFloat(el('vCap').value); }
+
+  // travel time in minutes at v/c = x
+  function evalFn(f, x){
+    const t0=tf(), c=cap();
+    if(f==='bpr') return t0*(1+pv('bpr','alpha')*Math.pow(x,pv('bpr','beta')));
+    if(f==='conical'){
+      const a=pv('conical','ca'), b=(2*a-1)/(2*a-2);
+      return t0*(2+Math.sqrt(a*a*(1-x)*(1-x)+b*b)-a*(1-x)-b);
+    }
+    if(f==='akcelik'){
+      const T=pv('akcelik','T'), J=pv('akcelik','J');
+      const d = 0.25*T*((x-1)+Math.sqrt((x-1)*(x-1)+8*J*x/(c*T)));   // hours
+      return t0 + pv('akcelik','D0')/60 + 60*d;
+    }
+    if(f==='combined'){
+      // BPR link part scaled by k4 + representative Webster signalized node delay
+      const link=pv('combined','k4')*tf()*(1+0.15*Math.pow(x,4));
+      const g=pv('combined','g'), Cc=pv('combined','Cc'), s=pv('combined','sat');
+      const lam=g/Cc, v=x*c;
+      const Xs=Math.min(v/(s*lam), 3);
+      const dUni=Cc*(1-lam)*(1-lam)/(2*Math.max(1-lam*Math.min(Xs,1),0.05));
+      const dOver=Xs>1 ? 900*0.25*((Xs-1)+Math.sqrt((Xs-1)*(Xs-1)+4*Xs/(s*lam*0.25)))/60 : 0;
+      return link + dUni/60 + dOver/60;
+    }
+    if(f==='gencost'){
+      const t=tf()*(1+0.15*Math.pow(x,4));
+      const money=pv('gencost','toll')+pv('gencost','dpm')*parseFloat(el('vLen').value);
+      return t + money/pv('gencost','vot')*60;
+    }
+    if(f==='logit'){
+      return tf()*(1+pv('logit','c1')/(1+Math.exp(pv('logit','c3')*(pv('logit','c2')-x))));
+    }
+    return t0;
+  }
+
+  // pills + param panel
+  function buildPills(){
+    el('vdfPills').innerHTML='';
+    Object.keys(FN).forEach(f=>{
+      const p=document.createElement('span');
+      p.className='vdf-pill'+(FN[f].on?' on':'');
+      p.style.background=FN[f].on?FN[f].col:'#fff';
+      p.textContent=FN[f].name;
+      p.addEventListener('click',()=>{ FN[f].on=!FN[f].on; buildPills(); draw(); });
+      el('vdfPills').appendChild(p);
+    });
+  }
+  function buildSel(){
+    el('vdfSel').innerHTML=Object.keys(FN).map(f=>`<option value="${f}">${FN[f].name}</option>`).join('');
+    el('vdfSel').addEventListener('change', buildParams);
+  }
+  function buildParams(){
+    const f=el('vdfSel').value;
+    el('vdfParams').innerHTML='';
+    Object.keys(FN[f].params).forEach(k=>{
+      const p=FN[f].params[k];
+      const g=document.createElement('div');
+      g.className='control-group';
+      g.innerHTML=`<label>${p.lbl}</label><input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.val}"><span class="val">${p.val}</span>`;
+      const inp=g.querySelector('input'), vs=g.querySelector('.val');
+      inp.addEventListener('input', ()=>{ p.val=parseFloat(inp.value); vs.textContent=inp.value; draw(); });
+      el('vdfParams').appendChild(g);
+    });
+  }
+
+  function draw(){
+    const t0=tf();
+    let yMax=t0;
+    Object.keys(FN).forEach(f=>{ if(FN[f].on) yMax=Math.max(yMax, evalFn(f,2)); });
+    yMax=Math.min(Math.ceil(yMax/2)*2, 90);
+    const yT=Math.max(1, Math.ceil(yMax/6));
+    const s=scaffold(cx,W,H,P,0,2,0,yMax,'v/c ratio','travel time on link (min)',0.25,yT);
+    // capacity line
+    cx.strokeStyle='#c9ced6'; cx.setLineDash([6,5]); cx.lineWidth=1.5;
+    cx.beginPath(); cx.moveTo(s.X(1),P.t); cx.lineTo(s.X(1),P.t+s.ph); cx.stroke();
+    cx.setLineDash([]);
+    cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS; cx.textAlign='center';
+    cx.fillText('v = c', s.X(1), P.t+12);
+    // free-flow line
+    cx.strokeStyle='#e3e6ec';
+    cx.beginPath(); cx.moveTo(P.l,s.Y(t0)); cx.lineTo(P.l+s.pw,s.Y(t0)); cx.stroke();
+    cx.fillStyle='#9aa1ad'; cx.textAlign='left'; cx.fillText('tf = '+t0.toFixed(1)+' min', P.l+6, s.Y(t0)-4);
+    // curves
+    Object.keys(FN).forEach(f=>{
+      if(!FN[f].on) return;
+      cx.strokeStyle=FN[f].col; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      let started=false;
+      for(let x=0; x<=2.0001; x+=0.02){
+        const v=Math.min(evalFn(f,x), yMax*1.05);
+        if(!started){ cx.moveTo(s.X(x), s.Y(Math.min(v,yMax))); started=true; }
+        else cx.lineTo(s.X(x), s.Y(Math.min(v,yMax)));
+      }
+      cx.stroke();
+    });
+    // legend
+    let ly=P.t+16;
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    Object.keys(FN).forEach(f=>{
+      if(!FN[f].on) return;
+      cx.fillStyle=FN[f].col;
+      cx.fillText('— '+FN[f].name, P.l+130, ly);
+      ly+=18;
+    });
+    cx.fillStyle='#9aa1ad'; cx.font='10px '+SANS;
+    cx.fillText('* representative implementation (exact TransModeler formulation not published in full)', P.l+130, ly+2);
+    // hover
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
+      const hx=(hover.x-P.l)/s.pw*2;
+      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+s.ph); cx.stroke();
+      const rows=[[`v/c = ${hx.toFixed(2)}  (v = ${(hx*cap()).toFixed(0)} veh/hr)`, '#1f2937', true]];
+      Object.keys(FN).forEach(f=>{
+        if(!FN[f].on) return;
+        const v=evalFn(f,hx);
+        cx.fillStyle=FN[f].col;
+        cx.beginPath(); cx.arc(hover.x, s.Y(Math.min(v,yMax)), 3.5, 0, Math.PI*2); cx.fill();
+        rows.push([`${FN[f].name}: ${v.toFixed(2)} min`, FN[f].col, false]);
+      });
+      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+    }
+    el('vdfReadout').textContent=
+      `sample link: ${el('vLen').value} mi @ ${el('vFfs').value} mph → tf = ${t0.toFixed(1)} min · capacity ${cap()} veh/hr`;
+  }
+
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    draw();
+  });
+  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+  [['vLen',v=>parseFloat(v).toFixed(1)+' mi'],['vFfs',v=>v+' mph'],['vCap',v=>v+' veh/hr']].forEach(([id,fmt])=>{
+    el(id).addEventListener('input', ()=>{ el(id+'Val').textContent=fmt(el(id).value); draw(); });
+  });
+  buildPills(); buildSel(); buildParams(); draw();
+})();
+
+// ─────────────────────────────────────────────
+//  TAB 2 — ODME SANDBOX
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('odChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height;
+  const QC=el('odConvChart'), qx=QC.getContext('2d');
+
+  // toy network geometry
+  const NODES={ O1:[90,140], O2:[90,460], a:[350,300], b:[760,300], D1:[1080,140], D2:[1080,460] };
+  const WPN=[555,150], WPS=[555,450];   // waypoints for the two middle routes
+  // links: id, path pts, counted?
+  const LINKS={
+    L1:{pts:['O1','a'], name:'O1→a'},
+    L2:{pts:['O2','a'], name:'O2→a'},
+    LN:{pts:['a','WPN','b'], name:'North route'},
+    LS:{pts:['a','WPS','b'], name:'South route'},
+    L5:{pts:['b','D1'], name:'b→D1'},
+    L6:{pts:['b','D2'], name:'b→D2'}
+  };
+  // BPR middle routes
+  const RT={ N:{tf:5, c:900}, S:{tf:6, c:1100} };
+  const bpr=(tf,v,c)=>tf*(1+0.15*Math.pow(v/c,4));
+
+  // hidden true OD + counted links generated from it
+  const TRUE={ '11':600, '12':300, '21':200, '22':500 };  // O1D1, O1D2, O2D1, O2D2
+  const SEED={ '11':400, '12':400, '21':350, '22':300 };
+  let X={}, it=0, rmseHist=[], lastSplit=0.5;
+  let counts={};
+
+  function assign(x){
+    const F=x['11']+x['12']+x['21']+x['22'];
+    // UE split on middle routes via bisection
+    let lo=0, hi=F, fN=F/2;
+    if(F>0){
+      const g=f=>bpr(RT.N.tf,f,RT.N.c)-bpr(RT.S.tf,F-f,RT.S.c);
+      if(g(0)>=0) fN=0;
+      else if(g(F)<=0) fN=F;
+      else { for(let i=0;i<60;i++){ fN=(lo+hi)/2; if(g(fN)<0) lo=fN; else hi=fN; } }
+    }
+    const s=F>0?fN/F:0.5;
+    return {
+      s, F,
+      vols:{
+        L1:x['11']+x['12'], L2:x['21']+x['22'],
+        LN:s*F, LS:(1-s)*F,
+        L5:x['11']+x['21'], L6:x['12']+x['22']
+      },
+      tN:bpr(RT.N.tf,s*F,RT.N.c), tS:bpr(RT.S.tf,(1-s)*F,RT.S.c)
+    };
+  }
+  // counted links: L1, LN, LS, L5  (L2 and L6 have no counts)
+  const COUNTED=['L1','LN','LS','L5'];
+  function makeCounts(){
+    const a=assign(TRUE);
+    counts={};
+    COUNTED.forEach(l=>counts[l]=a.vols[l]);
+  }
+  function rmse(vols){
+    let se=0, mc=0;
+    COUNTED.forEach(l=>{ se+=(vols[l]-counts[l])**2; mc+=counts[l]; });
+    return 100*Math.sqrt(se/COUNTED.length)/(mc/COUNTED.length);
+  }
+  // link incidence for OD pair given split s: list of [link, share]
+  function odLinks(od, s){
+    const first = od[0]==='1' ? 'L1':'L2';
+    const last  = od[1]==='1' ? 'L5':'L6';
+    return { first, last };
+  }
+
+  function iterate(){
+    const method=el('odMethod').value;
+    const a=assign(X);
+    lastSplit=a.s;
+    if(method==='grad'){
+      // gradient of F = Σ (v_l - cnt_l)² over counted links
+      const err={}; COUNTED.forEach(l=>err[l]=a.vols[l]-counts[l]);
+      const grads={};
+      let maxG=0;
+      Object.keys(X).forEach(od=>{
+        const {first,last}=odLinks(od);
+        let g=0;
+        if(COUNTED.includes(first)) g+=2*err[first];
+        if(COUNTED.includes(last))  g+=2*err[last];
+        g+=2*err['LN']*a.s + 2*err['LS']*(1-a.s);
+        grads[od]=g;
+        maxG=Math.max(maxG, Math.abs(g));
+      });
+      const meanX=(X['11']+X['12']+X['21']+X['22'])/4;
+      const eta=0.25*meanX/(maxG+1e-9);
+      Object.keys(X).forEach(od=>{ X[od]=Math.max(1, X[od]-eta*grads[od]); });
+    } else {
+      Object.keys(X).forEach(od=>{
+        const {first,last}=odLinks(od);
+        const ratios=[];
+        function push(l,w){ if(COUNTED.includes(l) && a.vols[l]>1) ratios.push([counts[l]/a.vols[l], w]); }
+        push(first,1); push(last,1);
+        if(method==='single'){
+          // only the currently-shortest middle route
+          if(a.tN<=a.tS) push('LN',1); else push('LS',1);
+        } else {
+          push('LN',a.s); push('LS',1-a.s);
+        }
+        if(ratios.length){
+          const wsum=ratios.reduce((s2,r)=>s2+r[1],0);
+          const ratio=ratios.reduce((s2,r)=>s2+r[0]*r[1],0)/wsum;
+          X[od]=Math.max(1, X[od]*Math.pow(ratio,0.7));   // damped multiplicative update
+        }
+      });
+    }
+    it++;
+    const a2=assign(X);
+    rmseHist.push(rmse(a2.vols));
+  }
+
+  function step(){ iterate(); render(); }
+  function run(){
+    const maxIt=parseInt(el('odIter').value), thr=parseFloat(el('odConv').value);
+    for(let k=0;k<200;k++){
+      if(it>=maxIt) break;
+      iterate();
+      if(rmseHist[rmseHist.length-1]<=thr) break;
+    }
+    render();
+  }
+  function reset(){
+    X={...SEED}; it=0; rmseHist=[];
+    const a=assign(X); rmseHist.push(rmse(a.vols)); lastSplit=a.s;
+    render();
+  }
+
+  function pt(p){ return Array.isArray(p)?p:(NODES[p]||( p==='WPN'?WPN:WPS )); }
+  function drawNet(){
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+    const a=assign(X);
+    // links
+    Object.keys(LINKS).forEach(l=>{
+      const L=LINKS[l];
+      const v=a.vols[l];
+      const counted=COUNTED.includes(l);
+      let col='#b9c2cf';
+      if(counted){
+        const e=Math.abs(v-counts[l])/Math.max(counts[l],1);
+        col = e<0.05?'#1d7a6f': e<0.15?'#b8860b':'#c1121f';
+      }
+      cx.strokeStyle=col;
+      cx.lineWidth=Math.max(3, v/70);
+      cx.lineJoin='round'; cx.lineCap='round';
+      cx.beginPath();
+      const ps=L.pts.map(pt);
+      cx.moveTo(ps[0][0],ps[0][1]);
+      for(let i=1;i<ps.length;i++) cx.lineTo(ps[i][0],ps[i][1]);
+      cx.stroke();
+      // label at midpoint
+      const mid=ps.length===3?ps[1]:[(ps[0][0]+ps[1][0])/2,(ps[0][1]+ps[1][1])/2];
+      const off = l==='LN'?-16 : l==='LS'?26 : l==='L1'?-14 : l==='L2'?24 : l==='L5'?-14 : 24;
+      cx.font='600 13px '+SANS; cx.textAlign='center';
+      cx.fillStyle=col;
+      cx.fillText(Math.round(v)+(counted?' / '+Math.round(counts[l]):''), mid[0], mid[1]+off);
+      cx.fillStyle='#9aa1ad'; cx.font='10px '+SANS;
+      cx.fillText(L.name+(counted?'':' (no count)'), mid[0], mid[1]+off+13);
+    });
+    // nodes
+    Object.keys(NODES).forEach(n=>{
+      const [x,y]=NODES[n];
+      const isZone = n[0]==='O'||n[0]==='D';
+      cx.fillStyle=isZone?'#14919b':'#4b5563';
+      cx.beginPath(); cx.arc(x,y,isZone?16:9,0,Math.PI*2); cx.fill();
+      cx.fillStyle='#fff'; cx.font='700 11px '+SANS; cx.textAlign='center';
+      cx.fillText(n, x, y+4);
+    });
+    // title
+    cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
+    cx.fillText('assigned volume / count  ·  green ≤5% error · amber ≤15% · red >15% · gray = no count', 20, 26);
+  }
+
+  function drawConv(){
+    qx.setTransform(1,0,0,1,0,0);
+    qx.clearRect(0,0,QC.width,QC.height);
+    qx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150,L=30,R=8,T=18,B=20;
+    const pw=w-L-R, ph=h-T-B;
+    const maxI=Math.max(10, rmseHist.length);
+    const maxR=Math.max(5, Math.ceil(Math.max(...rmseHist)/5)*5);
+    qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
+    qx.fillText('CONVERGENCE — %RMSE vs iteration', 8, 11);
+    qx.strokeStyle='#eef1f6'; qx.lineWidth=1;
+    qx.fillStyle='#7b8494'; qx.font='7px '+SANS;
+    for(let g=0; g<=maxR; g+=Math.max(5,Math.ceil(maxR/4/5)*5)){
+      const y=T+ph-(g/maxR)*ph;
+      qx.beginPath(); qx.moveTo(L,y); qx.lineTo(L+pw,y); qx.stroke();
+      qx.textAlign='right'; qx.fillText(g+'%', L-2, y+2);
+    }
+    // threshold line
+    const thr=parseFloat(el('odConv').value);
+    const yThr=T+ph-(thr/maxR)*ph;
+    qx.strokeStyle='#1d7a6f'; qx.setLineDash([4,3]);
+    qx.beginPath(); qx.moveTo(L,yThr); qx.lineTo(L+pw,yThr); qx.stroke();
+    qx.setLineDash([]);
+    qx.strokeStyle='#c1121f'; qx.lineWidth=2; qx.lineJoin='round';
+    qx.beginPath();
+    rmseHist.forEach((r,i)=>{
+      const x=L+(i/Math.max(1,maxI-1))*pw, y=T+ph-(Math.min(r,maxR)/maxR)*ph;
+      if(i===0) qx.moveTo(x,y); else qx.lineTo(x,y);
+    });
+    qx.stroke();
+  }
+
+  function odTable(){
+    const fmt=(od)=>`<td><b>${Math.round(X[od])}</b><small>seed ${SEED[od]} · true ${TRUE[od]}</small></td>`;
+    el('odTable').innerHTML=
+      `<table class="od"><tr><th></th><th>→ D1</th><th>→ D2</th></tr>`+
+      `<tr><th>O1</th>${fmt('11')}${fmt('12')}</tr>`+
+      `<tr><th>O2</th>${fmt('21')}${fmt('22')}</tr></table>`;
+  }
+
+  function render(){
+    drawNet(); drawConv(); odTable();
+    const a=assign(X);
+    const r=rmseHist[rmseHist.length-1];
+    let worst=0, worstL='';
+    COUNTED.forEach(l=>{
+      const e=Math.abs(a.vols[l]-counts[l]);
+      if(e>worst){ worst=e; worstL=l; }
+    });
+    el('odItC').textContent=it;
+    el('odRmse').textContent=r.toFixed(2)+'%';
+    el('odRmse').parentElement.className='card'+(r<=parseFloat(el('odConv').value)?'':' warn');
+    el('odWorst').textContent=worstL+' ('+Math.round(worst)+' veh)';
+    el('odSplit').textContent=(a.s*100).toFixed(0)+'% / '+((1-a.s)*100).toFixed(0)+'%';
+    el('odReadout').textContent=
+      `iter ${it} · ${el('odMethod').selectedOptions[0].text} · %RMSE ${r.toFixed(2)}  |  route times N ${a.tN.toFixed(2)} vs S ${a.tS.toFixed(2)} min (UE)`;
+  }
+
+  el('odStep').addEventListener('click', step);
+  el('odRun').addEventListener('click', run);
+  el('odReset').addEventListener('click', reset);
+  el('odMethod').addEventListener('change', reset);
+  el('odIter').addEventListener('input', ()=>el('odIterVal').textContent=el('odIter').value);
+  el('odConv').addEventListener('input', ()=>{ el('odConvVal').textContent=parseFloat(el('odConv').value).toFixed(1)+'%'; render(); });
+  makeCounts(); reset();
+})();
+
+// ─────────────────────────────────────────────
+//  TAB 3 — UE CONVERGENCE (MSA vs FW vs BiCFW)
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('ueChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height, P={l:70,r:20,t:24,b:44};
+  let hover=null;
+
+  const ROUTES=[{tf:10,c:1000},{tf:12,c:1200},{tf:15,c:1500}];
+  const times=v=>ROUTES.map((r,i)=>r.tf*(1+0.15*Math.pow(v[i]/r.c,4)));
+  const dtimes=v=>ROUTES.map((r,i)=>r.tf*0.15*4*Math.pow(v[i]/r.c,3)/r.c);
+  const beck=v=>ROUTES.reduce((s,r,i)=>s+r.tf*(v[i]+0.15*r.c/5*Math.pow(v[i]/r.c,5)),0);
+  function aon(t, D){ const m=t.indexOf(Math.min(...t)); const y=[0,0,0]; y[m]=D; return y; }
+  function relGap(v, D){
+    const t=times(v);
+    const TSTT=v.reduce((s,x,i)=>s+x*t[i],0);
+    const SPTT=D*Math.min(...t);
+    return Math.max(1e-12,(TSTT-SPTT)/TSTT);
+  }
+  function lineSearch(v, d){
+    // golden section on Beckmann along v+λd, λ∈[0,1]
+    let a=0,b=1;
+    const gr=(Math.sqrt(5)-1)/2;
+    const f=l=>beck(v.map((x,i)=>Math.max(0,x+l*d[i])));
+    let c1=b-gr*(b-a), c2=a+gr*(b-a);
+    for(let i=0;i<50;i++){
+      if(f(c1)<f(c2)){ b=c2; c2=c1; c1=b-gr*(b-a); }
+      else { a=c1; c1=c2; c2=a+gr*(b-a); }
+    }
+    return (a+b)/2;
+  }
+  function runAll(D, N){
+    // start: AON at free-flow
+    const start=aon(ROUTES.map(r=>r.tf), D);
+    const out={msa:[], fw:[], bcfw:[]};
+    // MSA
+    let v=[...start];
+    for(let k=1;k<=N;k++){
+      out.msa.push(relGap(v,D));
+      const y=aon(times(v),D);
+      v=v.map((x,i)=>x+(y[i]-x)/(k+1));
+    }
+    // FW
+    v=[...start];
+    for(let k=1;k<=N;k++){
+      out.fw.push(relGap(v,D));
+      const y=aon(times(v),D);
+      const d=y.map((x,i)=>x-v[i]);
+      const lam=lineSearch(v,d);
+      v=v.map((x,i)=>x+lam*d[i]);
+    }
+    // Bi-conjugate FW (Mitradjieva & Lindberg 2013, N=2)
+    v=[...start];
+    let dPrev=null;
+    for(let k=1;k<=N;k++){
+      out.bcfw.push(relGap(v,D));
+      const y=aon(times(v),D);
+      const dFW=y.map((x,i)=>x-v[i]);
+      let d=dFW;
+      if(dPrev){
+        const Hd=dtimes(v);
+        const num=dPrev.reduce((s,x,i)=>s+x*Hd[i]*dFW[i],0);
+        const den=dPrev.reduce((s,x,i)=>s+x*Hd[i]*(dFW[i]-dPrev[i]),0);
+        let al=den!==0 ? num/den : 0;
+        al=Math.max(0, Math.min(0.99, al));
+        d=dFW.map((x,i)=>al*dPrev[i]+(1-al)*x);
+      }
+      const lam=lineSearch(v,d);
+      dPrev=d.map(x=>x*1);   // keep the conjugate direction
+      v=v.map((x,i)=>Math.max(0,x+lam*d[i]));
+    }
+    // converged solution for the cards (long BCFW run)
+    let vs=[...start], dp=null;
+    for(let k=1;k<=300;k++){
+      const y=aon(times(vs),D);
+      const dFW=y.map((x,i)=>x-vs[i]);
+      let d=dFW;
+      if(dp){
+        const Hd=dtimes(vs);
+        const num=dp.reduce((s,x,i)=>s+x*Hd[i]*dFW[i],0);
+        const den=dp.reduce((s,x,i)=>s+x*Hd[i]*(dFW[i]-dp[i]),0);
+        let al=den!==0?num/den:0;
+        al=Math.max(0,Math.min(0.99,al));
+        d=dFW.map((x,i)=>al*dp[i]+(1-al)*x);
+      }
+      const lam=lineSearch(vs,d);
+      dp=d;
+      vs=vs.map((x,i)=>Math.max(0,x+lam*d[i]));
+    }
+    out.sol=vs;
+    return out;
+  }
+
+  const COLS={msa:'#8c3a4c', fw:'#2c5378', bcfw:'#0e7c86'};
+  const NAMES={msa:'MSA (1/k)', fw:'Frank-Wolfe', bcfw:'Bi-conjugate FW (N=2)'};
+
+  function draw(){
+    const D=parseFloat(el('ueDem').value), N=parseInt(el('ueN').value);
+    const res=runAll(D,N);
+    const yMin=-8, yMax=0;
+    const s=scaffold(cx,W,H,P,0,N,yMin,yMax,'iteration','log₁₀ relative gap',Math.max(5,Math.round(N/10)),1,g=>'1e'+g);
+    Object.keys(COLS).forEach(m=>{
+      cx.strokeStyle=COLS[m]; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      res[m].forEach((g,i)=>{
+        const y=s.Y(Math.max(yMin,Math.log10(g)));
+        if(i===0) cx.moveTo(s.X(i+1),y); else cx.lineTo(s.X(i+1),y);
+      });
+      cx.stroke();
+    });
+    let ly=P.t+16;
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    Object.keys(COLS).forEach(m=>{ cx.fillStyle=COLS[m]; cx.fillText('— '+NAMES[m], P.l+150, ly); ly+=18; });
+    // hover
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw){
+      const hi=Math.max(1,Math.min(N,Math.round((hover.x-P.l)/s.pw*N)));
+      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(s.X(hi),P.t); cx.lineTo(s.X(hi),P.t+s.ph); cx.stroke();
+      const rows=[[`iteration ${hi}`, '#1f2937', true]];
+      Object.keys(COLS).forEach(m=>{
+        const g=res[m][hi-1];
+        rows.push([`${NAMES[m]}: ${g.toExponential(2)}`, COLS[m], false]);
+      });
+      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+    }
+    // cards
+    function firstBelow(arr,thr){ const i=arr.findIndex(g=>g<=thr); return i<0?'—':(i+1); }
+    el('ueTo3').textContent=`${firstBelow(res.msa,1e-3)} / ${firstBelow(res.fw,1e-3)} / ${firstBelow(res.bcfw,1e-3)}`;
+    el('ueTo5').textContent=`${firstBelow(res.msa,1e-5)} / ${firstBelow(res.fw,1e-5)} / ${firstBelow(res.bcfw,1e-5)}`;
+    const t=times(res.sol);
+    el('ueTimes').textContent=t.map(x=>x.toFixed(2)).join(' / ')+' min';
+    el('ueFlows').textContent=res.sol.map(x=>Math.round(x)).join(' / ')+' veh/hr';
+    el('ueReadout').textContent=
+      `demand ${D} veh/hr over 3 routes — at UE all used routes have equal times; rel gap = (TSTT − SPTT)/TSTT → 0`;
+  }
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    draw();
+  });
+  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+  el('ueDem').addEventListener('input', ()=>{ el('ueDemVal').textContent=el('ueDem').value+' veh/hr'; draw(); });
+  el('ueN').addEventListener('input', ()=>{ el('ueNVal').textContent=el('ueN').value; draw(); });
+  draw();
+})();
+
+// ─────────────────────────────────────────────
+//  TAB 4 — SUE PERCEPTION ERROR
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('sueChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height, P={l:64,r:20,t:24,b:44};
+  const DC=el('sueDens'), dx=DC.getContext('2d');
+  let hover=null;
+
+  const erf=x=>{
+    const s=x<0?-1:1; x=Math.abs(x);
+    const t=1/(1+0.3275911*x);
+    const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+    return s*y;
+  };
+  const Phi=x=>0.5*(1+erf(x/Math.SQRT2));
+
+  function theta(){ return parseFloat(el('sueTheta').value); }
+  // equal-variance parameterizations
+  function pGumbel(dc){ const b=theta()*Math.sqrt(6)/Math.PI; return 1/(1+Math.exp(-dc/b)); }
+  function pNormal(dc){ return Phi(dc/(theta()*Math.SQRT2)); }
+  function pUniform(dc){
+    const a=theta()*Math.sqrt(3);       // U(−a,a); ε1−ε2 ~ triangular on (−2a,2a)
+    const z=dc;
+    if(z<=-2*a) return 0;
+    if(z>=2*a) return 1;
+    if(z<=0) return (z+2*a)*(z+2*a)/(8*a*a);
+    return 1-(2*a-z)*(2*a-z)/(8*a*a);
+  }
+  const COLS={g:'#0e7c86', n:'#2c5378', u:'#b45309'};
+
+  function draw(){
+    const s=scaffold(cx,W,H,P,-10,10,0,1,'Δc = c₂ − c₁ (min)  →  route 1 is better to the right','P(choose route 1)',2,0.25);
+    // 50/50 guides
+    cx.strokeStyle='#e3e6ec'; cx.setLineDash([5,4]); cx.lineWidth=1;
+    cx.beginPath(); cx.moveTo(s.X(0),P.t); cx.lineTo(s.X(0),P.t+s.ph); cx.stroke();
+    cx.beginPath(); cx.moveTo(P.l,s.Y(0.5)); cx.lineTo(P.l+s.pw,s.Y(0.5)); cx.stroke();
+    cx.setLineDash([]);
+    const fns=[['g',pGumbel,'Gumbel → logit'],['n',pNormal,'Normal → probit'],['u',pUniform,'Uniform → hard cutoff']];
+    fns.forEach(([k,f,name])=>{
+      cx.strokeStyle=COLS[k]; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      for(let dc=-10; dc<=10.001; dc+=0.1){
+        const y=s.Y(f(dc));
+        if(dc<=-10+1e-9) cx.moveTo(s.X(dc),y); else cx.lineTo(s.X(dc),y);
+      }
+      cx.stroke();
+    });
+    let ly=P.t+16;
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    fns.forEach(([k,,name])=>{ cx.fillStyle=COLS[k]; cx.fillText('— '+name, P.l+130, ly); ly+=18; });
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw){
+      const dc=(hover.x-P.l)/s.pw*20-10;
+      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+s.ph); cx.stroke();
+      const rows=[[`Δc = ${dc.toFixed(1)} min`, '#1f2937', true]];
+      fns.forEach(([k,f,name])=>{
+        cx.fillStyle=COLS[k];
+        cx.beginPath(); cx.arc(hover.x, s.Y(f(dc)), 3.5, 0, Math.PI*2); cx.fill();
+        rows.push([`${name}: ${(f(dc)*100).toFixed(1)}%`, COLS[k], false]);
+      });
+      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+    }
+    drawDens();
+    el('sueP2').textContent=`${(pGumbel(2)*100).toFixed(0)}% / ${(pNormal(2)*100).toFixed(0)}% / ${(pUniform(2)*100).toFixed(0)}%`;
+    el('sueReadout').textContent=
+      `θ = ${theta().toFixed(2)} min (all three scaled to equal variance) — θ→0 collapses to deterministic UE; larger θ spreads flow to weaker routes`;
+  }
+
+  function drawDens(){
+    dx.setTransform(1,0,0,1,0,0);
+    dx.clearRect(0,0,DC.width,DC.height);
+    dx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150,L=14,R=8,T=18,B=16;
+    const pw=w-L-R, ph=h-T-B;
+    const th=theta();
+    dx.font='600 8px '+SANS; dx.fillStyle='#9aa1ad'; dx.textAlign='left';
+    dx.fillText('PERCEPTION ERROR ε — density (equal variance)', 8, 11);
+    const xr=3.5*th;
+    const fG=e=>{ const b=th*Math.sqrt(6)/Math.PI, mu=-0.5772*b; const z=(e-mu)/b; return Math.exp(-(z+Math.exp(-z)))/b; };
+    const fN=e=>Math.exp(-e*e/(2*th*th))/(th*Math.sqrt(2*Math.PI));
+    const fU=e=>{ const a2=th*Math.sqrt(3); return Math.abs(e)<=a2 ? 1/(2*a2) : 0; };
+    let yMax=0;
+    for(let e=-xr;e<=xr;e+=xr/60) yMax=Math.max(yMax,fG(e),fN(e),fU(e));
+    yMax*=1.1;
+    [['g',fG],['n',fN],['u',fU]].forEach(([k,f])=>{
+      dx.strokeStyle=COLS[k]; dx.lineWidth=1.8; dx.lineJoin='round';
+      dx.beginPath();
+      let st=false;
+      for(let e=-xr;e<=xr;e+=xr/120){
+        const x=L+((e+xr)/(2*xr))*pw, y=T+ph-(f(e)/yMax)*ph;
+        if(!st){ dx.moveTo(x,y); st=true; } else dx.lineTo(x,y);
+      }
+      dx.stroke();
+    });
+    dx.strokeStyle='#e3e6ec'; dx.lineWidth=1;
+    dx.beginPath(); dx.moveTo(L+pw/2,T); dx.lineTo(L+pw/2,T+ph); dx.stroke();
+    dx.fillStyle='#7b8494'; dx.font='7px '+SANS; dx.textAlign='center';
+    dx.fillText('0', L+pw/2, h-5);
+    dx.fillText((-xr).toFixed(0), L+8, h-5);
+    dx.fillText('+'+xr.toFixed(0)+' min', L+pw-14, h-5);
+  }
+
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    draw();
+  });
+  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+  el('sueTheta').addEventListener('input', ()=>{ el('sueThetaVal').textContent=theta().toFixed(2)+' min'; draw(); });
+  draw();
+})();
+</script>
+</body>
+</html>
