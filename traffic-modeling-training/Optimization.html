@@ -90,6 +90,7 @@
         <div class="control-group"><label>Free-flow speed</label><input type="range" id="vFfs" min="20" max="70" step="5" value="40"><span class="val" id="vFfsVal">40 mph</span></div>
         <div class="control-group"><label>Capacity</label><input type="range" id="vCap" min="600" max="2400" step="100" value="1800"><span class="val" id="vCapVal">1800 veh/hr</span></div>
         <div class="control-group"><label>Edit parameters of…</label><select id="vdfSel"></select></div>
+        <button class="action sec" id="vdfRstV">↺ Reset view</button>
       </div>
       <div class="controls" id="vdfParams"></div>
     </div>
@@ -137,11 +138,12 @@
   <div class="panel" id="ue">
     <div class="panel-grid">
     <div class="viz-container">
-      <canvas id="ueChart" class="big-canvas" width="1200" height="600"></canvas>
+      <canvas id="ueSim" class="big-canvas" width="1200" height="280" style="cursor:default"></canvas>
+      <canvas id="ueChart" class="big-canvas" width="1200" height="420" style="margin-top:8px"></canvas>
       <div class="readout" id="ueReadout">Relative gap vs iteration (log scale) on a 3-route network</div>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip"><b>Relative gap</b> measures how far an assignment is from user equilibrium: <code>gap = (TSTT − SPTT)/TSTT</code>, where TSTT is total travel time at current flows and SPTT is the total if every trip used its current shortest path. At perfect UE nobody can improve → gap = 0. <b>MSA</b> (step 1/k) converges but slowly — it's what SUE uses. <b>Frank-Wolfe</b> adds an optimal line search toward the all-or-nothing solution but zigzags near the optimum. <b>N-conjugate FW</b> (Daneva &amp; Lindberg 2003, Mitradjieva &amp; Lindberg 2013) combines the FW direction with previous direction(s) forced to be Hessian-conjugate — shown here for N=2 (bi-conjugate). It reaches roughly an order of magnitude lower gap in the same iterations, which is why it's TransModeler's most-used method; N&gt;2 can do even better. Path-based methods (Dial's Algorithm B) go further still for very tight gaps (10⁻⁵ and below).</span></span></div>
+      <div class="pane-head"><span class="help">i<span class="tip"><b>Relative gap</b> measures how far an assignment is from user equilibrium: <code>gap = (TSTT − SPTT)/TSTT</code>, where TSTT is total travel time at current flows and SPTT is the total if every trip used its current shortest path. At perfect UE nobody can improve → gap = 0. <b>MSA</b> (step 1/k) converges but slowly — it's what SUE uses. <b>Frank-Wolfe</b> adds an optimal line search toward the all-or-nothing solution but zigzags near the optimum. <b>N-conjugate FW</b> (Daneva &amp; Lindberg 2003, Mitradjieva &amp; Lindberg 2013) combines the FW direction with previous direction(s) forced to be Hessian-conjugate — shown here for N=2 (bi-conjugate). It reaches roughly an order of magnitude lower gap in the same iterations, which is why it's TransModeler's most-used method; N&gt;2 can do even better. Path-based methods (Dial's Algorithm B) go further still for very tight gaps (10⁻⁵ and below). The <b>live traffic scene</b> on top makes the iterations physical: vehicles arrive from a <b>negative binomial process</b> (bursty, variance &gt; mean — more realistic than Poisson) at the demand rate, pick a route with probability equal to the <i>current iteration's</i> flow shares, and drive at speeds set by the current route times — press ▶ Play and watch the traffic itself re-distribute as the algorithm hunts for equilibrium.</span></span></div>
       <div class="controls">
         <div class="control-group"><label>Demand</label><input type="range" id="ueDem" min="1500" max="4500" step="250" value="3000"><span class="val" id="ueDemVal">3000 veh/hr</span></div>
         <div class="control-group"><label>Iterations shown</label><input type="range" id="ueN" min="10" max="80" step="5" value="50"><span class="val" id="ueNVal">50</span></div>
@@ -232,7 +234,7 @@
         <div class="card"><h3>Iteration · rel gap</h3><div class="value" id="fwGap">—</div></div>
         <div class="card"><h3>Step λ · direction mix</h3><div class="value" id="fwMix" style="font-size:0.82em">—</div></div>
         <div class="card"><h3>Iters to gap ≤ 10⁻⁴ (this N / plain FW)</h3><div class="value" id="fwCmp">—</div></div>
-        <div class="card"><h3>Current flows v₁/v₂/v₃</h3><div class="value" id="fwFlows">—</div></div>
+        <div class="card"><h3>Current flows &amp; travel times</h3><div class="value" id="fwFlows" style="font-size:0.82em">—</div></div>
       </div>
       <canvas id="fwGapC" class="gauge-canvas" width="520" height="300"></canvas>
     </div>
@@ -260,15 +262,15 @@ function scaffold(ctx, W, H, P, xMin, xMax, yMin, yMax, xLab, yLab, xTick, yTick
   const X=x=>P.l+(x-xMin)/(xMax-xMin)*pw;
   const Y=y=>P.t+ph-(y-yMin)/(yMax-yMin)*ph;
   ctx.strokeStyle='#f1f3f7'; ctx.lineWidth=1;
-  for(let g=yMin; g<=yMax+1e-9; g+=yTick){
+  for(let g=Math.ceil(yMin/yTick)*yTick; g<=yMax+1e-9; g+=yTick){
     ctx.beginPath(); ctx.moveTo(P.l,Y(g)); ctx.lineTo(P.l+pw,Y(g)); ctx.stroke();
   }
   ctx.strokeStyle='#d6dae2';
   ctx.beginPath(); ctx.moveTo(P.l,P.t+ph+0.5); ctx.lineTo(P.l+pw,P.t+ph+0.5); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(P.l+0.5,P.t); ctx.lineTo(P.l+0.5,P.t+ph); ctx.stroke();
   ctx.fillStyle='#7b8494'; ctx.font='12px '+SANS;
-  for(let g=xMin; g<=xMax+1e-9; g+=xTick){ ctx.textAlign='center'; ctx.fillText(Math.round(g*100)/100, X(g), P.t+ph+18); }
-  for(let g=yMin; g<=yMax+1e-9; g+=yTick){ ctx.textAlign='right'; ctx.fillText(yFmt?yFmt(g):Math.round(g*100)/100, P.l-8, Y(g)+4); }
+  for(let g=Math.ceil(xMin/xTick)*xTick; g<=xMax+1e-9; g+=xTick){ ctx.textAlign='center'; ctx.fillText(Math.round(g*100)/100, X(g), P.t+ph+18); }
+  for(let g=Math.ceil(yMin/yTick)*yTick; g<=yMax+1e-9; g+=yTick){ ctx.textAlign='right'; ctx.fillText(yFmt?yFmt(g):Math.round(g*100)/100, P.l-8, Y(g)+4); }
   ctx.fillStyle='#9aa1ad'; ctx.font='italic 12px '+SANS;
   ctx.textAlign='left';  ctx.fillText(yLab, P.l+10, P.t+16);
   ctx.textAlign='right'; ctx.fillText(xLab, P.l+pw-8, P.t+ph-10);
@@ -383,36 +385,57 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     });
   }
 
+  // free zoom & pan; null = default auto view (Reset restores this)
+  let view=null;
+  function niceStep(r){
+    const p=Math.pow(10,Math.floor(Math.log10(Math.max(r,1e-6)/5)));
+    const c=r/5/p;
+    return (c<1.5?1:c<3.5?2:c<7.5?5:10)*p;
+  }
+  function autoY(){
+    let yMax=tf();
+    Object.keys(FN).forEach(f=>{ if(FN[f].on) yMax=Math.max(yMax, evalFn(f,2)); });
+    return Math.min(Math.ceil(yMax/2)*2, 90);
+  }
+  function ensureView(){ if(!view) view={x0:0, x1:2, y0:0, y1:autoY()}; }
+
   function draw(){
     const t0=tf();
-    let yMax=t0;
-    Object.keys(FN).forEach(f=>{ if(FN[f].on) yMax=Math.max(yMax, evalFn(f,2)); });
-    yMax=Math.min(Math.ceil(yMax/2)*2, 90);
-    const yT=Math.max(1, Math.ceil(yMax/6));
-    const s=scaffold(cx,W,H,P,0,2,0,yMax,'v/c ratio','travel time on link (min)',0.25,yT);
+    const x0=view?view.x0:0, x1=view?view.x1:2;
+    const y0=view?view.y0:0, y1=view?view.y1:autoY();
+    const s=scaffold(cx,W,H,P,x0,x1,y0,y1,'v/c ratio','travel time on link (min)',niceStep(x1-x0),niceStep(y1-y0));
+    cx.save();
+    cx.beginPath(); cx.rect(P.l,P.t,s.pw,s.ph); cx.clip();
     // capacity line
-    cx.strokeStyle='#c9ced6'; cx.setLineDash([6,5]); cx.lineWidth=1.5;
-    cx.beginPath(); cx.moveTo(s.X(1),P.t); cx.lineTo(s.X(1),P.t+s.ph); cx.stroke();
-    cx.setLineDash([]);
-    cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS; cx.textAlign='center';
-    cx.fillText('v = c', s.X(1), P.t+12);
+    if(1>=x0 && 1<=x1){
+      cx.strokeStyle='#c9ced6'; cx.setLineDash([6,5]); cx.lineWidth=1.5;
+      cx.beginPath(); cx.moveTo(s.X(1),P.t); cx.lineTo(s.X(1),P.t+s.ph); cx.stroke();
+      cx.setLineDash([]);
+      cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS; cx.textAlign='center';
+      cx.fillText('v = c', s.X(1), P.t+12);
+    }
     // free-flow line
-    cx.strokeStyle='#e3e6ec';
-    cx.beginPath(); cx.moveTo(P.l,s.Y(t0)); cx.lineTo(P.l+s.pw,s.Y(t0)); cx.stroke();
-    cx.fillStyle='#9aa1ad'; cx.textAlign='left'; cx.fillText('tf = '+t0.toFixed(1)+' min', P.l+6, s.Y(t0)-4);
-    // curves
+    if(t0>=y0 && t0<=y1){
+      cx.strokeStyle='#e3e6ec';
+      cx.beginPath(); cx.moveTo(P.l,s.Y(t0)); cx.lineTo(P.l+s.pw,s.Y(t0)); cx.stroke();
+      cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS; cx.textAlign='left';
+      cx.fillText('tf = '+t0.toFixed(1)+' min', P.l+6, s.Y(t0)-4);
+    }
+    // curves (clipped to the current view)
+    const step=(x1-x0)/140;
     Object.keys(FN).forEach(f=>{
       if(!FN[f].on) return;
       cx.strokeStyle=FN[f].col; cx.lineWidth=2.5; cx.lineJoin='round';
       cx.beginPath();
       let started=false;
-      for(let x=0; x<=2.0001; x+=0.02){
-        const v=Math.min(evalFn(f,x), yMax*1.05);
-        if(!started){ cx.moveTo(s.X(x), s.Y(Math.min(v,yMax))); started=true; }
-        else cx.lineTo(s.X(x), s.Y(Math.min(v,yMax)));
+      for(let x=Math.max(0,x0); x<=x1+1e-9; x+=step){
+        const v=evalFn(f,x);
+        if(!started){ cx.moveTo(s.X(x), s.Y(v)); started=true; }
+        else cx.lineTo(s.X(x), s.Y(v));
       }
       cx.stroke();
     });
+    cx.restore();
     // legend
     let ly=P.t+16;
     cx.font='600 12px '+SANS; cx.textAlign='left';
@@ -426,29 +449,76 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     cx.fillText('* representative implementation (exact TransModeler formulation not published in full)', P.l+130, ly+2);
     // hover
     if(hover && hover.x>P.l && hover.x<P.l+s.pw && hover.y>P.t && hover.y<P.t+s.ph){
-      const hx=(hover.x-P.l)/s.pw*2;
-      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
-      cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+s.ph); cx.stroke();
-      const rows=[[`v/c = ${hx.toFixed(2)}  (v = ${(hx*cap()).toFixed(0)} veh/hr)`, '#1f2937', true]];
-      Object.keys(FN).forEach(f=>{
-        if(!FN[f].on) return;
-        const v=evalFn(f,hx);
-        cx.fillStyle=FN[f].col;
-        cx.beginPath(); cx.arc(hover.x, s.Y(Math.min(v,yMax)), 3.5, 0, Math.PI*2); cx.fill();
-        rows.push([`${FN[f].name}: ${v.toFixed(2)} min`, FN[f].col, false]);
-      });
-      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+      const hx=x0+(hover.x-P.l)/s.pw*(x1-x0);
+      if(hx>=0){
+        cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+        cx.beginPath(); cx.moveTo(hover.x,P.t); cx.lineTo(hover.x,P.t+s.ph); cx.stroke();
+        const rows=[[`v/c = ${hx.toFixed(2)}  (v = ${(hx*cap()).toFixed(0)} veh/hr)`, '#1f2937', true]];
+        cx.save();
+        cx.beginPath(); cx.rect(P.l,P.t,s.pw,s.ph); cx.clip();
+        Object.keys(FN).forEach(f=>{
+          if(!FN[f].on) return;
+          const v=evalFn(f,hx);
+          cx.fillStyle=FN[f].col;
+          cx.beginPath(); cx.arc(hover.x, s.Y(v), 3.5, 0, Math.PI*2); cx.fill();
+          rows.push([`${FN[f].name}: ${v.toFixed(2)} min`, FN[f].col, false]);
+        });
+        cx.restore();
+        tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+      }
     }
     el('vdfReadout').textContent=
-      `sample link: ${el('vLen').value} mi @ ${el('vFfs').value} mph → tf = ${t0.toFixed(1)} min · capacity ${cap()} veh/hr`;
+      `sample link: ${el('vLen').value} mi @ ${el('vFfs').value} mph → tf = ${t0.toFixed(1)} min · capacity ${cap()} veh/hr  ·  wheel = zoom, drag = pan`+(view?'  ·  (custom view)':'');
   }
 
+  // zoom (wheel, centred on cursor) and pan (drag)
+  C.addEventListener('wheel', e=>{
+    e.preventDefault();
+    ensureView();
+    const r=C.getBoundingClientRect();
+    const mx=(e.clientX-r.left)*C.width/r.width, my=(e.clientY-r.top)*C.height/r.height;
+    const pw=W-P.l-P.r, ph=H-P.t-P.b;
+    const fx=Math.min(1,Math.max(0,(mx-P.l)/pw));
+    const fy=Math.min(1,Math.max(0,1-(my-P.t)/ph));
+    const z=e.deltaY>0?1.25:0.8;
+    const cxx=view.x0+fx*(view.x1-view.x0);
+    const cyy=view.y0+fy*(view.y1-view.y0);
+    let nx0=Math.max(0, cxx-(cxx-view.x0)*z);
+    let nx1=Math.min(20, Math.max(cxx+(view.x1-cxx)*z, nx0+0.05));
+    let ny0=Math.max(0, cyy-(cyy-view.y0)*z);
+    let ny1=Math.min(600, Math.max(cyy+(view.y1-cyy)*z, ny0+0.5));
+    view={x0:nx0, x1:nx1, y0:ny0, y1:ny1};
+    draw();
+  },{passive:false});
+  let pan=null;
+  C.addEventListener('pointerdown', e=>{
+    ensureView();
+    const r=C.getBoundingClientRect();
+    pan={mx:(e.clientX-r.left)*C.width/r.width, my:(e.clientY-r.top)*C.height/r.height, v:{...view}};
+    C.setPointerCapture(e.pointerId);
+  });
   C.addEventListener('pointermove', e=>{
     const r=C.getBoundingClientRect();
-    hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
+    const mx=(e.clientX-r.left)*C.width/r.width, my=(e.clientY-r.top)*C.height/r.height;
+    if(pan){
+      const pw=W-P.l-P.r, ph=H-P.t-P.b;
+      const dx=(mx-pan.mx)/pw*(pan.v.x1-pan.v.x0);
+      const dy=(my-pan.my)/ph*(pan.v.y1-pan.v.y0);
+      let nx0=pan.v.x0-dx, nx1=pan.v.x1-dx;
+      if(nx0<0){ nx1-=nx0; nx0=0; }
+      let ny0=pan.v.y0+dy, ny1=pan.v.y1+dy;
+      if(ny0<0){ ny1-=ny0; ny0=0; }
+      view={x0:nx0, x1:nx1, y0:ny0, y1:ny1};
+      hover=null;
+      draw();
+      return;
+    }
+    hover={x:mx, y:my};
     draw();
   });
-  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
+  ['pointerup','pointercancel'].forEach(ev=>C.addEventListener(ev, ()=>{ pan=null; }));
+  C.addEventListener('pointerleave', ()=>{ pan=null; hover=null; draw(); });
+  el('vdfRstV').addEventListener('click', ()=>{ view=null; draw(); });
   [['vLen',v=>parseFloat(v).toFixed(1)+' mi'],['vFfs',v=>v+' mph'],['vCap',v=>v+' veh/hr']].forEach(([id,fmt])=>{
     el(id).addEventListener('input', ()=>{ el(id+'Val').textContent=fmt(el(id).value); draw(); });
   });
@@ -970,6 +1040,133 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('ueStep').addEventListener('click', ()=>{ stopPlay(); if(k<parseInt(el('ueN').value)) k++; renderAll(); });
   el('ueRst').addEventListener('click', ()=>{ stopPlay(); k=1; renderAll(); });
   el('ueSpd').addEventListener('input', ()=>{ el('ueSpdVal').textContent=el('ueSpd').value+' it/s'; if(timer){ stopPlay(); play(); } });
+
+  // ── micro-level vehicle animation: NegBin arrivals choosing routes at a
+  //    diverge node, color-coded by chosen route, speeds from current times ──
+  const SIMC=el('ueSim'), scx=SIMC.getContext('2d');
+  const SW=SIMC.width, SH=SIMC.height;
+  const O=[70,150], DV=[230,150], M=[1030,150], DEST=[1140,150];
+  const WPS2=[[620,56],[620,150],[620,240]];
+  const NB_R=3, SIMSPEED=5;    // sim-seconds per real second
+  let cars2=[], tally=[0,0,0], stateKey='', lastSim=null;
+
+  function gauss(){
+    let u=0,v2=0;
+    while(u===0) u=Math.random();
+    while(v2===0) v2=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v2);
+  }
+  function rGamma(shape){   // Marsaglia–Tsang (shape ≥ 1)
+    const d=shape-1/3, c=1/Math.sqrt(9*d);
+    while(true){
+      let x, v;
+      do { x=gauss(); v=1+c*x; } while(v<=0);
+      v=v*v*v;
+      const u=Math.random();
+      if(u<1-0.0331*x*x*x*x) return d*v;
+      if(Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v;
+    }
+  }
+  function rPoisson(mu){
+    if(mu<=0) return 0;
+    const L=Math.exp(-mu);
+    let kk=0, p=1;
+    do { kk++; p*=Math.random(); } while(p>L);
+    return kk-1;
+  }
+  // NegBin(mean μ, dispersion r): Gamma-Poisson mixture → variance μ(1+μ/r) > μ
+  function rNegBin(mu){ return rPoisson(rGamma(NB_R)*(mu/NB_R)); }
+
+  const seg=(a,b,u)=>[a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u];
+  function routePos(r,u){
+    return u<0.5 ? seg(DV,WPS2[r],u/0.5) : seg(WPS2[r],M,(u-0.5)/0.5);
+  }
+  function carXY(c){
+    if(c.phase===0) return seg(O,DV,c.u);
+    if(c.phase===1) return routePos(c.route,c.u);
+    return seg(M,DEST,c.u);
+  }
+
+  function simLoop(ts){
+    if(lastSim===null) lastSim=ts;
+    let dtR=(ts-lastSim)/1000; lastSim=ts;
+    dtR=Math.min(dtR,0.05);
+    const sdt=dtR*SIMSPEED;
+    const D=parseFloat(el('ueDem').value);
+    const arr=res.st[el('ueSel').value];
+    const stt=arr[Math.min(k,arr.length)-1];
+    const key=el('ueSel').value+'|'+k+'|'+D;
+    if(key!==stateKey){ stateKey=key; tally=[0,0,0]; }
+    // spawn from the negative binomial arrival process
+    const n=rNegBin(D/3600*sdt);
+    const shares=stt.v.map(x=>x/D);
+    for(let i2=0;i2<n && cars2.length<300;i2++){
+      const rr=Math.random();
+      const route = rr<shares[0] ? 0 : rr<shares[0]+shares[1] ? 1 : 2;
+      tally[route]++;
+      cars2.push({phase:0, u:Math.random()*0.05, route});
+    }
+    // move — route legs slow down in proportion to the current travel time
+    cars2.forEach(c=>{
+      const dur = c.phase===0 ? 1.2 : c.phase===1 ? 5*stt.t[c.route]/ROUTES[c.route].tf : 0.9;
+      c.u+=sdt/dur;
+      if(c.u>=1){ c.u=0; c.phase++; }
+    });
+    cars2=cars2.filter(c=>c.phase<3);
+    drawSim(stt,D,arr.length);
+    requestAnimationFrame(simLoop);
+  }
+
+  function drawSim(stt,D,len){
+    scx.clearRect(0,0,SW,SH);
+    scx.fillStyle='#fff'; scx.fillRect(0,0,SW,SH);
+    function road(pts){
+      scx.strokeStyle='#dfe4ea'; scx.lineWidth=16; scx.lineCap='round'; scx.lineJoin='round';
+      scx.beginPath(); scx.moveTo(pts[0][0],pts[0][1]);
+      for(let i2=1;i2<pts.length;i2++) scx.lineTo(pts[i2][0],pts[i2][1]);
+      scx.stroke();
+    }
+    road([O,DV]);
+    for(let r=0;r<3;r++) road([DV,WPS2[r],M]);
+    road([M,DEST]);
+    // route labels with live iteration shares/times
+    for(let r=0;r<3;r++){
+      const share=stt.v[r]/D;
+      const wp=WPS2[r];
+      const oy = r===0?-18 : r===2?30 : -16;
+      scx.fillStyle=RCOLS[r]; scx.font='600 13px '+SANS; scx.textAlign='center';
+      scx.fillText(`Route ${r+1} · ${(share*100).toFixed(0)}% · ${Math.round(stt.v[r])} veh/hr · ${stt.t[r].toFixed(1)} min`, wp[0], wp[1]+oy);
+    }
+    // nodes
+    [[O,'O'],[M,''],[DEST,'D']].forEach(([p,lb])=>{
+      scx.fillStyle='#14919b';
+      scx.beginPath(); scx.arc(p[0],p[1], lb===''?7:13, 0, Math.PI*2); scx.fill();
+      if(lb){ scx.fillStyle='#fff'; scx.font='700 11px '+SANS; scx.textAlign='center'; scx.fillText(lb,p[0],p[1]+4); }
+    });
+    scx.fillStyle='#b45309';
+    scx.beginPath(); scx.arc(DV[0],DV[1],13,0,Math.PI*2); scx.fill();
+    scx.fillStyle='#fff'; scx.font='700 14px '+SANS; scx.textAlign='center'; scx.fillText('?',DV[0],DV[1]+5);
+    scx.fillStyle='#b45309'; scx.font='600 11px '+SANS;
+    scx.fillText('route choice — P = this iteration\'s shares', DV[0], DV[1]+32);
+    // labels
+    scx.fillStyle='#6b7280'; scx.font='600 11px '+SANS; scx.textAlign='left';
+    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — bursty (var > mean)`, 16, 24);
+    const tt=tally[0]+tally[1]+tally[2];
+    if(tt>0){
+      const parts=tally.map((x,i2)=>`R${i2+1} ${(100*x/tt).toFixed(0)}%`);
+      scx.fillText(`realized choices at this iteration: ${parts.join(' · ')}  (${tt} veh sampled)`, 16, SH-12);
+    }
+    // vehicles: gray until they pass the choice node, then route-colored
+    cars2.forEach(c=>{
+      const [x,y]=carXY(c);
+      scx.fillStyle = c.phase===0 ? '#6b7280' : RCOLS[c.route];
+      scx.beginPath(); scx.roundRect(x-6,y-4,12,8,2); scx.fill();
+    });
+    scx.fillStyle='#1f2937'; scx.font='600 12px '+SANS; scx.textAlign='right';
+    scx.fillText(`iteration ${Math.min(k,len)} · ${NAMES[el('ueSel').value]}`, SW-16, 24);
+  }
+
+  requestAnimationFrame(simLoop);
   recompute(); renderAll();
 })();
 
@@ -1366,13 +1563,23 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
     cx.fillText('shading = Beckmann objective (light = low)', 870, 192);
     cx.fillText('N = '+N+(N>1?' — conjugate blend of last '+(N-1)+' direction'+(N>2?'s':''):' — pure Frank-Wolfe'), 870, 210);
+    // live travel times AT THIS POINT — they change as the flows move
+    const RC5=['#2c5378','#0e7c86','#b45309'];
+    cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS;
+    cx.fillText('travel times at this point (respond to the flows):', 870, 244);
+    s.t.forEach((tv,i)=>{
+      cx.fillStyle=RC5[i]; cx.font='600 13px '+SANS;
+      cx.fillText(`Route ${i+1}: ${Math.round(s.v[i])} veh → ${tv.toFixed(2)} min${i===s.target?'  ◀ cheapest now':''}`, 870, 268+i*22);
+    });
+    cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
+    cx.fillText('at the ★ all used routes end up equal — that IS user equilibrium', 870, 340);
     // narration + cards
     const mix=s.betas.length===1?'pure FW direction'
       : s.betas.length===2?`${(s.betas[0]*100).toFixed(0)}% FW + ${(s.betas[1]*100).toFixed(0)}% prev`
       : `${(s.betas[0]*100).toFixed(0)}% FW + ${(s.betas[1]*100).toFixed(0)}% prev + ${(s.betas[2]*100).toFixed(0)}% prev²`;
     el('fwGap').textContent=`it ${k} · ${s.gap.toExponential(2)}`;
     el('fwMix').textContent=`λ = ${s.lam.toFixed(3)} · ${mix}`;
-    el('fwFlows').textContent=s.v.map(x=>Math.round(x)).join(' / ')+' veh/hr';
+    el('fwFlows').textContent=s.v.map(x=>Math.round(x)).join('/')+' veh · '+s.t.map(x=>x.toFixed(1)).join('/')+' min';
     el('fwNarr').textContent = s.target>=0
       ? `it ${k}: cheapest = Route ${s.target+1} (${s.t[s.target].toFixed(2)} min) → AON vertex; step λ=${s.lam.toFixed(3)} along ${s.betas.length>1?'conjugate blend':'FW direction'} · gap ${s.gap.toExponential(1)}`
       : `converged view — gap ${s.gap.toExponential(1)}`;
