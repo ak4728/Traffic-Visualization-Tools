@@ -44,27 +44,34 @@ python analysis\i25_speed_flow.py --demo          # synthetic data, pipeline tes
   hypercongestion). Since BPR is a demand-based function, observations below
   0.72·ffs are classified as the congested branch and **excluded from the
   fit** — they are still plotted (in red) so the two branches are visible.
-- BPR `t = t0·(1 + α(v/c)^β)` is fitted with `scipy.optimize.curve_fit` and
-  compared against the classic α=0.15, β=4.
-- Every VDF family from the Chapter 3 explorer is also fitted to the same
-  uncongested observations: BPR, Akçelik (HCM 2000, J), Combined link+node
-  (k₄ and g/C, node capacity tied to link capacity), Conical (Spiess, α),
-  Generalized cost (constant money term over classic BPR), and Logit VDF
-  (c₁, c₂, c₃). Akçelik and Conical treat v/c = 1 as a hard wall, so they are
-  fitted on v/c ≤ 1 only.
+- **Demand reconstruction (shown, not fitted):** congested hours are also
+  placed at a reconstructed demand v/c — the median volume for the same
+  hour-of-day and day type on days that hour flowed freely, never less than
+  the hour's own throughput. A single station only sees ~1 mile of a queue
+  that extends miles upstream, so this shifts points by only ≈ +0.06 v/c —
+  it cannot recover corridor demand, and those hours stay out of the fits.
+- **BPR** `t = t0·(1 + α(v/c)^β)`: two fits are reported — both parameters
+  free, and the headline calibration with **β fixed at the engineering
+  standard 4** and α calibrated. Sub-capacity data identifies β only weakly
+  (pinning β = 4 costs almost no R²), and β governs the oversaturated range
+  that throughput data cannot observe, so the β = 4 prior is the defensible
+  choice.
+- Every VDF family from the Chapter 3 explorer is also fitted: BPR (β=4),
+  Akçelik (HCM 2000, J), Combined link+node (k₄ and g/C), Conical (Spiess,
+  α), Generalized cost (money term), Logit VDF (c₁, c₂, c₃). Akçelik and
+  Conical treat v/c = 1 as a hard wall, so they are fitted on v/c ≤ 1 only.
 
 With the Aug 1–29, 2026 month of data (672 hourly observations; Aug 12 lacks
-a volume file): ffs ≈ 69.3 mph, capacity ≈ 7,570 veh/hr (95th pct, all lanes),
-415 uncongested / 257 congested hours, throughput up to v/c ≈ 1.10.
-Fits (R²): Combined 0.76 (k₄≈1.01, g/C≈0.88) > Logit 0.75 (c₁=6, c₂≈1.93,
-c₃≈3.4) > BPR 0.72 (α≈0.25, β≈2.74) > Generalized cost 0.67 ≫ Akçelik 0.19 >
-Conical (negative). The last two fail honestly: Akçelik stays flat until
-v/c ≈ 1 and Spiess's conical forces t = 2·t0 exactly at capacity, while the
-observed near-capacity hours sit at only t/t0 ≈ 1.2–1.35.
+a volume file) and capacity 7,200 veh/hr (4 lanes × 1,800): ffs ≈ 69.3 mph,
+415 uncongested / 257 congested hours. BPR: α=0.216, β=2.74 free
+(R²=0.720) vs **α=0.220, β=4 fixed (R²=0.692)** — the headline. Other
+families (R²): Combined 0.76 > Logit 0.75 > Generalized cost 0.73 ≫
+Akçelik 0.22 > Conical (negative; it forces t = 2·t0 exactly at capacity
+while the data sits near 1.25 there).
 
 These fitted values are the default slider positions in the Chapter 3 VDF
 explorer (`Optimization.html` Part 1), which also embeds the 672 compiled
-observations as dots.
+observations as dots (congested hours at their reconstructed demand v/c).
 
 ## Outputs
 

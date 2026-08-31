@@ -247,29 +247,73 @@ def main():
     unc = df[~df["congested"]]
     con = df[df["congested"]]
 
+    # Demand reconstruction for congested hours. During queue discharge the
+    # detector counts THROUGHPUT, not demand, so those hours plot at an
+    # artificially low v/c. Proxy the demand with the median volume observed
+    # for the same hour-of-day and day type (weekday/weekend) on days when
+    # that hour flowed freely; demand is never less than the hour's own
+    # throughput. Uncongested hours keep their own volume (count = demand).
+    df["weekend"] = pd.to_datetime(df["date"]).dt.dayofweek >= 5
+    prof = df[~df["congested"]].groupby(["weekend", "hour"])["volume"].median()
+
+    def demand_of(r):
+        if not r.congested:
+            return r.volume
+        p = prof.get((r.weekend, r.hour), np.nan)
+        if pd.isna(p):   # hour congested on every day of this type
+            p = df[(df["weekend"] == r.weekend) & (df["hour"] == r.hour)]["volume"].max()
+        return max(p, r.volume)
+
+    df["demand"] = df.apply(demand_of, axis=1)
+    df["xd"] = df["demand"] / cap                    # demand-based v/c
+    unc = df[~df["congested"]]
+    con = df[df["congested"]]
+
     # ── BPR fit: t/t0 = 1 + a*(v/c)^b ────────────────────────────────
     def bpr(x, a, b):
         return 1 + a * np.power(np.clip(x, 1e-6, None), b)
 
-    fit_df = unc[unc["ratio"] >= 0.85]               # ignore the >ffs speeders
-    (a_fit, b_fit), _ = curve_fit(bpr, fit_df["xc"], fit_df["ratio"],
+    fit_unc = unc[unc["ratio"] >= 0.85]              # ignore the >ffs speeders
+    fit_all = df[df["ratio"] >= 0.85]                # all hours, x = demand v/c
+
+    def r2_of(fn, popt, xs, ys):
+        res = ys - fn(xs, *popt)
+        return 1 - np.sum(res ** 2) / np.sum((ys - ys.mean()) ** 2)
+
+    # free fit (alpha and beta both estimated from the uncongested branch)
+    (a_unc, b_unc), _ = curve_fit(bpr, fit_unc["xc"], fit_unc["ratio"],
                                   p0=[0.15, 4.0],
                                   bounds=([0.005, 0.5], [5.0, 15.0]),
                                   maxfev=20000)
-    pred = bpr(fit_df["xc"], a_fit, b_fit)
-    ss_res = np.sum((fit_df["ratio"] - pred) ** 2)
-    ss_tot = np.sum((fit_df["ratio"] - fit_df["ratio"].mean()) ** 2)
-    r2 = 1 - ss_res / ss_tot
+    r2u = r2_of(bpr, (a_unc, b_unc), fit_unc["xc"].values, fit_unc["ratio"].values)
+
+    # engineering fit: beta pinned at the classic 4 (sub-capacity data
+    # identifies beta only weakly, and beta governs the oversaturated range
+    # the throughput data cannot see), alpha calibrated
+    B_FIX = 4.0
+    (a_b4,), _ = curve_fit(lambda x, a: bpr(x, a, B_FIX),
+                           fit_unc["xc"], fit_unc["ratio"],
+                           p0=[0.15], bounds=([0.005], [5.0]), maxfev=20000)
+    r2b4 = r2_of(bpr, (a_b4, B_FIX), fit_unc["xc"].values, fit_unc["ratio"].values)
+    a_fit, b_fit, r2 = a_b4, B_FIX, r2b4        # headline calibration
 
     print("\n──── results ─────────────────────────────────────")
     print(f"  free-flow speed  (85th pct, low flow): {ffs:6.1f} mph")
     print(f"  capacity used                        : {cap:6.0f} veh/hr"
           + ("" if args.capacity else "  (95th pct of volume — override with --capacity)"))
     print(f"  regime split at {s_crit:.0f} mph        : "
-          f"{len(unc)} uncongested / {len(con)} congested hours "
-          f"(BPR fitted to uncongested only)")
+          f"{len(unc)} uncongested / {len(con)} congested hours")
+    shift = (con["xd"] - con["xc"])
+    print(f"  demand reconstruction (local queue)  : congested hours moved from "
+          f"throughput v/c [{con['xc'].min():.2f}-{con['xc'].max():.2f}] to "
+          f"demand v/c [{con['xd'].min():.2f}-{con['xd'].max():.2f}] "
+          f"(median shift +{shift.median():.2f})")
+    print("    NOTE: a single station sees only ~1 mi of the queue, so the")
+    print("    reconstruction cannot recover corridor demand — congested hours")
+    print("    are shown at the reconstructed position but stay out of the fits.")
     print(f"  free-flow travel time t0 ({args.length} mi)   : {t0:6.2f} min")
-    print(f"  BPR fit  t = t0(1 + a(v/c)^b)        : a = {a_fit:.3f}, b = {b_fit:.2f}   R2 = {r2:.3f}")
+    print(f"  BPR, both params free (uncongested)  : a = {a_unc:.3f}, b = {b_unc:.2f}   R2 = {r2u:.3f}")
+    print(f"  BPR, beta fixed at 4 (headline)      : a = {a_b4:.3f}, b = {B_FIX:.2f}   R2 = {r2b4:.3f}")
     print(f"  (classic BPR defaults: a = 0.150, b = 4.00)")
 
     # ── fit every VDF family from the Chapter 3 explorer ─────────────
@@ -301,26 +345,25 @@ def main():
         return 1 + c1 / (1 + np.exp(c3 * (c2 - x)))
 
     # capwall=True: the function treats v/c = 1 as a hard wall (it goes
-    # near-vertical there), so it is fitted only on v/c <= 1 — beyond 1 it
-    # describes demand, which throughput counts cannot measure.
+    # near-vertical there), so it is fitted only on v/c <= 1.
     FITS = [
-        ("BPR (1964)",           bpr,       [0.15, 4.0],      ([0.005, 0.5], [5, 15]),          ["a", "b"],        False),
+        ("BPR (1964)",           lambda x, a: bpr(x, a, B_FIX),
+                                            [0.15],           ([0.005], [5.0]),                  ["a (b=4 fixed)"], False),
         ("Akçelik (HCM 2000)",   akcelik,   [0.8],            ([0.001], [500]),                  ["J"],             True),
         ("Combined link+node",   combined,  [1.0, 0.8],       ([0.5, 0.1], [2.0, 0.98]),         ["k4", "g/C"],     False),
         ("Conical (Spiess 1990)", conical,  [4.0],            ([1.01], [40]),                    ["alpha"],         True),
         ("Generalized cost",     gencost,   [0.05],           ([0.0], [5.0]),                    ["money (min)"],   False),
-        ("Logit VDF",            logit_vdf, [1.5, 1.05, 6.0], ([0.05, 0.5, 0.5], [6, 2.5, 40]),  ["c1", "c2", "c3"], False),
+        ("Logit VDF",            logit_vdf, [1.5, 1.05, 6.0], ([0.05, 0.5, 0.5], [8, 2.5, 40]),  ["c1", "c2", "c3"], False),
     ]
-    sub1 = fit_df[fit_df["xc"] <= 1.0]
+    sub1 = fit_unc[fit_unc["xc"] <= 1.0]
     fitted = {}
     print("\n──── all VDF families, fitted to the uncongested branch ────")
     for name, fn, p0, bounds, labels, capwall in FITS:
-        d = sub1 if capwall else fit_df
-        yv = d["ratio"].values
+        d = sub1 if capwall else fit_unc
+        xs, yv = d["xc"].values, d["ratio"].values
         try:
-            popt, _ = curve_fit(fn, d["xc"].values, yv, p0=p0,
-                                bounds=bounds, maxfev=40000)
-            res = yv - fn(d["xc"].values, *popt)
+            popt, _ = curve_fit(fn, xs, yv, p0=p0, bounds=bounds, maxfev=40000)
+            res = yv - fn(xs, *popt)
             fr2 = 1 - np.sum(res ** 2) / np.sum((yv - yv.mean()) ** 2)
             rmse = np.sqrt(np.mean(res ** 2))
             fitted[name] = (fn, popt, fr2, capwall)
@@ -366,35 +409,35 @@ def main():
     a2.set_title("Flow vs density — fundamental diagram")
     a2.legend(fontsize=8)
 
-    # 3. travel time vs volume with the fitted BPR
+    # 3. travel time vs demand with the fitted BPR
     a3 = ax[1, 0]
     a3.scatter(unc["volume"], unc["tt"], s=16, alpha=0.55, color=BLUE,
                edgecolors="none", label="uncongested branch")
-    a3.scatter(con["volume"], con["tt"], s=16, alpha=0.55, color=RED,
-               edgecolors="none", label="congested (excluded from fit)")
-    vg = np.linspace(0, df["volume"].max(), 200)
+    a3.scatter(con["demand"], con["tt"], s=16, alpha=0.55, color=RED,
+               edgecolors="none", label="congested @ reconstructed demand")
+    vg = np.linspace(0, df["demand"].max(), 200)
     a3.plot(vg, t0 * bpr(vg / cap, a_fit, b_fit), color=TEAL, lw=2.5,
             label=f"BPR fit  a={a_fit:.2f}, b={b_fit:.1f}")
     a3.axhline(t0, color=GRAY, ls="--", lw=1, label=f"t0 = {t0:.2f} min")
-    a3.set_xlabel("volume (veh/hr)")
+    a3.set_xlabel("demand volume (veh/hr)")
     a3.set_ylabel(f"travel time over {args.length} mi (min) = length/speed")
-    a3.set_title("Travel time vs volume — the volume-delay relationship")
+    a3.set_title("Travel time vs demand — the volume-delay relationship")
     a3.legend(fontsize=8)
 
     # 4. t/t0 vs v/c: the VDF itself
     a4 = ax[1, 1]
     a4.scatter(unc["xc"], unc["ratio"], s=16, alpha=0.55, color=BLUE,
                edgecolors="none", label="uncongested branch")
-    a4.scatter(con["xc"], con["ratio"], s=16, alpha=0.55, color=RED,
-               edgecolors="none", label="congested (excluded from fit)")
-    xg = np.linspace(0, max(1.4, df["xc"].max()), 200)
+    a4.scatter(con["xd"], con["ratio"], s=16, alpha=0.55, color=RED,
+               edgecolors="none", label="congested @ reconstructed demand")
+    xg = np.linspace(0, max(1.4, df["xd"].max()), 200)
     a4.plot(xg, bpr(xg, a_fit, b_fit), color=TEAL, lw=2.5,
             label=f"fitted BPR (a={a_fit:.2f}, b={b_fit:.1f}, R2={r2:.2f})")
     a4.plot(xg, bpr(xg, 0.15, 4.0), color=AMBER, lw=1.8, ls="--",
             label="classic BPR (0.15, 4)")
     a4.axvline(1.0, color=GRAY, ls=":", lw=1)
-    a4.set_xlabel("v/c ratio"); a4.set_ylabel("t / t0 (travel-time ratio)")
-    a4.set_title("The volume-delay function, fitted to the uncongested branch")
+    a4.set_xlabel("v/c ratio (demand-based)"); a4.set_ylabel("t / t0 (travel-time ratio)")
+    a4.set_title("The volume-delay function — β = 4 fixed, α calibrated")
     a4.legend(fontsize=8)
 
     fig.tight_layout(rect=[0, 0, 1, 0.94])
@@ -405,15 +448,15 @@ def main():
     fig2, a = plt.subplots(figsize=(8, 5.5))
     a.scatter(unc["xc"], unc["ratio"], s=18, alpha=0.55, color=BLUE,
               edgecolors="none", label="uncongested hours (t/t0 from speed)")
-    a.scatter(con["xc"], con["ratio"], s=18, alpha=0.55, color=RED,
-              edgecolors="none", label="congested hours (excluded from fit)")
+    a.scatter(con["xd"], con["ratio"], s=18, alpha=0.55, color=RED,
+              edgecolors="none", label="congested hours @ reconstructed demand")
     a.plot(xg, bpr(xg, a_fit, b_fit), color=TEAL, lw=3,
            label=f"fitted BPR: 1 + {a_fit:.3f}*(v/c)^{b_fit:.2f}")
     a.plot(xg, bpr(xg, 0.15, 4.0), color=AMBER, lw=2, ls="--",
            label="classic BPR (0.15, 4)")
     a.axvline(1.0, color=GRAY, ls=":", lw=1)
-    a.set_xlabel("v/c ratio"); a.set_ylabel("t / t0")
-    a.set_title(f"I-25 NB volume-delay function — R2 = {r2:.3f}")
+    a.set_xlabel("v/c ratio (demand-based)"); a.set_ylabel("t / t0")
+    a.set_title(f"I-25 NB volume-delay function (β = 4 fixed) — R2 = {r2:.3f}")
     a.legend()
     fig2.tight_layout()
     p2 = os.path.join(out_dir, "i25_bpr_fit.png")
@@ -427,30 +470,32 @@ def main():
     fig3, a = plt.subplots(figsize=(10, 6.5))
     a.scatter(unc["xc"], unc["ratio"], s=18, alpha=0.5, color="#7d8da0",
               edgecolors="none", label="uncongested hours")
-    a.scatter(con["xc"], con["ratio"], s=18, alpha=0.35, color="#d9a0a3",
-              edgecolors="none", label="congested hours (excluded from fits)")
-    xg2 = np.linspace(0.01, max(1.4, df["xc"].max()), 300)
+    a.scatter(con["xd"], con["ratio"], s=18, alpha=0.35, color="#d9a0a3",
+              edgecolors="none", label="congested hours @ reconstructed demand")
+    xg2 = np.linspace(0.01, max(1.4, df["xd"].max()), 300)
     for name, (fn, popt, fr2, capwall) in fitted.items():
         note = ", fit on v/c≤1" if capwall else ""
         a.plot(xg2, fn(xg2, *popt), color=VDF_COLS.get(name, "#333"), lw=2.2,
                label=f"{name}  (R2={fr2:.2f}{note})")
     a.axvline(1.0, color=GRAY, ls=":", lw=1)
-    a.set_xlabel("v/c ratio"); a.set_ylabel("t / t0 (travel-time ratio)")
-    a.set_ylim(0.9, min(3.0, float(np.nanmax(unc["ratio"])) + 1.2))
-    a.set_title(f"All VDF families fitted to I-25 NB — {sub}")
+    a.set_xlabel("v/c ratio (demand-based)"); a.set_ylabel("t / t0 (travel-time ratio)")
+    a.set_ylim(0.9, min(5.5, float(np.nanmax(df["ratio"])) + 0.3))
+    a.set_title(f"All VDF families fitted to I-25 NB (all hours) — {sub}")
     a.legend(fontsize=8)
     fig3.tight_layout()
     p3 = os.path.join(out_dir, "i25_vdf_all_fits.png")
     fig3.savefig(p3, dpi=140)
 
     # compiled observations as a JS array, ready to embed in the Chapter 3
-    # VDF explorer (x = v/c at cap above, r = t/t0, c = congested flag)
+    # VDF explorer. x is the DEMAND-based v/c (congested hours at their
+    # reconstructed demand), r = t/t0, c = congested flag.
     pts = ",".join(
-        f"[{r.xc:.3f},{r.ratio:.3f},{1 if r.congested else 0}]"
-        for r in df.sort_values(["xc"]).itertuples()
+        f"[{r.xd:.3f},{r.ratio:.3f},{1 if r.congested else 0}]"
+        for r in df.sort_values(["xd"]).itertuples()
     )
     js = (f"// I-25 NB, CDOT station 000501, {len(df)} hourly obs, "
-          f"cap={cap:.0f} veh/hr, ffs={ffs:.1f} mph  [v/c, t/t0, congested]\n"
+          f"cap={cap:.0f} veh/hr, ffs={ffs:.1f} mph  "
+          f"[demand v/c, t/t0, congested] (congested at reconstructed demand)\n"
           f"const I25_OBS=[{pts}];\n")
     pjs = os.path.join(out_dir, "i25_points.js")
     with open(pjs, "w", encoding="utf-8") as f:
