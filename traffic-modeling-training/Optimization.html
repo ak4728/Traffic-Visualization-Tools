@@ -105,7 +105,7 @@
       <div class="readout" id="odReadout">A toy network: 2 origins, 2 destinations, two competing middle routes. Counted links show volume vs count.</div>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip"><b>O-D Matrix Estimation</b> (Nielsen's bi-level method, as in TransModeler): iterate between a <b>traffic assignment</b> (here UE between the two middle routes, BPR times) and a <b>matrix adjustment</b> that nudges O-D flows toward consistency with the link counts. <b>Single Path</b> compares volumes to counts only along each pair's current shortest path; <b>Multiple Paths</b> uses all used paths weighted by their flows (usually more accurate); <b>Gradient</b> descends the least-squares count-error objective — best when you trust the seed matrix. Counts exist on 4 of 6 links (gray links are uncounted — flows there are only pinned down indirectly, which is why the estimate need not equal the hidden truth). Convergence is tracked as <b>%RMSE</b> between assigned volumes and counts.</span></span></div>
+      <div class="pane-head"><span class="help">i<span class="tip"><b>O-D Matrix Estimation</b> (Nielsen's bi-level method, as in TransModeler): iterate between a <b>traffic assignment</b> (here UE between the two middle routes, BPR times) and a <b>matrix adjustment</b> that nudges O-D flows toward consistency with the link counts. <b>Single Path</b> compares volumes to counts only along each pair's current shortest path; <b>Multiple Paths</b> uses all used paths weighted by their flows (usually more accurate); <b>Gradient</b> descends the least-squares count-error objective — best when you trust the seed matrix. Counts exist on 4 of 6 links (gray links are uncounted — flows there are only pinned down indirectly, which is why the estimate need not equal the hidden truth). Convergence is tracked as <b>%RMSE</b> between assigned volumes and counts. The moving vehicles are a live sample of the <b>current estimate</b>: each O-D pair spawns (NegBin arrivals) at its estimated rate in its own colour, and picks North or South at node a with the live UE split — run the estimation and watch the traffic mix itself change as the matrix is corrected.</span></span></div>
       <div class="controls">
         <div class="control-group"><label>Estimation method</label>
           <select id="odMethod">
@@ -680,11 +680,15 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   function explain(){ el('odExplain').innerHTML=METHOD_INFO[el('odMethod').value]; }
 
   function pt(p){ return Array.isArray(p)?p:(NODES[p]||( p==='WPN'?WPN:WPS )); }
+  const OD_COL={'11':'#0e7c86','12':'#2c5378','21':'#b45309','22':'#8c3a4c'};
+  const OD_NAME={'11':'O1→D1','12':'O1→D2','21':'O2→D1','22':'O2→D2'};
+  let odCars=[];
   function drawNet(){
     cx.clearRect(0,0,W,H);
     cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
     const a=assign(X);
-    // links
+    // pass 1: link strokes
+    const linkCols={};
     Object.keys(LINKS).forEach(l=>{
       const L=LINKS[l];
       const v=a.vols[l];
@@ -694,6 +698,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         const e=Math.abs(v-counts[l])/Math.max(counts[l],1);
         col = e<0.05?'#1d7a6f': e<0.15?'#b8860b':'#c1121f';
       }
+      linkCols[l]=col;
       cx.strokeStyle=col;
       cx.lineWidth=Math.max(3, v/70);
       cx.lineJoin='round'; cx.lineCap='round';
@@ -702,7 +707,22 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.moveTo(ps[0][0],ps[0][1]);
       for(let i=1;i<ps.length;i++) cx.lineTo(ps[i][0],ps[i][1]);
       cx.stroke();
-      // label at midpoint — big chip so volumes stay readable over the links
+    });
+    // pass 2: moving vehicles (colored by O-D pair)
+    odCars.forEach(c=>{
+      const [x,y]=carXY2(c);
+      cx.fillStyle=OD_COL[c.od];
+      cx.beginPath(); cx.roundRect(x-7,y-5,14,10,3); cx.fill();
+      cx.strokeStyle='rgba(255,255,255,0.7)'; cx.lineWidth=1;
+      cx.strokeRect(x-7,y-5,14,10);
+    });
+    // pass 3: label chips on top
+    Object.keys(LINKS).forEach(l=>{
+      const L=LINKS[l];
+      const v=a.vols[l];
+      const counted=COUNTED.includes(l);
+      const col=linkCols[l];
+      const ps=L.pts.map(pt);
       const mid=ps.length===3?ps[1]:[(ps[0][0]+ps[1][0])/2,(ps[0][1]+ps[1][1])/2];
       const off = l==='LN'?-26 : l==='LS'?38 : l==='L1'?-24 : l==='L2'?36 : l==='L5'?-24 : 36;
       const txt=Math.round(v)+(counted?' / '+Math.round(counts[l]):'');
@@ -718,6 +738,19 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.fillStyle='#6b7280'; cx.font='600 11px '+SANS;
       cx.fillText(L.name+(counted?' — vol / count':' — no count'), mid[0], mid[1]+off+19);
     });
+    // O-D colour legend
+    let lx=20;
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillStyle='#6b7280'; cx.fillText('vehicles by O-D pair:', lx, H-16); lx+=150;
+    Object.keys(OD_COL).forEach(od=>{
+      cx.fillStyle=OD_COL[od];
+      cx.fillRect(lx, H-27, 14, 10);
+      cx.fillStyle='#4b5563';
+      cx.fillText(OD_NAME[od]+' ('+Math.round(X[od])+'/hr)', lx+19, H-17);
+      lx+=140;
+    });
+    cx.fillStyle='#6b7280';
+    cx.fillText('N/S choice at node a = current UE split ('+(a.s*100).toFixed(0)+'%)', lx+10, H-17);
     // nodes
     Object.keys(NODES).forEach(n=>{
       const [x,y]=NODES[n];
@@ -816,6 +849,73 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     el('odSpdVal').textContent=parseFloat(el('odSpd').value).toFixed(1)+' it/s';
     if(timer){ stopRun(); run(); }   // apply new pace mid-run
   });
+
+  // ── micro vehicle animation on the ODME network: spawn rates follow the
+  //    CURRENT O-D estimate; N/S choice at node a follows the live UE split ──
+  const SIMSPEED2=6, NB_R2=3;
+  function gauss2(){
+    let u=0,v2=0;
+    while(u===0) u=Math.random();
+    while(v2===0) v2=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v2);
+  }
+  function rGamma2(shape){
+    const d=shape-1/3, c=1/Math.sqrt(9*d);
+    while(true){
+      let x, v;
+      do { x=gauss2(); v=1+c*x; } while(v<=0);
+      v=v*v*v;
+      const u=Math.random();
+      if(u<1-0.0331*x*x*x*x) return d*v;
+      if(Math.log(u)<0.5*x*x+d*(1-v+Math.log(v))) return d*v;
+    }
+  }
+  function rPoisson2(mu){
+    if(mu<=0) return 0;
+    const L2=Math.exp(-mu);
+    let kk=0, p=1;
+    do { kk++; p*=Math.random(); } while(p>L2);
+    return kk-1;
+  }
+  function rNegBin2(mu){ return rPoisson2(rGamma2(NB_R2)*(mu/NB_R2)); }
+  const seg2=(a,b,u)=>[a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u];
+  function carXY2(c){
+    if(c.phase===0) return seg2(NODES[c.od[0]==='1'?'O1':'O2'], NODES.a, c.u);
+    if(c.phase===1){
+      const wp=c.mid==='N'?WPN:WPS;
+      return c.u<0.5 ? seg2(NODES.a,wp,c.u/0.5) : seg2(wp,NODES.b,(c.u-0.5)/0.5);
+    }
+    return seg2(NODES.b, NODES[c.od[1]==='1'?'D1':'D2'], c.u);
+  }
+  let lastSim2=null;
+  function simLoop2(ts){
+    if(lastSim2===null) lastSim2=ts;
+    let dtR=(ts-lastSim2)/1000; lastSim2=ts;
+    dtR=Math.min(dtR,0.05);
+    const sdt=dtR*SIMSPEED2;
+    const a=assign(X);
+    // spawn per O-D pair at the CURRENT estimated rate (NegBin, bursty)
+    Object.keys(X).forEach(od=>{
+      const n=rNegBin2(X[od]/3600*sdt);
+      for(let i2=0;i2<n && odCars.length<260;i2++){
+        odCars.push({od, phase:0, u:Math.random()*0.05, mid: Math.random()<a.s?'N':'S'});
+      }
+    });
+    // move — mid-route duration scales with the congested route time
+    odCars.forEach(c=>{
+      let dur;
+      if(c.phase===0) dur=1.4;
+      else if(c.phase===1) dur=2.2*(c.mid==='N' ? a.tN/RT.N.tf : a.tS/RT.S.tf);
+      else dur=1.4;
+      c.u+=sdt/dur;
+      if(c.u>=1){ c.u=0; c.phase++; }
+    });
+    odCars=odCars.filter(c=>c.phase<3);
+    drawNet();
+    requestAnimationFrame(simLoop2);
+  }
+  requestAnimationFrame(simLoop2);
+
   makeCounts(); explain(); reset();
 })();
 
