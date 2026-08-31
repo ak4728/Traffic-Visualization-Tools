@@ -69,6 +69,22 @@ families (R²): Combined 0.76 > Logit 0.75 > Generalized cost 0.73 ≫
 Akçelik 0.22 > Conical (negative; it forces t = 2·t0 exactly at capacity
 while the data sits near 1.25 there).
 
+- **Speed-density models** (fitted on u vs k across BOTH regimes — their
+  whole point is one curve through free flow and congestion): Greenshields
+  u = uf(1−k/kj), Greenberg u = uc·ln(kj/k), Underwood u = uf·e^(−k/kc).
+  Their implied speed-flow curves q = k·u(k) are overlaid on the speed-flow
+  and fundamental-diagram panels. With the August data: **Greenshields
+  uf = 74.7 mph, kj = 388 veh/mi, R² = 0.93, implied capacity = 7,254 veh/hr**
+  (independently confirming the 7,200 engineering estimate); Underwood 0.86
+  (capacity 7,678); Greenberg 0.64 (its u→∞ behavior at low density makes it
+  calibrate poorly on freeway data without deep-jam observations).
+
+Note on axes: the travel-time panel plots OBSERVED volume (it is the exact
+inverse of the speed-flow panel, tt = length/speed). The reconstructed-demand
+x-axis appears only in the VDF panels — there the congested hours form
+vertical stacks because the demand proxy assigns the same hour-of-day median
+to every congested occurrence of that hour.
+
 These fitted values are the default slider positions in the Chapter 3 VDF
 explorer (`Optimization.html` Part 1), which also embeds the 672 compiled
 observations as dots (congested hours at their reconstructed demand v/c).

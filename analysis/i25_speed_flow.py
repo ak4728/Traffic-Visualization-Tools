@@ -373,6 +373,46 @@ def main():
         except Exception as e:
             print(f"  {name:<24} fit failed: {e}")
 
+    # ── classic speed-density models ─────────────────────────────────
+    # Fitted on u vs k across BOTH regimes — that is their whole point:
+    # one curve through free flow and congestion. q(k) = k·u(k) follows.
+    kv, uv = df["density"].values, df["speed"].values
+
+    def gs_u(k, uf, kj):          # Greenshields (1935): linear u-k
+        return uf * (1 - k / kj)
+
+    def gb_u(k, uc, kj):          # Greenberg (1959): logarithmic
+        return uc * np.log(np.maximum(kj / np.maximum(k, 1e-9), 1e-9))
+
+    def uw_u(k, uf, kc):          # Underwood (1961): exponential
+        return uf * np.exp(-k / kc)
+
+    SD = {}
+    print("\n──── speed-density models (fitted on all hours, u vs k) ────")
+    for name, fn, p0, bnd, capfun in [
+        ("Greenshields", gs_u, [70, 600],  ([30, 100], [100, 3000]),
+         lambda p: p[0] * p[1] / 4),                 # qmax = uf·kj/4
+        ("Greenberg",    gb_u, [35, 600],  ([5, 100], [200, 5000]),
+         lambda p: p[0] * p[1] / np.e),              # qmax = uc·kj/e
+        ("Underwood",    uw_u, [70, 200],  ([30, 20], [100, 3000]),
+         lambda p: p[0] * p[1] / np.e),              # qmax = uf·kc/e
+    ]:
+        popt, _ = curve_fit(fn, kv, uv, p0=p0, bounds=bnd, maxfev=40000)
+        sr2 = r2_of(fn, popt, kv, uv)
+        SD[name] = (fn, popt, sr2)
+        qm = capfun(popt)
+        print(f"  {name:<13} p1 = {popt[0]:7.1f}, p2 = {popt[1]:7.1f}   "
+              f"R2(u|k) = {sr2:.3f}   implied capacity = {qm:5.0f} veh/hr")
+
+    SD_COLS = {"Greenshields": "#40663c", "Greenberg": "#7a4b8f", "Underwood": "#b45309"}
+
+    def sd_curves(name, n=300):
+        fn, popt, _ = SD[name]
+        kmax = popt[1] * (0.999 if name != "Underwood" else 6)
+        kk = np.linspace(1, min(kmax, kv.max() * 1.6), n)
+        uu = np.clip(fn(kk, *popt), 0, None)
+        return kk, uu, kk * uu
+
     # ── plots ────────────────────────────────────────────────────────
     plt.rcParams.update({"font.family": "Segoe UI", "font.size": 10,
                          "axes.grid": True, "grid.alpha": 0.3})
@@ -389,13 +429,17 @@ def main():
                edgecolors="none", label="uncongested branch")
     a1.scatter(con["volume"], con["speed"], s=16, alpha=0.55, color=RED,
                edgecolors="none", label="congested (queue discharge)")
-    bx, by = binned(unc, "volume", "speed")
-    a1.plot(bx, by, color=TEAL, lw=2.5, label="binned median (uncongested)")
+    for nm in SD:
+        kk, uu, qq = sd_curves(nm)
+        a1.plot(qq, uu, color=SD_COLS[nm], lw=2,
+                label=f"{nm} (R2={SD[nm][2]:.2f})")
     a1.axhline(ffs, color=GRAY, ls="--", lw=1.2, label=f"free-flow {ffs:.0f} mph")
     a1.axvline(cap, color=AMBER, ls="--", lw=1.2, label=f"capacity {cap:.0f} veh/hr")
     a1.set_xlabel("volume (veh/hr)"); a1.set_ylabel("speed (mph)")
-    a1.set_title("Speed vs volume — the two-branch speed-flow curve")
-    a1.legend(fontsize=8)
+    a1.set_title("Speed vs volume — with fitted speed-density models")
+    a1.set_xlim(0, df["volume"].max() * 1.08)
+    a1.set_ylim(0, min(90, uv.max() * 1.15))
+    a1.legend(fontsize=7)
 
     # 2. flow vs density (fundamental diagram)
     a2 = ax[0, 1]
@@ -403,25 +447,31 @@ def main():
                edgecolors="none", label="uncongested branch")
     a2.scatter(con["density"], con["volume"], s=16, alpha=0.55, color=RED,
                edgecolors="none", label="congested branch")
-    bx, by = binned(df, "density", "volume")
-    a2.plot(bx, by, color=TEAL, lw=2.5, label="binned median")
+    for nm in SD:
+        kk, uu, qq = sd_curves(nm)
+        a2.plot(kk, qq, color=SD_COLS[nm], lw=2,
+                label=f"{nm} (R2={SD[nm][2]:.2f})")
     a2.set_xlabel("density k = q/v (veh/mi)"); a2.set_ylabel("flow q (veh/hr)")
-    a2.set_title("Flow vs density — fundamental diagram")
-    a2.legend(fontsize=8)
+    a2.set_xlim(0, kv.max() * 1.05)
+    a2.set_ylim(0, df["volume"].max() * 1.12)
+    a2.set_title("Flow vs density — fundamental diagram with fitted models")
+    a2.legend(fontsize=7)
 
-    # 3. travel time vs demand with the fitted BPR
+    # 3. travel time vs OBSERVED volume — the exact mirror of panel 1
+    # (tt = length/speed, same x-axis; the reconstructed-demand view lives
+    # in panel 4 and the VDF figures, where x must be demand)
     a3 = ax[1, 0]
     a3.scatter(unc["volume"], unc["tt"], s=16, alpha=0.55, color=BLUE,
                edgecolors="none", label="uncongested branch")
-    a3.scatter(con["demand"], con["tt"], s=16, alpha=0.55, color=RED,
-               edgecolors="none", label="congested @ reconstructed demand")
-    vg = np.linspace(0, df["demand"].max(), 200)
+    a3.scatter(con["volume"], con["tt"], s=16, alpha=0.55, color=RED,
+               edgecolors="none", label="congested (queue discharge)")
+    vg = np.linspace(0, df["volume"].max(), 200)
     a3.plot(vg, t0 * bpr(vg / cap, a_fit, b_fit), color=TEAL, lw=2.5,
             label=f"BPR fit  a={a_fit:.2f}, b={b_fit:.1f}")
     a3.axhline(t0, color=GRAY, ls="--", lw=1, label=f"t0 = {t0:.2f} min")
-    a3.set_xlabel("demand volume (veh/hr)")
+    a3.set_xlabel("volume (veh/hr)")
     a3.set_ylabel(f"travel time over {args.length} mi (min) = length/speed")
-    a3.set_title("Travel time vs demand — the volume-delay relationship")
+    a3.set_title("Travel time vs volume — inverse of the speed-flow curve")
     a3.legend(fontsize=8)
 
     # 4. t/t0 vs v/c: the VDF itself
