@@ -113,8 +113,8 @@
       <div class="controls" id="vdfPills"></div>
       <div class="controls">
         <div class="control-group"><label>Link length</label><input type="range" id="vLen" min="0.5" max="5" step="0.5" value="1"><span class="val" id="vLenVal">1.0 mi</span></div>
-        <div class="control-group"><label>Free-flow speed</label><input type="range" id="vFfs" min="20" max="70" step="5" value="40"><span class="val" id="vFfsVal">40 mph</span></div>
-        <div class="control-group"><label>Capacity</label><input type="range" id="vCap" min="600" max="2400" step="100" value="1800"><span class="val" id="vCapVal">1800 veh/hr</span></div>
+        <div class="control-group"><label>Free-flow speed</label><input type="range" id="vFfs" min="20" max="70" step="5" value="70"><span class="val" id="vFfsVal">70 mph</span></div>
+        <div class="control-group"><label>Capacity</label><input type="range" id="vCap" min="600" max="2400" step="100" value="2100"><span class="val" id="vCapVal">2100 veh/hr</span></div>
         <div class="control-group"><label>Edit parameters of…</label><select id="vdfSel"></select></div>
         <button class="action sec" id="vdfRstV">↺ Reset view</button>
       </div>
@@ -372,18 +372,26 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
                params:{ alpha:{lbl:'α',min:0.05,max:1,step:0.05,val:0.15}, beta:{lbl:'β',min:1,max:10,step:0.5,val:4} } },
     akcelik: { name:'Akçelik (HCM 2000)', col:'#a4161a', on:true,
                params:{ T:{lbl:'period T (hr)',min:0.25,max:2,step:0.25,val:1}, J:{lbl:'J',min:0.1,max:2,step:0.1,val:0.8}, D0:{lbl:'D₀ (s)',min:0,max:30,step:5,val:10} } },
-    combined:{ name:'Combined link+node*', col:'#b45309', on:false,
+    combined:{ name:'Combined link+node*', col:'#b45309', on:true,
                params:{ g:{lbl:'green g (s)',min:15,max:60,step:5,val:30}, Cc:{lbl:'cycle C (s)',min:60,max:150,step:10,val:90}, sat:{lbl:'sat flow (veh/hr)',min:1200,max:2200,step:100,val:1800}, k4:{lbl:'k₄ (link factor)',min:1,max:1.5,step:0.05,val:1.15} } },
     conical: { name:'Conical (Spiess 1990)', col:'#0e7c86', on:true,
                params:{ ca:{lbl:'α (>1)',min:2,max:12,step:0.5,val:4} } },
-    gencost: { name:'Generalized cost', col:'#4f3f5c', on:false,
+    gencost: { name:'Generalized cost', col:'#4f3f5c', on:true,
                params:{ toll:{lbl:'toll k ($)',min:0,max:2,step:0.25,val:0.5}, dpm:{lbl:'op. cost δ ($/mi)',min:0,max:1,step:0.05,val:0.2}, vot:{lbl:'VOT φ ($/hr)',min:5,max:50,step:5,val:15} } },
-    logit:   { name:'Logit VDF*', col:'#8c3a4c', on:false,
+    logit:   { name:'Logit VDF*', col:'#8c3a4c', on:true,
                params:{ c1:{lbl:'c₁ (max ×tf)',min:0.5,max:4,step:0.25,val:1.5}, c2:{lbl:'c₂ (inflection v/c)',min:0.7,max:1.5,step:0.05,val:1.05}, c3:{lbl:'c₃ (steepness)',min:2,max:12,step:1,val:6} } }
   };
   function pv(f,k){ return FN[f].params[k].val; }
   function tf(){ return parseFloat(el('vLen').value)/parseFloat(el('vFfs').value)*60; } // min
   function cap(){ return parseFloat(el('vCap').value); }
+
+  // Real observations: I-25 NB, CDOT station 000501 (S/O 6th Ave, Denver),
+  // Aug 23-29 2026, 168 hourly points. [v/c, t/t0, congested-branch flag],
+  // capacity 8358 veh/hr, free-flow 69.1 mph. Plotted at t = (t/t0) x tf so
+  // the dots rescale with the sample-link settings.
+  const I25_OBS=[[0.063,1.037,0],[0.063,1.039,0],[0.064,1.046,0],[0.066,1.037,0],[0.068,1.021,0],[0.069,1.040,0],[0.069,1.038,0],[0.076,1.016,0],[0.076,1.031,0],[0.078,1.023,0],[0.080,1.015,0],[0.083,1.024,0],[0.086,1.036,0],[0.086,1.042,0],[0.087,1.033,0],[0.087,1.032,0],[0.091,1.034,0],[0.093,1.030,0],[0.093,1.022,0],[0.097,1.039,0],[0.107,1.063,0],[0.111,1.006,0],[0.111,1.039,0],[0.112,1.018,0],[0.137,1.031,0],[0.146,1.033,0],[0.146,1.030,0],[0.149,1.025,0],[0.149,0.999,0],[0.153,1.018,0],[0.170,1.039,0],[0.172,0.995,0],[0.172,0.988,0],[0.176,0.987,0],[0.178,1.017,0],[0.178,0.983,0],[0.182,1.026,0],[0.182,0.991,0],[0.219,1.030,0],[0.222,0.997,0],[0.227,1.037,0],[0.255,1.036,0],[0.259,0.994,0],[0.260,1.021,0],[0.296,1.030,0],[0.300,1.033,0],[0.312,1.035,0],[0.361,1.004,0],[0.362,1.030,0],[0.378,1.055,0],[0.394,1.040,0],[0.395,1.001,0],[0.444,1.085,0],[0.447,1.048,0],[0.455,1.055,0],[0.460,1.006,0],[0.463,1.055,0],[0.470,5.043,1],[0.496,1.922,1],[0.507,4.934,1],[0.508,1.010,0],[0.528,1.072,0],[0.532,1.011,0],[0.534,1.011,0],[0.534,1.015,0],[0.534,4.609,1],[0.535,4.291,1],[0.537,4.419,1],[0.546,4.988,1],[0.550,3.088,1],[0.553,1.023,0],[0.555,1.068,0],[0.556,4.237,1],[0.569,1.040,0],[0.578,4.627,1],[0.592,3.871,1],[0.596,3.841,1],[0.598,4.270,1],[0.606,1.069,0],[0.609,1.092,0],[0.610,1.097,0],[0.611,3.686,1],[0.613,1.102,0],[0.619,1.088,0],[0.620,1.095,0],[0.643,3.564,1],[0.653,2.359,1],[0.662,1.104,0],[0.669,3.578,1],[0.677,3.189,1],[0.678,1.495,1],[0.686,1.071,0],[0.689,1.101,0],[0.700,2.626,1],[0.706,1.110,0],[0.708,1.085,0],[0.712,3.012,1],[0.724,2.572,1],[0.724,1.405,1],[0.731,2.321,1],[0.734,1.946,1],[0.734,2.745,1],[0.737,1.073,0],[0.738,2.548,1],[0.738,1.574,1],[0.739,1.062,0],[0.747,2.688,1],[0.753,1.080,0],[0.768,2.354,1],[0.769,2.388,1],[0.775,1.835,1],[0.782,1.091,0],[0.784,1.227,0],[0.785,1.520,1],[0.791,2.315,1],[0.792,1.460,1],[0.795,1.589,1],[0.803,1.565,1],[0.805,2.239,1],[0.806,2.450,1],[0.806,1.721,1],[0.823,1.922,1],[0.824,1.452,1],[0.825,1.489,1],[0.833,1.681,1],[0.834,2.301,1],[0.840,1.246,0],[0.846,1.211,0],[0.848,1.318,0],[0.852,2.169,1],[0.853,1.673,1],[0.853,1.345,0],[0.855,1.982,1],[0.857,2.162,1],[0.858,1.198,0],[0.865,1.143,0],[0.866,1.249,0],[0.866,1.248,0],[0.868,1.594,1],[0.869,1.204,0],[0.869,2.110,1],[0.871,1.329,0],[0.871,1.191,0],[0.874,1.211,0],[0.875,1.199,0],[0.876,1.913,1],[0.883,1.241,0],[0.883,1.701,1],[0.884,1.355,0],[0.887,1.185,0],[0.888,1.205,0],[0.890,1.154,0],[0.890,1.449,1],[0.896,1.230,0],[0.896,1.824,1],[0.897,1.448,1],[0.899,1.286,0],[0.905,1.241,0],[0.906,1.239,0],[0.909,1.945,1],[0.913,1.310,0],[0.914,1.729,1],[0.916,1.988,1],[0.918,1.914,1],[0.970,1.406,1],[0.998,1.628,1],[0.999,1.540,1],[1.000,1.568,1]];
+  const OBS_COL={unc:'#7d8da0', con:'#d9a0a3'};
+  let obsOn=true;
 
   // travel time in minutes at v/c = x
   function evalFn(f, x){
@@ -430,6 +438,12 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       p.addEventListener('click',()=>{ FN[f].on=!FN[f].on; buildPills(); draw(); });
       el('vdfPills').appendChild(p);
     });
+    const op=document.createElement('span');
+    op.className='vdf-pill'+(obsOn?' on':'');
+    op.style.background=obsOn?OBS_COL.unc:'#fff';
+    op.textContent='I-25 NB data (CDOT 000501)';
+    op.addEventListener('click',()=>{ obsOn=!obsOn; buildPills(); draw(); });
+    el('vdfPills').appendChild(op);
   }
   function buildSel(){
     el('vdfSel').innerHTML=Object.keys(FN).map(f=>`<option value="${f}">${FN[f].name}</option>`).join('');
@@ -459,6 +473,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   function autoY(){
     let yMax=tf();
     Object.keys(FN).forEach(f=>{ if(FN[f].on) yMax=Math.max(yMax, evalFn(f,2)); });
+    if(obsOn) I25_OBS.forEach(o=>{ yMax=Math.max(yMax, o[1]*tf()*1.05); });
     return Math.min(Math.ceil(yMax/2)*2, 90);
   }
   function ensureView(){ if(!view) view={x0:0, x1:2, y0:0, y1:autoY()}; }
@@ -485,6 +500,16 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS; cx.textAlign='left';
       cx.fillText('tf = '+t0.toFixed(1)+' min', P.l+6, s.Y(t0)-4);
     }
+    // observed I-25 NB hours as dots (t = ratio x tf on the sample link)
+    if(obsOn){
+      const t0m=tf();
+      I25_OBS.forEach(o=>{
+        cx.fillStyle=o[2]?OBS_COL.con:OBS_COL.unc;
+        cx.globalAlpha=0.65;
+        cx.beginPath(); cx.arc(s.X(o[0]), s.Y(o[1]*t0m), 3, 0, Math.PI*2); cx.fill();
+      });
+      cx.globalAlpha=1;
+    }
     // curves (clipped to the current view)
     const step=(x1-x0)/140;
     Object.keys(FN).forEach(f=>{
@@ -509,6 +534,12 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.fillText('— '+FN[f].name, P.l+130, ly);
       ly+=18;
     });
+    if(obsOn){
+      cx.fillStyle=OBS_COL.unc;
+      cx.fillText('● I-25 NB observed (uncongested hours)', P.l+130, ly); ly+=18;
+      cx.fillStyle=OBS_COL.con;
+      cx.fillText('● I-25 NB observed (congested / queue discharge)', P.l+130, ly); ly+=18;
+    }
     cx.fillStyle='#9aa1ad'; cx.font='10px '+SANS;
     cx.fillText('* representative implementation (exact TransModeler formulation not published in full)', P.l+130, ly+2);
     // hover

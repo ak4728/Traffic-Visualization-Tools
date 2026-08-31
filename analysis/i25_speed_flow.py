@@ -269,6 +269,58 @@ def main():
     print(f"  BPR fit  t = t0(1 + a(v/c)^b)        : a = {a_fit:.3f}, b = {b_fit:.2f}   R2 = {r2:.3f}")
     print(f"  (classic BPR defaults: a = 0.150, b = 4.00)")
 
+    # ── fit every VDF family from the Chapter 3 explorer ─────────────
+    # All are expressed as travel-time ratio r(x) = t/t0 and fitted to the
+    # uncongested branch, mirroring traffic-modeling-training/Optimization.html.
+    def conical(x, a):
+        b = (2 * a - 1) / (2 * a - 2)
+        return 2 + np.sqrt(a * a * (1 - x) ** 2 + b * b) - a * (1 - x) - b
+
+    def akcelik(x, J):
+        # T = 1 hr analysis period, node delay D0 = 0 (freeway segment)
+        T = 1.0
+        d_hr = 0.25 * T * ((x - 1) + np.sqrt((x - 1) ** 2 + 8 * J * x / (cap * T)))
+        return 1 + 60 * d_hr / t0
+
+    def combined(x, k4, lam):
+        # BPR link part scaled by k4 + Webster uniform node delay with the
+        # node's capacity tied to the link's (sat*lam = cap), cycle C = 90 s
+        Cc = 90.0
+        link = k4 * (1 + 0.15 * np.power(x, 4))
+        d_uni = Cc * (1 - lam) ** 2 / (2 * np.maximum(1 - lam * np.minimum(x, 1), 0.05))
+        return link + d_uni / 60 / t0
+
+    def gencost(x, m):
+        # classic BPR time + a constant money term converted to minutes
+        return 1 + 0.15 * np.power(x, 4) + m / t0
+
+    def logit_vdf(x, c1, c2, c3):
+        return 1 + c1 / (1 + np.exp(c3 * (c2 - x)))
+
+    FITS = [
+        ("BPR (1964)",           bpr,       [0.15, 4.0],      ([0.005, 0.5], [5, 15]),          ["a", "b"]),
+        ("Akçelik (HCM 2000)",   akcelik,   [0.8],            ([0.001], [500]),                  ["J"]),
+        ("Combined link+node",   combined,  [1.0, 0.8],       ([0.5, 0.1], [2.0, 0.98]),         ["k4", "g/C"]),
+        ("Conical (Spiess 1990)", conical,  [4.0],            ([1.01], [40]),                    ["alpha"]),
+        ("Generalized cost",     gencost,   [0.05],           ([0.0], [5.0]),                    ["money (min)"]),
+        ("Logit VDF",            logit_vdf, [1.5, 1.05, 6.0], ([0.05, 0.5, 0.5], [6, 2.5, 40]),  ["c1", "c2", "c3"]),
+    ]
+    y = fit_df["ratio"].values
+    fitted = {}
+    print("\n──── all VDF families, fitted to the uncongested branch ────")
+    for name, fn, p0, bounds, labels in FITS:
+        try:
+            popt, _ = curve_fit(fn, fit_df["xc"].values, y, p0=p0,
+                                bounds=bounds, maxfev=40000)
+            res = y - fn(fit_df["xc"].values, *popt)
+            fr2 = 1 - np.sum(res ** 2) / ss_tot
+            rmse = np.sqrt(np.mean(res ** 2))
+            fitted[name] = (fn, popt, fr2)
+            ptxt = ", ".join(f"{l} = {v:.3f}" for l, v in zip(labels, popt))
+            print(f"  {name:<24} {ptxt:<44} R2 = {fr2:6.3f}   RMSE = {rmse:.4f}")
+        except Exception as e:
+            print(f"  {name:<24} fit failed: {e}")
+
     # ── plots ────────────────────────────────────────────────────────
     plt.rcParams.update({"font.family": "Segoe UI", "font.size": 10,
                          "axes.grid": True, "grid.alpha": 0.3})
@@ -358,7 +410,43 @@ def main():
     p2 = os.path.join(out_dir, "i25_bpr_fit.png")
     fig2.savefig(p2, dpi=140)
 
-    print(f"\n  plots saved:\n    {p1}\n    {p2}")
+    # all VDF families over the same observations (colors match the
+    # Chapter 3 VDF explorer)
+    VDF_COLS = {"BPR (1964)": "#2c5378", "Akçelik (HCM 2000)": "#a4161a",
+                "Combined link+node": "#b45309", "Conical (Spiess 1990)": "#0e7c86",
+                "Generalized cost": "#4f3f5c", "Logit VDF": "#8c3a4c"}
+    fig3, a = plt.subplots(figsize=(10, 6.5))
+    a.scatter(unc["xc"], unc["ratio"], s=18, alpha=0.5, color="#7d8da0",
+              edgecolors="none", label="uncongested hours")
+    a.scatter(con["xc"], con["ratio"], s=18, alpha=0.35, color="#d9a0a3",
+              edgecolors="none", label="congested hours (excluded from fits)")
+    xg2 = np.linspace(0.01, max(1.4, df["xc"].max()), 300)
+    for name, (fn, popt, fr2) in fitted.items():
+        a.plot(xg2, fn(xg2, *popt), color=VDF_COLS.get(name, "#333"), lw=2.2,
+               label=f"{name}  (R2={fr2:.2f})")
+    a.axvline(1.0, color=GRAY, ls=":", lw=1)
+    a.set_xlabel("v/c ratio"); a.set_ylabel("t / t0 (travel-time ratio)")
+    a.set_ylim(0.9, min(3.0, float(np.nanmax(unc["ratio"])) + 1.2))
+    a.set_title(f"All VDF families fitted to I-25 NB — {sub}")
+    a.legend(fontsize=8)
+    fig3.tight_layout()
+    p3 = os.path.join(out_dir, "i25_vdf_all_fits.png")
+    fig3.savefig(p3, dpi=140)
+
+    # compiled observations as a JS array, ready to embed in the Chapter 3
+    # VDF explorer (x = v/c at cap above, r = t/t0, c = congested flag)
+    pts = ",".join(
+        f"[{r.xc:.3f},{r.ratio:.3f},{1 if r.congested else 0}]"
+        for r in df.sort_values(["xc"]).itertuples()
+    )
+    js = (f"// I-25 NB, CDOT station 000501, {len(df)} hourly obs, "
+          f"cap={cap:.0f} veh/hr, ffs={ffs:.1f} mph  [v/c, t/t0, congested]\n"
+          f"const I25_OBS=[{pts}];\n")
+    pjs = os.path.join(out_dir, "i25_points.js")
+    with open(pjs, "w", encoding="utf-8") as f:
+        f.write(js)
+
+    print(f"\n  plots saved:\n    {p1}\n    {p2}\n    {p3}\n  JS points:\n    {pjs}")
 
 
 if __name__ == "__main__":

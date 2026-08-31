@@ -44,10 +44,16 @@ python analysis\i25_speed_flow.py --demo          # synthetic data, pipeline tes
   fit** — they are still plotted (in red) so the two branches are visible.
 - BPR `t = t0·(1 + α(v/c)^β)` is fitted with `scipy.optimize.curve_fit` and
   compared against the classic α=0.15, β=4.
+- Every VDF family from the Chapter 3 explorer is also fitted to the same
+  uncongested observations: BPR, Akçelik (HCM 2000, J), Combined link+node
+  (k₄ and g/C, node capacity tied to link capacity), Conical (Spiess, α),
+  Generalized cost (constant money term over classic BPR), and Logit VDF
+  (c₁, c₂, c₃).
 
 With the Aug 23–29, 2026 week of data: ffs ≈ 69 mph, capacity ≈ 8,360 veh/hr
-(all lanes), 104 uncongested / 64 congested hours, fitted α ≈ 0.36, β ≈ 3.3,
-R² ≈ 0.82.
+(all lanes), 104 uncongested / 64 congested hours. Fits (R²): Logit 0.84 >
+Combined 0.82 ≈ BPR 0.82 (α≈0.36, β≈3.3) > Conical 0.81 ≈ Akçelik 0.80 >
+Generalized cost 0.56.
 
 ## Outputs
 
@@ -60,3 +66,8 @@ Saved next to the data in `…/Volume Speed Data/plots/` (also git-ignored):
    BPR overlaid
 4. **t/t0 vs v/c** — the VDF itself: fitted BPR vs the classic BPR (0.15, 4),
    the same function explored in Chapter 3's VDF tool
+5. **i25_vdf_all_fits.png** — all six VDF families fitted over the data,
+   colors matching the Chapter 3 explorer
+6. **i25_points.js** — the compiled `[v/c, t/t0, congested]` observations as a
+   JS array; this array is embedded in `Optimization.html` Part 1, which shows
+   the I-25 hours as dots behind the VDF curves
