@@ -242,7 +242,7 @@
       <div class="readout" id="fwReadout">Objective: match observed volumes, speeds (and optionally times) — click the 2D map to choose a start point</div>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip">A <b>calibration objective surface</b>, the optimization at the heart of ODME: the decision variables are the two route demands (x₁, x₂); the <b>VDF turns them into simulated volumes, speeds and travel times</b>; and the objective F is the mismatch against field observations — a volume term, a speed term, and an optional travel-time term. The observations are deliberately <b>inconsistent</b> (counts from one day, speeds from another — exactly what real calibration data looks like), so with the <b>robust loss</b> (each term saturates, as robust estimators do to resist outliers) the surface has <b>two local optima</b>: one fitting the counts, one fitting the speeds. <b>Frank-Wolfe</b> over the box feasible set picks a <b>corner</b> each iteration (the linear subproblem's answer) and line-searches toward it; <b>N-conjugate</b> blends previous directions. On a non-convex surface FW only finds a <i>stationary point</i> — the default start is deliberately in the pull of the shallower <b>speeds valley</b>, so plain FW gets <b>trapped in a local optimum</b> (the card turns red). The escape tools are the real-world remedies: <b>⚡ Perturb &amp; retry</b> kicks the converged point randomly and re-runs (sometimes it hops the ridge, sometimes it falls back — that's the honest behavior of perturbation restarts), and <b>🎲 Multi-start ×8</b> runs FW from 8 random starts, shows every path, reports how many landed in each valley, and keeps the best — the standard cure for local optima. Click anywhere on the map to try your own start; switch to the squared loss to make the surface single-valley again.</span></span></div>
+      <div class="pane-head"><span class="help">i<span class="tip">A <b>calibration objective surface</b>, the optimization at the heart of ODME: the decision variables are the two route demands (x₁, x₂); the <b>VDF turns them into simulated volumes, speeds and travel times</b>; and the objective F is the mismatch against field observations — a volume term, a speed term, and an optional travel-time term. The observations are deliberately <b>inconsistent</b> (counts from one day, speeds from another — exactly what real calibration data looks like), so with the <b>robust loss</b> (each term saturates, as robust estimators do to resist outliers) the surface has <b>two local optima</b>: one fitting the counts, one fitting the speeds. <b>Frank-Wolfe</b> over the box feasible set picks a <b>corner</b> each iteration (the linear subproblem's answer) and line-searches toward it; <b>N-conjugate</b> blends previous directions. On a non-convex surface FW only finds a <i>stationary point</i> — the default start is deliberately in the pull of the shallower <b>speeds valley</b>, so plain FW gets <b>trapped in a local optimum</b> (the card turns red). The escape tools are the real-world remedies: <b>⚡ Perturb &amp; retry</b> kicks the converged point randomly and re-runs (sometimes it hops the ridge, sometimes it falls back — that's the honest behavior of perturbation restarts), and <b>🎲 Multi-start ×8</b> runs FW from 8 random starts, shows every path, reports how many landed in each valley, and keeps the best — the standard cure for local optima. Click anywhere on the map to try your own start; switch to the squared loss to make the surface single-valley again; <b>drag the 3D surface</b> to rotate and tilt it. <b>Step length λ</b>: by default each iteration does an <b>exact line search</b> — a golden-section minimization of F along the segment from the current point toward the target direction, with λ ≤ 1 so the new point stays feasible (it is a convex combination of feasible points). The alternative rule <b>λ = 2/(k+2)</b> is the classic pre-set diminishing step from FW convergence theory — no search needed, but compare the paths and you'll see why the line search earns its cost.</span></span></div>
       <div class="controls">
         <div class="control-group"><label>N (conjugate directions)</label>
           <select id="fwN">
@@ -264,7 +264,12 @@
             <label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" id="fwWt"> time</label>
           </div>
         </div>
-        <div class="control-group"><label>3D rotation</label><input type="range" id="fwRot" min="0" max="360" step="5" value="40"><span class="val" id="fwRotVal">40°</span></div>
+        <div class="control-group"><label>Step length λ rule</label>
+          <select id="fwStepR">
+            <option value="ls" selected>Exact line search (golden section)</option>
+            <option value="dim">Diminishing 2/(k+2) (classic FW)</option>
+          </select>
+        </div>
       </div>
       <div class="controls">
         <button class="action" id="fwPlay">▶ Play</button>
@@ -1618,7 +1623,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
           betas=[1-b1,b1];
         }
       }
-      const lam=lineSearch(x,d);
+      // step length: exact line search, or the classic diminishing 2/(k+2) rule
+      const lam = el('fwStepR').value==='dim' ? 2/(k+2) : lineSearch(x,d);
       st.push({x:[...x], F:F(x), corner, lam, betas});
       x=x.map((v,i)=>Math.min(XMAX,Math.max(0,v+lam*d[i])));
       prev.unshift([...d]);
@@ -1662,15 +1668,16 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     return [r,g,b];
   }
 
-  // ── 3D projection (left half) ──
+  // ── 3D projection (left half) — drag the surface to rotate/tilt ──
   const C3={cx:305, cy:340, S:430, zS:190};
+  let rot3=40, tilt3=0.42;
   function proj3(x1,x2,f){
-    const th=parseFloat(el('fwRot').value)*Math.PI/180;
+    const th=rot3*Math.PI/180;
     const X=(x1/XMAX-0.5), Y=(x2/XMAX-0.5);
     const xr=X*Math.cos(th)-Y*Math.sin(th);
     const yr=X*Math.sin(th)+Y*Math.cos(th);
     const zn=(f-zMin)/(zMax-zMin+1e-12);
-    return [C3.cx+xr*C3.S, C3.cy+yr*C3.S*0.42-zn*C3.zS, yr];
+    return [C3.cx+xr*C3.S, C3.cy+yr*C3.S*tilt3-zn*C3.zS, yr];
   }
   // ── 2D contour (right half) ──
   const P2={l:700, t:70, w:470, h:480};
@@ -1742,7 +1749,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
     cx.fillText('3D objective surface F(x₁, x₂)', 30, 28);
     cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
-    cx.fillText('z = calibration error (vol + spd'+(el('fwWt').checked?' + time':'')+') · rotate with the slider', 30, 46);
+    cx.fillText('z = calibration error (vol + spd'+(el('fwWt').checked?' + time':'')+') · drag the surface to rotate & tilt', 30, 46);
     // ---- 2D contour ----
     const cell=P2.w/GN;
     for(let i=0;i<GN;i++){
@@ -1873,6 +1880,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     }, 1000/parseFloat(el('fwSpd').value));
   }
 
+  let drag3=null;
   C.addEventListener('pointerdown', e=>{
     const r=C.getBoundingClientRect();
     const mx=(e.clientX-r.left)*C.width/r.width, my=(e.clientY-r.top)*C.height/r.height;
@@ -1881,8 +1889,24 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       stopPlay(); k=0; history=[]; multi=null;
       st=runFW(start, parseInt(el('fwN').value), 60);
       draw();
+    } else if(mx<640){
+      // drag the 3D surface: horizontal = rotate, vertical = tilt
+      drag3={mx,my,rot:rot3,tilt:tilt3};
+      C.setPointerCapture(e.pointerId);
     }
   });
+  C.addEventListener('pointermove', e=>{
+    const r=C.getBoundingClientRect();
+    const mx=(e.clientX-r.left)*C.width/r.width, my=(e.clientY-r.top)*C.height/r.height;
+    if(drag3){
+      rot3=drag3.rot+(mx-drag3.mx)*0.4;
+      tilt3=Math.min(0.85, Math.max(0.12, drag3.tilt+(my-drag3.my)*0.0022));
+      draw();
+      return;
+    }
+    C.style.cursor = mx<640 ? 'grab' : 'crosshair';
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>C.addEventListener(ev, ()=>{ drag3=null; }));
   // escape heuristics: FW is a LOCAL method on a non-convex surface
   el('fwKick').addEventListener('click', ()=>{
     stopPlay();
@@ -1915,7 +1939,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('fwN').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; st=runFW(start, parseInt(el('fwN').value), 60); draw(); });
   el('fwLoss').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; recompute(); draw(); });
   el('fwWt').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; recompute(); draw(); });
-  el('fwRot').addEventListener('input', ()=>{ el('fwRotVal').textContent=el('fwRot').value+'°'; draw(); });
+  el('fwStepR').addEventListener('change', ()=>{ stopPlay(); k=0; history=[]; multi=null; st=runFW(start, parseInt(el('fwN').value), 60); draw(); });
   el('fwPlay').addEventListener('click', play);
   el('fwStep').addEventListener('click', ()=>{ stopPlay(); if(k<st.length-1) k++; draw(); });
   el('fwRst').addEventListener('click', ()=>{ stopPlay(); k=0; draw(); });
