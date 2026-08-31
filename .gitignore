@@ -3,6 +3,10 @@ I70-ROD2-Cluster-Travel-Time.csv
 TMC_Identification.csv
 Contents.txt
 
+# Local detector data (I-25 volume/speed etc.) — never committed
+data/
+traffic-modeling-training/Volume Speed Data/
+
 # Python
 __pycache__/
 *.py[cod]
