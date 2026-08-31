@@ -114,10 +114,12 @@
         </div>
         <div class="control-group"><label>Max iterations</label><input type="range" id="odIter" min="5" max="60" step="5" value="30"><span class="val" id="odIterVal">30</span></div>
         <div class="control-group"><label>Convergence %RMSE</label><input type="range" id="odConv" min="0.5" max="10" step="0.5" value="2"><span class="val" id="odConvVal">2.0%</span></div>
+        <div class="control-group"><label>Animation speed</label><input type="range" id="odSpd" min="0.5" max="5" step="0.5" value="1.5"><span class="val" id="odSpdVal">1.5 it/s</span></div>
         <button class="action" id="odStep">Step ▸</button>
         <button class="action" id="odRun">▶ Run</button>
         <button class="action sec" id="odReset">↺ Reset</button>
       </div>
+      <div class="readout" id="odExplain" style="text-align:left; font-family:inherit; font-size:0.8em; line-height:1.5"></div>
       <div id="odTable"></div>
       <div class="cards">
         <div class="card"><h3>Iteration</h3><div class="value" id="odItC">0</div></div>
@@ -143,6 +145,21 @@
         <div class="control-group"><label>Demand</label><input type="range" id="ueDem" min="1500" max="4500" step="250" value="3000"><span class="val" id="ueDemVal">3000 veh/hr</span></div>
         <div class="control-group"><label>Iterations shown</label><input type="range" id="ueN" min="10" max="80" step="5" value="50"><span class="val" id="ueNVal">50</span></div>
       </div>
+      <div class="controls">
+        <div class="control-group"><label>Watch method</label>
+          <select id="ueSel">
+            <option value="bcfw">Bi-conjugate FW</option>
+            <option value="fw" selected>Frank-Wolfe</option>
+            <option value="msa">MSA</option>
+          </select>
+        </div>
+        <button class="action" id="uePlay">▶ Play</button>
+        <button class="action sec" id="ueStep">Step ▸</button>
+        <button class="action sec" id="ueRst">↺</button>
+        <div class="control-group"><label>Speed</label><input type="range" id="ueSpd" min="1" max="10" step="1" value="3"><span class="val" id="ueSpdVal">3 it/s</span></div>
+      </div>
+      <canvas id="ueRoutes" class="gauge-canvas" width="520" height="300"></canvas>
+      <div class="readout" id="ueNarr">press ▶ Play to watch the algorithm iterate</div>
       <div class="cards">
         <div class="card"><h3>Iters to gap ≤ 10⁻³ (MSA / FW / BiCFW)</h3><div class="value" id="ueTo3">—</div></div>
         <div class="card"><h3>Iters to gap ≤ 10⁻⁵ (MSA / FW / BiCFW)</h3><div class="value" id="ueTo5">—</div></div>
@@ -162,16 +179,25 @@
       <div class="readout" id="sueReadout">P(driver chooses route 1) vs cost difference Δc = c₂ − c₁, for each perception-error distribution</div>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip"><b>Stochastic User Equilibrium</b> assumes drivers perceive costs with error: perceived cost = c + ε. The <b>Function</b> you pick in TransModeler's SUE settings is the distribution of ε, and the <b>Error</b> box is its scale θ. With <b>Gumbel</b> errors the route-choice probability has the closed-form <b>logit</b> model — P₁ = 1/(1+e^(−Δc/θ)) — which is why Gumbel is the standard choice. <b>Normal</b> errors give the probit model (no closed form; the S-curve is slightly different in the tails). <b>Uniform</b> errors give a piecewise-linear choice curve that assigns exactly 0 or 1 beyond a finite cost difference — a hard cutoff unlike the other two. Larger θ → flatter curves → more flow on less-attractive routes; as θ→0 all three collapse to deterministic UE. SUE is solved with MSA (provably convergent, slow) — use many iterations.</span></span></div>
-      <canvas id="sueDens" class="gauge-canvas" width="520" height="300"></canvas>
+      <div class="pane-head"><span class="help">i<span class="tip"><b>Stochastic User Equilibrium</b> assumes drivers perceive costs with error: perceived cost = c + ε. The <b>Function</b> you pick in TransModeler's SUE settings is the distribution of ε, and the <b>Error</b> box is its scale θ. With <b>Gumbel</b> errors the route-choice probability has the closed-form <b>logit</b> model — P₁ = 1/(1+e^(−Δc/θ)) — which is why Gumbel is the standard choice. <b>Normal</b> errors give the probit model (no closed form; the S-curve is slightly different in the tails). <b>Uniform</b> errors give a piecewise-linear choice curve that assigns exactly 0 or 1 beyond a finite cost difference — a hard cutoff unlike the other two. Larger θ → flatter curves → more flow on less-attractive routes; as θ→0 all three collapse to deterministic UE. SUE is solved with MSA (provably convergent, slow) — use many iterations. The <b>ringed dot on the chart</b> is the live SUE equilibrium of the two-route example (Route 1: 10 min free-flow, c=1000 · Route 2: 13 min, c=1400): flows shift until Δc and P₁ are consistent. The bar panel compares it to deterministic UE — SUE's signature is the extra flow on the <i>slower</i> route.</span></span></div>
       <div class="controls">
-        <div class="control-group"><label>Perception error θ (std dev, min)</label><input type="range" id="sueTheta" min="0.5" max="6" step="0.25" value="2"><span class="val" id="sueThetaVal">2.0 min</span></div>
+        <div class="control-group"><label>Distribution (TransModeler "Function")</label>
+          <select id="sueDist">
+            <option value="g" selected>Gumbel (→ logit)</option>
+            <option value="n">Normal (→ probit)</option>
+            <option value="u">Uniform</option>
+          </select>
+        </div>
+        <div class="control-group"><label>Perception error θ ("Error", min)</label><input type="range" id="sueTheta" min="0.5" max="6" step="0.25" value="2"><span class="val" id="sueThetaVal">2.0 min</span></div>
+        <div class="control-group"><label>Demand (two-route example)</label><input type="range" id="sueDem2" min="800" max="2400" step="100" value="1600"><span class="val" id="sueDem2Val">1600 veh/hr</span></div>
       </div>
+      <canvas id="sueSplit" class="gauge-canvas" width="520" height="300"></canvas>
+      <canvas id="sueDens" class="gauge-canvas" width="520" height="300"></canvas>
       <div class="cards">
         <div class="card"><h3>Gumbel → logit</h3><div class="value" style="font-size:0.85em">P₁ = 1/(1+e^(−Δc/β)), β=θ√6/π</div></div>
         <div class="card"><h3>Normal → probit</h3><div class="value" style="font-size:0.85em">P₁ = Φ(Δc/(θ√2))</div></div>
         <div class="card"><h3>Uniform → linear</h3><div class="value" style="font-size:0.85em">triangular CDF, hard 0/1 cutoff</div></div>
-        <div class="card"><h3>At Δc = 2 min (P₁ G / N / U)</h3><div class="value" id="sueP2">—</div></div>
+        <div class="card"><h3>SUE vs UE equilibrium</h3><div class="value" id="sueEq" style="font-size:0.82em">—</div></div>
       </div>
     </div>
     </div>
@@ -463,10 +489,13 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     return { first, last };
   }
 
+  let lastDiag={method:null, per:{}, F:0, eta:0};
   function iterate(){
     const method=el('odMethod').value;
     const a=assign(X);
     lastSplit=a.s;
+    lastDiag={method, per:{}, F:0, eta:0};
+    COUNTED.forEach(l=>{ lastDiag.F+=(a.vols[l]-counts[l])**2; });
     if(method==='grad'){
       // gradient of F = Σ (v_l - cnt_l)² over counted links
       const err={}; COUNTED.forEach(l=>err[l]=a.vols[l]-counts[l]);
@@ -483,7 +512,12 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       });
       const meanX=(X['11']+X['12']+X['21']+X['22'])/4;
       const eta=0.25*meanX/(maxG+1e-9);
-      Object.keys(X).forEach(od=>{ X[od]=Math.max(1, X[od]-eta*grads[od]); });
+      lastDiag.eta=eta;
+      Object.keys(X).forEach(od=>{
+        const delta=-eta*grads[od];
+        lastDiag.per[od]={grad:grads[od], delta};
+        X[od]=Math.max(1, X[od]+delta);
+      });
     } else {
       Object.keys(X).forEach(od=>{
         const {first,last}=odLinks(od);
@@ -499,8 +533,10 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         if(ratios.length){
           const wsum=ratios.reduce((s2,r)=>s2+r[1],0);
           const ratio=ratios.reduce((s2,r)=>s2+r[0]*r[1],0)/wsum;
-          X[od]=Math.max(1, X[od]*Math.pow(ratio,0.7));   // damped multiplicative update
-        }
+          const f=Math.pow(ratio,0.7);                    // damped multiplicative update
+          lastDiag.per[od]={factor:f};
+          X[od]=Math.max(1, X[od]*f);
+        } else lastDiag.per[od]={factor:1};
       });
     }
     it++;
@@ -508,21 +544,34 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     rmseHist.push(rmse(a2.vols));
   }
 
-  function step(){ iterate(); render(); }
+  function step(){ stopRun(); iterate(); render(); }
+  let timer=null;
+  function stopRun(){
+    if(timer){ clearInterval(timer); timer=null; el('odRun').textContent='▶ Run'; }
+  }
   function run(){
-    const maxIt=parseInt(el('odIter').value), thr=parseFloat(el('odConv').value);
-    for(let k=0;k<200;k++){
-      if(it>=maxIt) break;
-      iterate();
-      if(rmseHist[rmseHist.length-1]<=thr) break;
-    }
-    render();
+    if(timer){ stopRun(); return; }
+    el('odRun').textContent='⏸ Stop';
+    timer=setInterval(()=>{
+      const maxIt=parseInt(el('odIter').value), thr=parseFloat(el('odConv').value);
+      if(it>=maxIt || rmseHist[rmseHist.length-1]<=thr){ stopRun(); return; }
+      iterate(); render();
+    }, 1000/parseFloat(el('odSpd').value));
   }
   function reset(){
-    X={...SEED}; it=0; rmseHist=[];
+    stopRun();
+    X={...SEED}; it=0; rmseHist=[]; lastDiag={method:null, per:{}, F:0, eta:0};
     const a=assign(X); rmseHist.push(rmse(a.vols)); lastSplit=a.s;
+    COUNTED.forEach(l=>{ lastDiag.F+=(a.vols[l]-counts[l])**2; });
     render();
   }
+
+  const METHOD_INFO={
+    single:'<b>Single Path</b> — after each assignment, every O-D pair looks only at its <i>current shortest path</i>. For each counted link on that path it computes count ÷ assigned volume, averages the ratios, and scales its flow by that factor (damped, ^0.7 — shown as ×f in the matrix). Simple and fast, but pairs sharing the shortest route all move together, so it can stall when paths overlap.',
+    multi:'<b>Multiple Paths</b> — the same ratio idea, but over <i>all used paths</i>, each weighted by its flow share (here the N/S split s). Both routes now pull on every estimate, which usually reaches a lower %RMSE than Single Path. This is the recommended default when the seed matrix is uncertain.',
+    grad:'<b>Gradient</b> — minimizes the objective <b>F = Σ (volume − count)²</b> over the counted links. Each pair\'s gradient <b>∂F/∂x = Σ 2(v−cnt)</b> summed over the links it uses (the N/S links weighted by split s), and flows step downhill: <b>x ← max(0, x − η·∂F/∂x)</b> with an adaptive step η. The <b>∇ and Δ shown in each matrix cell</b> are this iteration\'s gradient and the applied change; the F card tracks the objective falling. Because updates are additive and gentle, Gradient is the method of choice when you <i>trust the seed matrix</i>.'
+  };
+  function explain(){ el('odExplain').innerHTML=METHOD_INFO[el('odMethod').value]; }
 
   function pt(p){ return Array.isArray(p)?p:(NODES[p]||( p==='WPN'?WPN:WPS )); }
   function drawNet(){
@@ -547,14 +596,21 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.moveTo(ps[0][0],ps[0][1]);
       for(let i=1;i<ps.length;i++) cx.lineTo(ps[i][0],ps[i][1]);
       cx.stroke();
-      // label at midpoint
+      // label at midpoint — big chip so volumes stay readable over the links
       const mid=ps.length===3?ps[1]:[(ps[0][0]+ps[1][0])/2,(ps[0][1]+ps[1][1])/2];
-      const off = l==='LN'?-16 : l==='LS'?26 : l==='L1'?-14 : l==='L2'?24 : l==='L5'?-14 : 24;
-      cx.font='600 13px '+SANS; cx.textAlign='center';
-      cx.fillStyle=col;
-      cx.fillText(Math.round(v)+(counted?' / '+Math.round(counts[l]):''), mid[0], mid[1]+off);
-      cx.fillStyle='#9aa1ad'; cx.font='10px '+SANS;
-      cx.fillText(L.name+(counted?'':' (no count)'), mid[0], mid[1]+off+13);
+      const off = l==='LN'?-26 : l==='LS'?38 : l==='L1'?-24 : l==='L2'?36 : l==='L5'?-24 : 36;
+      const txt=Math.round(v)+(counted?' / '+Math.round(counts[l]):'');
+      cx.font='700 18px '+SANS;
+      const twd=cx.measureText(txt).width;
+      cx.save();
+      cx.shadowColor='rgba(16,24,40,0.12)'; cx.shadowBlur=6; cx.shadowOffsetY=1;
+      cx.fillStyle='rgba(255,255,255,0.92)';
+      cx.beginPath(); cx.roundRect(mid[0]-twd/2-8, mid[1]+off-17, twd+16, 24, 6); cx.fill();
+      cx.restore();
+      cx.fillStyle=col; cx.textAlign='center';
+      cx.fillText(txt, mid[0], mid[1]+off+1);
+      cx.fillStyle='#6b7280'; cx.font='600 11px '+SANS;
+      cx.fillText(L.name+(counted?' — vol / count':' — no count'), mid[0], mid[1]+off+19);
     });
     // nodes
     Object.keys(NODES).forEach(n=>{
@@ -603,7 +659,17 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   }
 
   function odTable(){
-    const fmt=(od)=>`<td><b>${Math.round(X[od])}</b><small>seed ${SEED[od]} · true ${TRUE[od]}</small></td>`;
+    const upd=(od)=>{
+      const d=lastDiag.per[od];
+      if(!d) return '<small>&nbsp;</small>';
+      if(lastDiag.method==='grad'){
+        const col=d.delta>=0?'#1d7a6f':'#c1121f';
+        return `<small style="color:${col}">∇=${d.grad>=0?'+':''}${d.grad.toFixed(0)} → Δ${d.delta>=0?'+':''}${d.delta.toFixed(0)}</small>`;
+      }
+      const col=d.factor>=1?'#1d7a6f':'#c1121f';
+      return `<small style="color:${col}">last update × ${d.factor.toFixed(3)}</small>`;
+    };
+    const fmt=(od)=>`<td><b>${Math.round(X[od])}</b><small>seed ${SEED[od]} · true ${TRUE[od]}</small>${upd(od)}</td>`;
     el('odTable').innerHTML=
       `<table class="od"><tr><th></th><th>→ D1</th><th>→ D2</th></tr>`+
       `<tr><th>O1</th>${fmt('11')}${fmt('12')}</tr>`+
@@ -622,7 +688,13 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     el('odItC').textContent=it;
     el('odRmse').textContent=r.toFixed(2)+'%';
     el('odRmse').parentElement.className='card'+(r<=parseFloat(el('odConv').value)?'':' warn');
-    el('odWorst').textContent=worstL+' ('+Math.round(worst)+' veh)';
+    if(el('odMethod').value==='grad'){
+      el('odWorst').parentElement.querySelector('h3').textContent='Objective F = Σ(v−cnt)²';
+      el('odWorst').textContent=Math.round(lastDiag.F).toLocaleString()+(lastDiag.eta?`  (η=${lastDiag.eta.toFixed(3)})`:'');
+    } else {
+      el('odWorst').parentElement.querySelector('h3').textContent='Worst counted link error';
+      el('odWorst').textContent=worstL+' ('+Math.round(worst)+' veh)';
+    }
     el('odSplit').textContent=(a.s*100).toFixed(0)+'% / '+((1-a.s)*100).toFixed(0)+'%';
     el('odReadout').textContent=
       `iter ${it} · ${el('odMethod').selectedOptions[0].text} · %RMSE ${r.toFixed(2)}  |  route times N ${a.tN.toFixed(2)} vs S ${a.tS.toFixed(2)} min (UE)`;
@@ -631,10 +703,14 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('odStep').addEventListener('click', step);
   el('odRun').addEventListener('click', run);
   el('odReset').addEventListener('click', reset);
-  el('odMethod').addEventListener('change', reset);
+  el('odMethod').addEventListener('change', ()=>{ explain(); reset(); });
   el('odIter').addEventListener('input', ()=>el('odIterVal').textContent=el('odIter').value);
   el('odConv').addEventListener('input', ()=>{ el('odConvVal').textContent=parseFloat(el('odConv').value).toFixed(1)+'%'; render(); });
-  makeCounts(); reset();
+  el('odSpd').addEventListener('input', ()=>{
+    el('odSpdVal').textContent=parseFloat(el('odSpd').value).toFixed(1)+' it/s';
+    if(timer){ stopRun(); run(); }   // apply new pace mid-run
+  });
+  makeCounts(); explain(); reset();
 })();
 
 // ─────────────────────────────────────────────
@@ -669,23 +745,27 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     return (a+b)/2;
   }
   function runAll(D, N){
-    // start: AON at free-flow
+    // start: AON at free-flow. Each method records per-iteration STATE for animation.
     const start=aon(ROUTES.map(r=>r.tf), D);
-    const out={msa:[], fw:[], bcfw:[]};
+    const out={msa:[], fw:[], bcfw:[], st:{msa:[], fw:[], bcfw:[]}};
     // MSA
     let v=[...start];
     for(let k=1;k<=N;k++){
       out.msa.push(relGap(v,D));
-      const y=aon(times(v),D);
+      const t=times(v);
+      const y=aon(t,D);
+      out.st.msa.push({v:[...v], t, gap:out.msa[k-1], target:t.indexOf(Math.min(...t)), lam:1/(k+1)});
       v=v.map((x,i)=>x+(y[i]-x)/(k+1));
     }
     // FW
     v=[...start];
     for(let k=1;k<=N;k++){
       out.fw.push(relGap(v,D));
-      const y=aon(times(v),D);
+      const t=times(v);
+      const y=aon(t,D);
       const d=y.map((x,i)=>x-v[i]);
       const lam=lineSearch(v,d);
+      out.st.fw.push({v:[...v], t, gap:out.fw[k-1], target:t.indexOf(Math.min(...t)), lam});
       v=v.map((x,i)=>x+lam*d[i]);
     }
     // Bi-conjugate FW (Mitradjieva & Lindberg 2013, N=2)
@@ -693,7 +773,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     let dPrev=null;
     for(let k=1;k<=N;k++){
       out.bcfw.push(relGap(v,D));
-      const y=aon(times(v),D);
+      const t=times(v);
+      const y=aon(t,D);
       const dFW=y.map((x,i)=>x-v[i]);
       let d=dFW;
       if(dPrev){
@@ -705,6 +786,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         d=dFW.map((x,i)=>al*dPrev[i]+(1-al)*x);
       }
       const lam=lineSearch(v,d);
+      out.st.bcfw.push({v:[...v], t, gap:out.bcfw[k-1], target:t.indexOf(Math.min(...t)), lam});
       dPrev=d.map(x=>x*1);   // keep the conjugate direction
       v=v.map((x,i)=>Math.max(0,x+lam*d[i]));
     }
@@ -732,55 +814,127 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
 
   const COLS={msa:'#8c3a4c', fw:'#2c5378', bcfw:'#0e7c86'};
   const NAMES={msa:'MSA (1/k)', fw:'Frank-Wolfe', bcfw:'Bi-conjugate FW (N=2)'};
+  const RCOLS=['#2c5378','#0e7c86','#b45309'];
+  const RC=el('ueRoutes'), rrx=RC.getContext('2d');
+  let res=null, k=1, timer=null;
 
-  function draw(){
+  function recompute(){
     const D=parseFloat(el('ueDem').value), N=parseInt(el('ueN').value);
-    const res=runAll(D,N);
-    const yMin=-8, yMax=0;
-    const s=scaffold(cx,W,H,P,0,N,yMin,yMax,'iteration','log₁₀ relative gap',Math.max(5,Math.round(N/10)),1,g=>'1e'+g);
-    Object.keys(COLS).forEach(m=>{
-      cx.strokeStyle=COLS[m]; cx.lineWidth=2.5; cx.lineJoin='round';
-      cx.beginPath();
-      res[m].forEach((g,i)=>{
-        const y=s.Y(Math.max(yMin,Math.log10(g)));
-        if(i===0) cx.moveTo(s.X(i+1),y); else cx.lineTo(s.X(i+1),y);
-      });
-      cx.stroke();
-    });
-    let ly=P.t+16;
-    cx.font='600 12px '+SANS; cx.textAlign='left';
-    Object.keys(COLS).forEach(m=>{ cx.fillStyle=COLS[m]; cx.fillText('— '+NAMES[m], P.l+150, ly); ly+=18; });
-    // hover
-    if(hover && hover.x>P.l && hover.x<P.l+s.pw){
-      const hi=Math.max(1,Math.min(N,Math.round((hover.x-P.l)/s.pw*N)));
-      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
-      cx.beginPath(); cx.moveTo(s.X(hi),P.t); cx.lineTo(s.X(hi),P.t+s.ph); cx.stroke();
-      const rows=[[`iteration ${hi}`, '#1f2937', true]];
-      Object.keys(COLS).forEach(m=>{
-        const g=res[m][hi-1];
-        rows.push([`${NAMES[m]}: ${g.toExponential(2)}`, COLS[m], false]);
-      });
-      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
-    }
-    // cards
+    res=runAll(D,N);
+    k=Math.min(k, N);
     function firstBelow(arr,thr){ const i=arr.findIndex(g=>g<=thr); return i<0?'—':(i+1); }
     el('ueTo3').textContent=`${firstBelow(res.msa,1e-3)} / ${firstBelow(res.fw,1e-3)} / ${firstBelow(res.bcfw,1e-3)}`;
     el('ueTo5').textContent=`${firstBelow(res.msa,1e-5)} / ${firstBelow(res.fw,1e-5)} / ${firstBelow(res.bcfw,1e-5)}`;
     const t=times(res.sol);
     el('ueTimes').textContent=t.map(x=>x.toFixed(2)).join(' / ')+' min';
     el('ueFlows').textContent=res.sol.map(x=>Math.round(x)).join(' / ')+' veh/hr';
-    el('ueReadout').textContent=
-      `demand ${D} veh/hr over 3 routes — at UE all used routes have equal times; rel gap = (TSTT − SPTT)/TSTT → 0`;
   }
+
+  function drawGap(){
+    const D=parseFloat(el('ueDem').value), N=parseInt(el('ueN').value);
+    const yMin=-8, yMax=0;
+    const s=scaffold(cx,W,H,P,0,N,yMin,yMax,'iteration','log₁₀ relative gap',Math.max(5,Math.round(N/10)),1,g=>'1e'+g);
+    // curves drawn only up to the animation's current iteration k
+    Object.keys(COLS).forEach(m=>{
+      cx.strokeStyle=COLS[m]; cx.lineWidth=2.5; cx.lineJoin='round';
+      cx.beginPath();
+      for(let i=0;i<Math.min(k,res[m].length);i++){
+        const y=s.Y(Math.max(yMin,Math.log10(res[m][i])));
+        if(i===0) cx.moveTo(s.X(i+1),y); else cx.lineTo(s.X(i+1),y);
+      }
+      cx.stroke();
+      // marker at the frontier
+      const gi=Math.min(k,res[m].length)-1;
+      const y=s.Y(Math.max(yMin,Math.log10(res[m][gi])));
+      cx.fillStyle=COLS[m];
+      cx.beginPath(); cx.arc(s.X(gi+1), y, m===el('ueSel').value?6:4, 0, Math.PI*2); cx.fill();
+      if(m===el('ueSel').value){
+        cx.strokeStyle='#fff'; cx.lineWidth=2;
+        cx.beginPath(); cx.arc(s.X(gi+1), y, 6, 0, Math.PI*2); cx.stroke();
+      }
+    });
+    let ly=P.t+16;
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    Object.keys(COLS).forEach(m=>{ cx.fillStyle=COLS[m]; cx.fillText('— '+NAMES[m]+(m===el('ueSel').value?'  ◀ watching':''), P.l+150, ly); ly+=18; });
+    if(hover && hover.x>P.l && hover.x<P.l+s.pw){
+      const hi=Math.max(1,Math.min(k,Math.round((hover.x-P.l)/s.pw*N)));
+      cx.strokeStyle='#e3e6ec'; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(s.X(hi),P.t); cx.lineTo(s.X(hi),P.t+s.ph); cx.stroke();
+      const rows=[[`iteration ${hi}`, '#1f2937', true]];
+      Object.keys(COLS).forEach(m=>{
+        rows.push([`${NAMES[m]}: ${res[m][hi-1].toExponential(2)}`, COLS[m], false]);
+      });
+      tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
+    }
+    el('ueReadout').textContent=
+      `iteration ${k} of ${N} · demand ${D} veh/hr — rel gap = (TSTT − SPTT)/TSTT: how much total time could still be saved if everyone jumped to their current shortest route`;
+  }
+
+  function drawRoutes(){
+    rrx.setTransform(1,0,0,1,0,0);
+    rrx.clearRect(0,0,RC.width,RC.height);
+    rrx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150;
+    const st=res.st[el('ueSel').value][Math.min(k,res.st[el('ueSel').value].length)-1];
+    const D=parseFloat(el('ueDem').value);
+    rrx.font='600 8px '+SANS; rrx.fillStyle='#9aa1ad'; rrx.textAlign='left';
+    rrx.fillText(NAMES[el('ueSel').value].toUpperCase()+' — ROUTE FLOWS, ITERATION '+Math.min(k,res.st[el('ueSel').value].length), 8, 11);
+    const L=54, maxW=150;
+    st.v.forEach((f,i)=>{
+      const y=32+i*38;
+      rrx.fillStyle='#4b5563'; rrx.font='600 10px '+SANS; rrx.textAlign='left';
+      rrx.fillText('Route '+(i+1), 8, y+4);
+      // capacity outline
+      rrx.strokeStyle='#e2e6ee'; rrx.lineWidth=1;
+      rrx.strokeRect(L, y-9, maxW, 18);
+      // flow bar
+      rrx.fillStyle=RCOLS[i];
+      rrx.fillRect(L, y-9, Math.min(maxW, f/D*maxW), 18);
+      rrx.fillStyle='#1f2937'; rrx.font='700 10px '+SANS;
+      rrx.fillText(Math.round(f)+' veh', L+4, y+4);
+      rrx.font='600 10px '+SANS; rrx.textAlign='left';
+      rrx.fillStyle = i===st.target ? '#1d7a6f' : '#7b8494';
+      rrx.fillText(st.t[i].toFixed(2)+' min'+(i===st.target?'  ◀ shortest (AON target)':''), L+maxW+6, y+4);
+    });
+    rrx.fillStyle='#7b8494'; rrx.font='9px '+SANS; rrx.textAlign='left';
+    rrx.fillText(`this iteration: send flow toward Route ${st.target+1}, step λ = ${st.lam.toFixed(3)}`, 8, 138);
+  }
+
+  function narrate(){
+    const m=el('ueSel').value;
+    const st=res.st[m][Math.min(k,res.st[m].length)-1];
+    el('ueNarr').textContent=
+      `it ${Math.min(k,res.st[m].length)} (${NAMES[m]}): shortest = Route ${st.target+1} @ ${st.t[st.target].toFixed(2)} min → `+
+      (m==='msa' ? `MSA step 1/(k+1) = ${st.lam.toFixed(3)}` : `line-search step λ = ${st.lam.toFixed(3)}`)+
+      `  |  gap ${st.gap.toExponential(2)}`;
+  }
+
+  function renderAll(){ drawGap(); drawRoutes(); narrate(); }
+  function stopPlay(){ if(timer){ clearInterval(timer); timer=null; el('uePlay').textContent='▶ Play'; } }
+  function play(){
+    if(timer){ stopPlay(); return; }
+    el('uePlay').textContent='⏸ Pause';
+    timer=setInterval(()=>{
+      const N=parseInt(el('ueN').value);
+      if(k>=N){ stopPlay(); return; }
+      k++; renderAll();
+    }, 1000/parseFloat(el('ueSpd').value));
+  }
+
   C.addEventListener('pointermove', e=>{
     const r=C.getBoundingClientRect();
     hover={x:(e.clientX-r.left)*C.width/r.width, y:(e.clientY-r.top)*C.height/r.height};
-    draw();
+    drawGap();
   });
-  C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
-  el('ueDem').addEventListener('input', ()=>{ el('ueDemVal').textContent=el('ueDem').value+' veh/hr'; draw(); });
-  el('ueN').addEventListener('input', ()=>{ el('ueNVal').textContent=el('ueN').value; draw(); });
-  draw();
+  C.addEventListener('pointerleave', ()=>{ hover=null; drawGap(); });
+  el('ueDem').addEventListener('input', ()=>{ el('ueDemVal').textContent=el('ueDem').value+' veh/hr'; stopPlay(); k=1; recompute(); renderAll(); });
+  el('ueN').addEventListener('input', ()=>{ el('ueNVal').textContent=el('ueN').value; stopPlay(); recompute(); renderAll(); });
+  el('ueSel').addEventListener('change', renderAll);
+  el('uePlay').addEventListener('click', play);
+  el('ueStep').addEventListener('click', ()=>{ stopPlay(); if(k<parseInt(el('ueN').value)) k++; renderAll(); });
+  el('ueRst').addEventListener('click', ()=>{ stopPlay(); k=1; renderAll(); });
+  el('ueSpd').addEventListener('input', ()=>{ el('ueSpdVal').textContent=el('ueSpd').value+' it/s'; if(timer){ stopPlay(); play(); } });
+  recompute(); renderAll();
 })();
 
 // ─────────────────────────────────────────────
@@ -814,6 +968,63 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   }
   const COLS={g:'#0e7c86', n:'#2c5378', u:'#b45309'};
 
+  // two-route example: SUE fixed point vs deterministic UE
+  const RA={tf:10,c:1000}, RB={tf:13,c:1400};
+  const bpr2=(r,v)=>r.tf*(1+0.15*Math.pow(v/r.c,4));
+  function distF(dc){
+    const d=el('sueDist').value;
+    return d==='g'?pGumbel(dc) : d==='n'?pNormal(dc) : pUniform(dc);
+  }
+  function solveSUE(D){
+    let v1=D/2;
+    for(let kk=1;kk<=600;kk++){
+      const t1=bpr2(RA,v1), t2=bpr2(RB,D-v1);
+      v1 += (D*distF(t2-t1) - v1)/(kk+1);
+    }
+    const t1=bpr2(RA,v1), t2=bpr2(RB,D-v1);
+    return {v1, v2:D-v1, t1, t2, dc:t2-t1, P:distF(t2-t1)};
+  }
+  function solveUE(D){
+    const g=f=>bpr2(RA,f)-bpr2(RB,D-f);
+    if(g(0)>=0) return {v1:0,v2:D,t1:bpr2(RA,0),t2:bpr2(RB,D)};
+    if(g(D)<=0) return {v1:D,v2:0,t1:bpr2(RA,D),t2:bpr2(RB,0)};
+    let lo=0,hi=D,f=D/2;
+    for(let i=0;i<60;i++){ f=(lo+hi)/2; if(g(f)<0) lo=f; else hi=f; }
+    return {v1:f, v2:D-f, t1:bpr2(RA,f), t2:bpr2(RB,D-f)};
+  }
+
+  const SC=el('sueSplit'), spx=SC.getContext('2d');
+  function drawSplit(sue, ue, D){
+    spx.setTransform(1,0,0,1,0,0);
+    spx.clearRect(0,0,SC.width,SC.height);
+    spx.setTransform(2,0,0,2,0,0);
+    const w=260;
+    spx.font='600 8px '+SANS; spx.fillStyle='#9aa1ad'; spx.textAlign='left';
+    spx.fillText('TWO-ROUTE EXAMPLE — UE vs SUE FLOWS', 8, 11);
+    const L=64, maxW=130;
+    const rows=[
+      ['R1 · UE',  ue.v1,  '#b9c2cf', ue.t1],
+      ['R1 · SUE', sue.v1, '#0e7c86', sue.t1],
+      ['R2 · UE',  ue.v2,  '#b9c2cf', ue.t2],
+      ['R2 · SUE', sue.v2, '#b45309', sue.t2]
+    ];
+    rows.forEach((r,i)=>{
+      const y=32+i*26 + (i>=2?8:0);
+      spx.fillStyle='#4b5563'; spx.font='600 9px '+SANS; spx.textAlign='left';
+      spx.fillText(r[0], 8, y+4);
+      spx.strokeStyle='#e2e6ee'; spx.lineWidth=1;
+      spx.strokeRect(L, y-8, maxW, 16);
+      spx.fillStyle=r[2];
+      spx.fillRect(L, y-8, Math.min(maxW, r[1]/D*maxW), 16);
+      spx.fillStyle='#1f2937'; spx.font='700 9px '+SANS;
+      spx.fillText(Math.round(r[1])+' veh', L+4, y+4);
+      spx.fillStyle='#7b8494'; spx.font='9px '+SANS;
+      spx.fillText(r[3].toFixed(2)+' min', L+maxW+6, y+4);
+    });
+    spx.fillStyle='#c1121f'; spx.font='600 9px '+SANS; spx.textAlign='left';
+    spx.fillText(`SUE puts ${Math.round(sue.v2-ue.v2)>=0?'+':''}${Math.round(sue.v2-ue.v2)} veh on the slower route vs UE`, 8, 148);
+  }
+
   function draw(){
     const s=scaffold(cx,W,H,P,-10,10,0,1,'Δc = c₂ − c₁ (min)  →  route 1 is better to the right','P(choose route 1)',2,0.25);
     // 50/50 guides
@@ -846,10 +1057,28 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       });
       tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
     }
+    // live SUE equilibrium of the two-route example, marked on the active curve
+    const D=parseFloat(el('sueDem2').value);
+    const sue=solveSUE(D), ue=solveUE(D);
+    const selK=el('sueDist').value;
+    cx.strokeStyle='#9aa1ad'; cx.setLineDash([4,4]); cx.lineWidth=1.5;
+    cx.beginPath(); cx.moveTo(s.X(sue.dc),P.t); cx.lineTo(s.X(sue.dc),P.t+s.ph); cx.stroke();
+    cx.beginPath(); cx.moveTo(P.l,s.Y(sue.P)); cx.lineTo(s.X(sue.dc),s.Y(sue.P)); cx.stroke();
+    cx.setLineDash([]);
+    cx.fillStyle=COLS[selK];
+    cx.beginPath(); cx.arc(s.X(sue.dc), s.Y(sue.P), 7, 0, Math.PI*2); cx.fill();
+    cx.strokeStyle='#fff'; cx.lineWidth=2.5;
+    cx.beginPath(); cx.arc(s.X(sue.dc), s.Y(sue.P), 7, 0, Math.PI*2); cx.stroke();
+    cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS;
+    cx.textAlign = sue.dc>4 ? 'right' : 'left';
+    cx.fillText(`SUE equilibrium: Δc = ${sue.dc.toFixed(2)} min → P₁ = ${(sue.P*100).toFixed(0)}%`,
+                s.X(sue.dc)+(sue.dc>4?-12:12), s.Y(sue.P)-12);
     drawDens();
-    el('sueP2').textContent=`${(pGumbel(2)*100).toFixed(0)}% / ${(pNormal(2)*100).toFixed(0)}% / ${(pUniform(2)*100).toFixed(0)}%`;
+    drawSplit(sue, ue, D);
+    el('sueEq').textContent=
+      `SUE ${Math.round(sue.v1)}/${Math.round(sue.v2)} veh (${sue.t1.toFixed(1)}/${sue.t2.toFixed(1)} min) · UE ${Math.round(ue.v1)}/${Math.round(ue.v2)}`;
     el('sueReadout').textContent=
-      `θ = ${theta().toFixed(2)} min (all three scaled to equal variance) — θ→0 collapses to deterministic UE; larger θ spreads flow to weaker routes`;
+      `θ = ${theta().toFixed(2)} min — the flatter the curve, the more flow SUE moves to the slower route; θ→0 collapses every distribution to deterministic UE`;
   }
 
   function drawDens(){
@@ -893,6 +1122,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   });
   C.addEventListener('pointerleave', ()=>{ hover=null; draw(); });
   el('sueTheta').addEventListener('input', ()=>{ el('sueThetaVal').textContent=theta().toFixed(2)+' min'; draw(); });
+  el('sueDist').addEventListener('change', draw);
+  el('sueDem2').addEventListener('input', ()=>{ el('sueDem2Val').textContent=el('sueDem2').value+' veh/hr'; draw(); });
   draw();
 })();
 </script>
