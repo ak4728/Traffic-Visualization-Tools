@@ -72,6 +72,7 @@
     <button class="tab" data-tab="odme">2. ODME Sandbox</button>
     <button class="tab" data-tab="ue">3. UE Convergence &amp; Rel Gap</button>
     <button class="tab" data-tab="sue">4. SUE Perception Error</button>
+    <button class="tab" data-tab="fws">5. Frank-Wolfe on the Surface</button>
   </div>
 
   <!-- ═══ TAB 1: VDF EXPLORER ═══ -->
@@ -199,6 +200,41 @@
         <div class="card"><h3>Uniform → linear</h3><div class="value" style="font-size:0.85em">triangular CDF, hard 0/1 cutoff</div></div>
         <div class="card"><h3>SUE vs UE equilibrium</h3><div class="value" id="sueEq" style="font-size:0.82em">—</div></div>
       </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB 5: FRANK-WOLFE ON THE OPTIMIZATION SURFACE ═══ -->
+  <div class="panel" id="fws">
+    <div class="panel-grid">
+    <div class="viz-container">
+      <canvas id="fwChart" class="big-canvas" width="1200" height="620"></canvas>
+      <div class="readout" id="fwReadout">The Beckmann objective over the feasible flow simplex — every point is a way to split the demand over 3 routes</div>
+    </div>
+    <div class="viz-container">
+      <div class="pane-head"><span class="help">i<span class="tip">Traffic assignment IS constrained optimization: the feasible set of route flows (v₁+v₂+v₃ = demand, vᵢ ≥ 0) is a <b>simplex</b> — the triangle — and UE minimizes the <b>Beckmann objective</b> whose contours are shaded (light = low). <b>Frank-Wolfe</b> is the conditional-gradient method: each iteration solves a linear subproblem over the polytope, whose answer is always a <b>vertex</b> — and in traffic that subproblem is exactly <b>all-or-nothing assignment</b> (the dashed arrow points at the corner "all flow on the cheapest route"). A line search then moves partway along that direction (solid arrow), staying feasible as a convex combination. Near the optimum FW <b>zigzags</b> — successive vertices alternate and steps shrink. <b>N-conjugate FW</b> blends the FW direction with the previous N−1 search directions, forced to be conjugate w.r.t. the Beckmann Hessian: the blended arrow cuts through the zigzag, which is why TransModeler's N-Conjugate UE converges an order of magnitude tighter in the same time. Switch N and replay the exact same problem to see the path straighten.</span></span></div>
+      <div class="controls">
+        <div class="control-group"><label>N (conjugate directions)</label>
+          <select id="fwN">
+            <option value="1">N = 1 (plain Frank-Wolfe)</option>
+            <option value="2" selected>N = 2 (bi-conjugate)</option>
+            <option value="3">N = 3 (tri-conjugate)</option>
+          </select>
+        </div>
+        <div class="control-group"><label>Demand</label><input type="range" id="fwDem" min="1500" max="4500" step="250" value="3000"><span class="val" id="fwDemVal">3000 veh/hr</span></div>
+        <button class="action" id="fwPlay">▶ Play</button>
+        <button class="action sec" id="fwStep">Step ▸</button>
+        <button class="action sec" id="fwRst">↺</button>
+        <div class="control-group"><label>Speed</label><input type="range" id="fwSpd" min="1" max="8" step="1" value="2"><span class="val" id="fwSpdVal">2 it/s</span></div>
+      </div>
+      <div class="readout" id="fwNarr">press ▶ Play — watch the iterate walk the surface toward the UE optimum</div>
+      <div class="cards">
+        <div class="card"><h3>Iteration · rel gap</h3><div class="value" id="fwGap">—</div></div>
+        <div class="card"><h3>Step λ · direction mix</h3><div class="value" id="fwMix" style="font-size:0.82em">—</div></div>
+        <div class="card"><h3>Iters to gap ≤ 10⁻⁴ (this N / plain FW)</h3><div class="value" id="fwCmp">—</div></div>
+        <div class="card"><h3>Current flows v₁/v₂/v₃</h3><div class="value" id="fwFlows">—</div></div>
+      </div>
+      <canvas id="fwGapC" class="gauge-canvas" width="520" height="300"></canvas>
     </div>
     </div>
   </div>
@@ -1125,6 +1161,272 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('sueDist').addEventListener('change', draw);
   el('sueDem2').addEventListener('input', ()=>{ el('sueDem2Val').textContent=el('sueDem2').value+' veh/hr'; draw(); });
   draw();
+})();
+
+// ─────────────────────────────────────────────
+//  TAB 5 — FRANK-WOLFE ON THE OPTIMIZATION SURFACE
+// ─────────────────────────────────────────────
+(function(){
+  const C=el('fwChart'), cx=C.getContext('2d');
+  const W=C.width, H=C.height;
+  const GC=el('fwGapC'), gx=GC.getContext('2d');
+
+  const ROUTES=[{tf:10,c:1000},{tf:12,c:1200},{tf:15,c:1500}];
+  const times=v=>ROUTES.map((r,i)=>r.tf*(1+0.15*Math.pow(v[i]/r.c,4)));
+  const dtimes=v=>ROUTES.map((r,i)=>r.tf*0.15*4*Math.pow(Math.max(v[i],0)/r.c,3)/r.c);
+  const beck=v=>ROUTES.reduce((s,r,i)=>s+r.tf*(Math.max(v[i],0)+0.15*r.c/5*Math.pow(Math.max(v[i],0)/r.c,5)),0);
+  function relGap(v,D){
+    const t=times(v);
+    const TSTT=v.reduce((s,x,i)=>s+x*t[i],0);
+    return Math.max(1e-12,(TSTT-D*Math.min(...t))/TSTT);
+  }
+  function lineSearch(v,d){
+    let a=0,b=1;
+    const gr=(Math.sqrt(5)-1)/2;
+    const f=l=>beck(v.map((x,i)=>Math.max(0,x+l*d[i])));
+    let c1=b-gr*(b-a), c2=a+gr*(b-a);
+    for(let i=0;i<50;i++){
+      if(f(c1)<f(c2)){ b=c2; c2=c1; c1=b-gr*(b-a); }
+      else { a=c1; c1=c2; c2=a+gr*(b-a); }
+    }
+    return (a+b)/2;
+  }
+  const dotH=(a,H2,b)=>a.reduce((s,x,i)=>s+x*H2[i]*b[i],0);
+
+  // one full N-conjugate FW run with per-iteration state for animation
+  function runFW(D, N, iters){
+    let v=[D,0,0];                                  // start: everything on route 1
+    let prev=[];                                    // previous directions, newest first
+    const st=[];
+    for(let k=1;k<=iters;k++){
+      const t=times(v);
+      const target=t.indexOf(Math.min(...t));
+      const y=[0,0,0]; y[target]=D;
+      const dFW=y.map((x,i)=>x-v[i]);
+      const H2=dtimes(v);
+      let d=dFW, betas=[1];
+      if(N>=2 && prev.length>=1){
+        const s1=prev[0];
+        const a1=dotH(s1,H2,dFW), b11=dotH(s1,H2,s1);
+        let b1=(b11-a1)!==0 ? a1/(a1-b11) : 0;
+        b1=Math.max(0, Math.min(0.99, b1));
+        if(N>=3 && prev.length>=2){
+          const s2=prev[1];
+          // solve the 2x2 conjugacy system for (β1, β2), β0 = 1−β1−β2
+          const a2=dotH(s2,H2,dFW);
+          const c11=dotH(s1,H2,s1)-a1, c12=dotH(s2,H2,s1)-a1;
+          const c21=dotH(s1,H2,s2)-a2, c22=dotH(s2,H2,s2)-a2;
+          const det=c11*c22-c12*c21;
+          if(Math.abs(det)>1e-9){
+            let B1=(-a1*c22+a2*c12)/det;
+            let B2=(-c11*a2+c21*a1)/det;
+            const B0=1-B1-B2;
+            if(B0>0.01 && B1>=-0.01 && B2>=-0.01 && B1<=1 && B2<=1){
+              d=dFW.map((x,i)=>B0*x+Math.max(0,B1)*s1[i]+Math.max(0,B2)*s2[i]);
+              betas=[B0,Math.max(0,B1),Math.max(0,B2)];
+            } else { d=dFW.map((x,i)=>(1-b1)*x+b1*s1[i]); betas=[1-b1,b1]; }
+          } else { d=dFW.map((x,i)=>(1-b1)*x+b1*s1[i]); betas=[1-b1,b1]; }
+        } else {
+          d=dFW.map((x,i)=>(1-b1)*x+b1*s1[i]);
+          betas=[1-b1,b1];
+        }
+      }
+      const lam=lineSearch(v,d);
+      st.push({v:[...v], t, gap:relGap(v,D), target, lam, d:[...d], betas});
+      v=v.map((x,i)=>Math.max(0,x+lam*d[i]));
+      prev.unshift([...d]);
+      prev=prev.slice(0, Math.max(0,N-1));
+    }
+    st.push({v:[...v], t:times(v), gap:relGap(v,D), target:-1, lam:0, d:[0,0,0], betas:[1]});
+    return st;
+  }
+
+  // ── simplex geometry & contour heatmap ──
+  const TRI={ A:[120,560], B:[830,560], C:[475,70] };   // corners: all-on-R1, R2, R3
+  function toXY(v,D){
+    const w1=v[0]/D, w2=v[1]/D, w3=v[2]/D;
+    return [w1*TRI.A[0]+w2*TRI.B[0]+w3*TRI.C[0], w1*TRI.A[1]+w2*TRI.B[1]+w3*TRI.C[1]];
+  }
+  function bary(x,y){
+    const [x1,y1]=TRI.A,[x2,y2]=TRI.B,[x3,y3]=TRI.C;
+    const det=(y2-y3)*(x1-x3)+(x3-x2)*(y1-y3);
+    const w1=((y2-y3)*(x-x3)+(x3-x2)*(y-y3))/det;
+    const w2=((y3-y1)*(x-x3)+(x1-x3)*(y-y3))/det;
+    return [w1,w2,1-w1-w2];
+  }
+  let heat=null, heatD=0;
+  function buildHeat(D){
+    heat=document.createElement('canvas'); heat.width=W; heat.height=H;
+    const hx=heat.getContext('2d');
+    const cell=4;
+    // objective range over the simplex
+    let bMin=Infinity, bMax=-Infinity;
+    const vals=[];
+    for(let y=60; y<580; y+=cell){
+      for(let x=100; x<850; x+=cell){
+        const w=bary(x+cell/2,y+cell/2);
+        if(w[0]<-0.01||w[1]<-0.01||w[2]<-0.01) continue;
+        const B=beck([w[0]*D,w[1]*D,w[2]*D]);
+        vals.push([x,y,B]);
+        bMin=Math.min(bMin,B); bMax=Math.max(bMax,B);
+      }
+    }
+    const LV=16;
+    vals.forEach(([x,y,B])=>{
+      const t=Math.pow((B-bMin)/(bMax-bMin+1e-9),0.55);
+      const lv=Math.floor(t*LV)/LV;
+      const r=Math.round(251+lv*(44-251));
+      const g=Math.round(253+lv*(83-253));
+      const b=Math.round(253+lv*(120-253));
+      hx.fillStyle=`rgb(${r},${g},${b})`;
+      hx.fillRect(x,y,cell,cell);
+    });
+    heatD=D;
+  }
+
+  let st=null, k=0, timer=null, stFW=null;
+  function recompute(){
+    const D=parseFloat(el('fwDem').value), N=parseInt(el('fwN').value);
+    st=runFW(D,N,120);
+    stFW=runFW(D,1,400);
+    if(heatD!==D) buildHeat(D);
+    k=Math.min(k, st.length-2);
+    const to=(arr,thr)=>{ const i=arr.findIndex(s2=>s2.gap<=thr); return i<0?'—':i; };
+    el('fwCmp').textContent=`${to(st,1e-4)} / ${to(stFW,1e-4)}`;
+  }
+
+  function arrow(x1,y1,x2,y2,col,dash){
+    cx.strokeStyle=col; cx.fillStyle=col; cx.lineWidth=2.5;
+    if(dash) cx.setLineDash([6,5]);
+    cx.beginPath(); cx.moveTo(x1,y1); cx.lineTo(x2,y2); cx.stroke();
+    cx.setLineDash([]);
+    const ang=Math.atan2(y2-y1,x2-x1);
+    cx.beginPath();
+    cx.moveTo(x2,y2);
+    cx.lineTo(x2-11*Math.cos(ang-0.4), y2-11*Math.sin(ang-0.4));
+    cx.lineTo(x2-11*Math.cos(ang+0.4), y2-11*Math.sin(ang+0.4));
+    cx.closePath(); cx.fill();
+  }
+
+  function draw(){
+    const D=parseFloat(el('fwDem').value), N=parseInt(el('fwN').value);
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+    cx.drawImage(heat,0,0);
+    // triangle border + corner labels
+    cx.strokeStyle='#4b5563'; cx.lineWidth=2; cx.lineJoin='round';
+    cx.beginPath(); cx.moveTo(...TRI.A); cx.lineTo(...TRI.B); cx.lineTo(...TRI.C); cx.closePath(); cx.stroke();
+    cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
+    cx.textAlign='right'; cx.fillText('ALL on Route 1 (10 min ff)', TRI.A[0]+55, TRI.A[1]+22);
+    cx.textAlign='left';  cx.fillText('ALL on Route 2 (12 min ff)', TRI.B[0]-155, TRI.B[1]+22);
+    cx.textAlign='center';cx.fillText('ALL on Route 3 (15 min ff)', TRI.C[0], TRI.C[1]-12);
+    // optimum star
+    const vStar=stFW[stFW.length-1].v;
+    const [ox,oy]=toXY(vStar,D);
+    cx.fillStyle='#1d7a6f'; cx.font='700 20px '+SANS; cx.textAlign='center';
+    cx.fillText('★', ox, oy+7);
+    cx.font='600 11px '+SANS;
+    cx.fillText('UE optimum', ox, oy+22);
+    // path so far
+    cx.strokeStyle='#a4161a'; cx.lineWidth=2; cx.lineJoin='round';
+    cx.beginPath();
+    for(let i=0;i<=k;i++){
+      const [px,py]=toXY(st[i].v,D);
+      if(i===0) cx.moveTo(px,py); else cx.lineTo(px,py);
+    }
+    cx.stroke();
+    for(let i=0;i<=k;i++){
+      const [px,py]=toXY(st[i].v,D);
+      cx.fillStyle='#a4161a';
+      cx.beginPath(); cx.arc(px,py,i===k?0:3,0,Math.PI*2); cx.fill();
+    }
+    // current iterate + directions
+    const s=st[k];
+    const [px,py]=toXY(s.v,D);
+    if(s.target>=0){
+      const vtx=[0,0,0]; vtx[s.target]=D;
+      const [tx,ty]=toXY(vtx,D);
+      arrow(px,py,tx,ty,'#9aa1ad',true);                       // FW direction: to the AON vertex
+      cx.strokeStyle='#0e7c86'; cx.lineWidth=3;
+      cx.beginPath(); cx.arc(tx,ty,10,0,Math.PI*2); cx.stroke(); // highlight AON vertex
+      const nxt=s.v.map((x,i)=>Math.max(0,x+s.lam*s.d[i]));
+      const [qx,qy]=toXY(nxt,D);
+      arrow(px,py,qx,qy,'#a4161a',false);                      // actual (possibly conjugate) step
+    }
+    cx.fillStyle='#a4161a';
+    cx.beginPath(); cx.arc(px,py,7,0,Math.PI*2); cx.fill();
+    cx.strokeStyle='#fff'; cx.lineWidth=2.5;
+    cx.beginPath(); cx.arc(px,py,7,0,Math.PI*2); cx.stroke();
+    // in-canvas legend
+    cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillStyle='#9aa1ad'; cx.fillText('– – gray dashed = FW direction (to the AON vertex)', 870, 100);
+    cx.fillStyle='#a4161a'; cx.fillText('— red = actual search step (λ from line search)', 870, 122);
+    cx.fillStyle='#0e7c86'; cx.fillText('○ AON vertex = all-or-nothing assignment', 870, 144);
+    cx.fillStyle='#1d7a6f'; cx.fillText('★ UE optimum (Beckmann minimum)', 870, 166);
+    cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
+    cx.fillText('shading = Beckmann objective (light = low)', 870, 192);
+    cx.fillText('N = '+N+(N>1?' — conjugate blend of last '+(N-1)+' direction'+(N>2?'s':''):' — pure Frank-Wolfe'), 870, 210);
+    // narration + cards
+    const mix=s.betas.length===1?'pure FW direction'
+      : s.betas.length===2?`${(s.betas[0]*100).toFixed(0)}% FW + ${(s.betas[1]*100).toFixed(0)}% prev`
+      : `${(s.betas[0]*100).toFixed(0)}% FW + ${(s.betas[1]*100).toFixed(0)}% prev + ${(s.betas[2]*100).toFixed(0)}% prev²`;
+    el('fwGap').textContent=`it ${k} · ${s.gap.toExponential(2)}`;
+    el('fwMix').textContent=`λ = ${s.lam.toFixed(3)} · ${mix}`;
+    el('fwFlows').textContent=s.v.map(x=>Math.round(x)).join(' / ')+' veh/hr';
+    el('fwNarr').textContent = s.target>=0
+      ? `it ${k}: cheapest = Route ${s.target+1} (${s.t[s.target].toFixed(2)} min) → AON vertex; step λ=${s.lam.toFixed(3)} along ${s.betas.length>1?'conjugate blend':'FW direction'} · gap ${s.gap.toExponential(1)}`
+      : `converged view — gap ${s.gap.toExponential(1)}`;
+    el('fwReadout').textContent=
+      `demand ${D} veh/hr — each point of the triangle is a feasible flow split (v₁+v₂+v₃=${D}); UE = the Beckmann minimum`;
+    drawGapMini();
+  }
+
+  function drawGapMini(){
+    gx.setTransform(1,0,0,1,0,0);
+    gx.clearRect(0,0,GC.width,GC.height);
+    gx.setTransform(2,0,0,2,0,0);
+    const w=260,h=150,L=30,R=8,T=18,B=18;
+    const pw=w-L-R, ph=h-T-B;
+    const NIT=60;
+    gx.font='600 8px '+SANS; gx.fillStyle='#9aa1ad'; gx.textAlign='left';
+    gx.fillText('REL GAP (log₁₀) — this N vs plain FW', 8, 11);
+    gx.strokeStyle='#eef1f6'; gx.lineWidth=1;
+    gx.fillStyle='#7b8494'; gx.font='7px '+SANS;
+    for(let g=0; g>=-8; g-=2){
+      const y=T+ph*(-g/8);
+      gx.beginPath(); gx.moveTo(L,y); gx.lineTo(L+pw,y); gx.stroke();
+      gx.textAlign='right'; gx.fillText('1e'+g, L-2, y+2);
+    }
+    function line(arr,col,upTo){
+      gx.strokeStyle=col; gx.lineWidth=1.8; gx.lineJoin='round';
+      gx.beginPath();
+      for(let i=0;i<Math.min(upTo,NIT,arr.length);i++){
+        const x=L+(i/NIT)*pw, y=T+ph*Math.min(1,-Math.log10(arr[i].gap)/8);
+        if(i===0) gx.moveTo(x,y); else gx.lineTo(x,y);
+      }
+      gx.stroke();
+    }
+    line(stFW,'#b9c2cf',NIT);
+    line(st,'#a4161a',k+1);
+  }
+
+  function stopPlay(){ if(timer){ clearInterval(timer); timer=null; el('fwPlay').textContent='▶ Play'; } }
+  function play(){
+    if(timer){ stopPlay(); return; }
+    el('fwPlay').textContent='⏸ Pause';
+    timer=setInterval(()=>{
+      if(k>=st.length-2 || st[k].gap<=1e-8){ stopPlay(); return; }
+      k++; draw();
+    }, 1000/parseFloat(el('fwSpd').value));
+  }
+
+  el('fwN').addEventListener('change', ()=>{ stopPlay(); k=0; recompute(); draw(); });
+  el('fwDem').addEventListener('input', ()=>{ el('fwDemVal').textContent=el('fwDem').value+' veh/hr'; stopPlay(); k=0; recompute(); draw(); });
+  el('fwPlay').addEventListener('click', play);
+  el('fwStep').addEventListener('click', ()=>{ stopPlay(); if(k<st.length-2) k++; draw(); });
+  el('fwRst').addEventListener('click', ()=>{ stopPlay(); k=0; draw(); });
+  el('fwSpd').addEventListener('input', ()=>{ el('fwSpdVal').textContent=el('fwSpd').value+' it/s'; if(timer){ stopPlay(); play(); } });
+  recompute(); draw();
 })();
 </script>
 </body>
