@@ -53,12 +53,18 @@ python analysis\i25_speed_flow.py --demo          # synthetic data, pipeline tes
   (c₁, c₂, c₃). Akçelik and Conical treat v/c = 1 as a hard wall, so they are
   fitted on v/c ≤ 1 only.
 
-With the Aug 23–29, 2026 week of data: ffs ≈ 69 mph, capacity ≈ 7,590 veh/hr
-(95th pct, all lanes), 104 uncongested / 64 congested hours, throughput up to
-v/c ≈ 1.10. Fits (R²): Combined 0.84 > Logit 0.83 > BPR 0.82 (α≈0.26, β≈3.3)
-≫ Akçelik 0.39 > Conical (negative). The last two fail honestly: Akçelik stays
-flat until v/c ≈ 1 and Spiess's conical forces t = 2·t0 exactly at capacity,
-while the observed near-capacity hours sit at only t/t0 ≈ 1.2–1.35.
+With the Aug 1–29, 2026 month of data (672 hourly observations; Aug 12 lacks
+a volume file): ffs ≈ 69.3 mph, capacity ≈ 7,570 veh/hr (95th pct, all lanes),
+415 uncongested / 257 congested hours, throughput up to v/c ≈ 1.10.
+Fits (R²): Combined 0.76 (k₄≈1.01, g/C≈0.88) > Logit 0.75 (c₁=6, c₂≈1.93,
+c₃≈3.4) > BPR 0.72 (α≈0.25, β≈2.74) > Generalized cost 0.67 ≫ Akçelik 0.19 >
+Conical (negative). The last two fail honestly: Akçelik stays flat until
+v/c ≈ 1 and Spiess's conical forces t = 2·t0 exactly at capacity, while the
+observed near-capacity hours sit at only t/t0 ≈ 1.2–1.35.
+
+These fitted values are the default slider positions in the Chapter 3 VDF
+explorer (`Optimization.html` Part 1), which also embeds the 672 compiled
+observations as dots.
 
 ## Outputs
 
