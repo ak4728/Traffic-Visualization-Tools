@@ -72,14 +72,40 @@
   .checkbox-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 8px 0; font-size:0.85em; }
   .checkbox-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
   code { background: #eef1f5; padding: 1px 5px; border-radius: 3px; color: #b45309; font-size: 0.88em; }
-</style>
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }</style>
 </head>
 <body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+</nav>
 <div class="container">
   <header>
     <h1>The Time-Space Diagram</h1>
     <span class="subtitle">Daganzo — Fundamentals of Transportation and Traffic Operations, Ch. 1</span>
-    <span class="nav"><a href="DilemmaZone.html">Dilemma Zone</a> · <a href="CumulativePlots.html">Ch.2 Cumulative Plots →</a></span>
+
   </header>
 
   <div class="tabs">
@@ -2289,7 +2315,19 @@ document.querySelectorAll('.tab').forEach(tab => {
   reset();
 })();
 
-</script>
+
+// chapter navigation drawer
+(function(){
+  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
+  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
+  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', ()=> d.classList.contains('open')?close():open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
+  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+})();</script>
 </body>
 </html>
 
