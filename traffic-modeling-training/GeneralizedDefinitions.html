@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.4 — Generalized Definitions (Edie)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; cursor: grab; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 4px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 130px; accent-color: #14919b; }
+  .preset { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #d6dae2; background: #fff; color: #374151; font-size: 0.8em; font-weight: 600; cursor: pointer; }
+  .preset:hover { border-color: #14919b; color: #0f7b82; }
+  .preset.on { background: #14919b; border-color: transparent; color: #fff; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.68em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.12em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.68em; }
+  .card.hl { background: #e8f6f5; border-color: #bfe3e0; }
+  .card.hl .value { color: #0e6e63; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.86em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .note { font-size: 0.82em; color: #6b7280; line-height: 1.5; }
+  .identity { text-align: center; font-size: 0.95em; padding: 8px; border-radius: 9px; background: #e8f6f5; color: #0e6e63; font-weight: 700; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 360px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <h4>Ch. X — Fundamental Diagrams</h4>
+  <a href="FundamentalDiagrams.html">Fundamental Diagrams — I-25 Data</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>Generalized Definitions of Flow, Density &amp; Speed</h1>
+    <span class="subtitle">Ch. 4 §4.1.1 — Daganzo / Edie (1963): measure any region A of the time-space plane
+      <span class="help">?<span class="tip">
+        A time-space diagram with real (simulated) trajectories through a temporary bottleneck.
+        <b>Drag region A</b> anywhere, resize it by its corner handles, or shear it with the observer-speed slider.<br><br>
+        Edie's generalized definitions (Daganzo Eqs. 4.3, 4.8, 4.12):<br>
+        <b>k(A) = t(A) / |A|</b> — total vehicle-time in A ÷ 'area' of A<br>
+        <b>q(A) = d(A) / |A|</b> — total distance driven in A ÷ 'area' of A<br>
+        <b>v(A) = q(A) / k(A) = d(A) / t(A)</b> — a true space-mean speed<br><br>
+        |A| has units of distance × time. The identity <b>q = k·v</b> is <i>exact</i> for these definitions — no matter what region you pick, unlike mixing a detector's flow with a photo's density.<br><br>
+        Presets: a <b>photograph</b> (thin vertical strip → k = n/L, v = arithmetic mean of photo speeds, Eq. 4.14); a <b>detector</b> (thin horizontal strip → q = m/T, v = harmonic mean of passing speeds, Eqs. 4.15–4.16 — this is why space-mean ≤ time-mean); a generic <b>L × T rectangle</b>; and a <b>moving observer</b> (sheared parallelogram travelling at speed w).
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="tsd" width="1240" height="760"></canvas>
+      <div class="controls">
+        <span style="font-size:0.8em;font-weight:700;color:#6b7280">REGION A:</span>
+        <button class="preset" data-p="rect">▭ Rectangle L×T</button>
+        <button class="preset" data-p="photo">📷 Photograph (thin vertical)</button>
+        <button class="preset" data-p="detector">🎥 Detector (thin horizontal)</button>
+        <button class="preset" data-p="mov">🚶 Moving observer</button>
+        <div class="control-group"><label>observer speed w</label><input type="range" id="wSlider" min="-30" max="60" step="1" value="0"><span class="val" id="wVal">0 mph</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="eqbox" id="eqbox">
+          <b>k(A) = t(A)/|A|</b> &nbsp;·&nbsp; <b>q(A) = d(A)/|A|</b> &nbsp;·&nbsp; <b>v(A) = d(A)/t(A)</b><br>
+          <span class="note" id="presetNote">Drag the shaded region A around the diagram — every quantity below recomputes live from the clipped trajectory pieces (drawn in teal).</span>
+        </div>
+        <div class="cards">
+          <div class="card"><h3>|A| — 'area'</h3><div class="value" id="cArea">—<small> ft·s</small></div></div>
+          <div class="card"><h3>t(A) — veh-time</h3><div class="value" id="cT">—<small> veh·s</small></div></div>
+          <div class="card"><h3>d(A) — veh-distance</h3><div class="value" id="cD">—<small> veh·ft</small></div></div>
+          <div class="card hl"><h3>density k(A)</h3><div class="value" id="cK">—<small> veh/mi</small></div></div>
+          <div class="card hl"><h3>flow q(A)</h3><div class="value" id="cQ">—<small> veh/hr</small></div></div>
+          <div class="card hl"><h3>speed v(A)</h3><div class="value" id="cV">—<small> mph</small></div></div>
+        </div>
+        <div class="identity" id="identity">q = k·v exact: — </div>
+        <div class="cards" style="grid-template-columns:1fr 1fr">
+          <div class="card"><h3 id="convTitle1">trajectories touching A</h3><div class="value" id="conv1">—</div></div>
+          <div class="card"><h3 id="convTitle2">conventional check</h3><div class="value" id="conv2">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox" style="border-left-color:#b45309">
+          <b>Why this matters</b><br>
+          <span class="note">
+            A detector measures over <i>time at a point</i>; a photo measures over <i>space at an instant</i>. Mixing the two ("detector q" ÷ "photo k") breaks q = k·v.
+            Edie's region-based definitions always satisfy it — and they let you compare streams observed in completely different ways.
+            Note the <b>point limit is ill-defined</b>: shrink A onto a spot between trajectories and k → 0; shrink it onto a trajectory and k → ∞ (Daganzo's points O and P). Density is a property of a region, not a point.
+          </span>
+        </div>
+        <div class="eqbox" style="border-left-color:#8c3a4c">
+          <b>Try this</b><br>
+          <span class="note">
+            1) Set the <b>Detector</b> preset and drag it into the queue — v(A) is the harmonic mean of passing speeds (Eq. 4.16), which is why it dips below the arithmetic mean.
+            2) Set <b>Photograph</b> and slide it across the shockwave — watch k jump as the strip crosses into the queue.
+            3) Pick <b>Moving observer</b> and set w to the wave speed (≈ −6 mph): travelling with the shockwave, conditions inside A stay nearly constant.
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+
+// ── world: T seconds × X feet ───────────────────────────────────────
+const T_MAX = 120;        // s
+const X_MAX = 2000;       // ft
+const VF = 80.7;          // free speed ft/s (55 mph)
+const VB = 5;             // crawl speed in bottleneck ft/s — capacity ≈ 640 veh/hr,
+                          // well below demand, so a real queue grows upstream
+const BOT = { x0: 1150, x1: 1250, t0: 20, t1: 70 };   // temporary bottleneck
+const MPH = fps => fps * 3600 / 5280;
+
+// ── build trajectories: Newell-style car following through the bottleneck ──
+const DT = 0.25, GAP = 28;
+const trajs = [];
+(function build(){
+  const starts = [];
+  let t = 1.5;
+  let seed = 42;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  while (t < T_MAX) { starts.push(t); t += 1.8 + rnd() * 0.9; }   // ≈1,600 veh/hr demand
+  const cur = starts.map(s => ({ s, x: -1, pts: [] }));
+  for (let tt = 0; tt <= T_MAX + 1e-9; tt += DT) {
+    for (let i = 0; i < cur.length; i++) {
+      const c = cur[i];
+      if (c.x < 0) { if (tt >= c.s) c.x = 0; else continue; }
+      const inBot = c.x >= BOT.x0 && c.x <= BOT.x1 && tt >= BOT.t0 && tt <= BOT.t1;
+      const vdes = inBot ? VB : VF;
+      let nx = c.x + vdes * DT;
+      if (i > 0 && cur[i-1].x >= 0) nx = Math.min(nx, Math.max(cur[i-1].x - GAP, c.x));
+      c.x = nx;
+      c.pts.push([tt, c.x]);
+    }
+  }
+  cur.forEach(c => { if (c.pts.length > 1) trajs.push(c.pts.filter(p => p[1] <= X_MAX + 60)); });
+})();
+
+// ── region A: parallelogram [t0,t1] × [x0,x1] sheared by speed w ────
+// membership: t0 ≤ t ≤ t1  and  x0 ≤ x − w·(t − t0) ≤ x1
+let A = { t0: 40, t1: 75, x0: 550, x1: 1150, w: 0 };
+let preset = 'rect';
+
+function clipSeg(p, q2){
+  // parametric clip of segment p→q2 (each [t,x]) against region A; returns [u0,u1] or null
+  let u0 = 0, u1 = 1;
+  const dt = q2[0] - p[0], dx = q2[1] - p[1];
+  // constraints as g(u) = a·u + b ≥ 0
+  const cons = [
+    [ dt, p[0] - A.t0 ],                                   // t ≥ t0
+    [ -dt, A.t1 - p[0] ],                                  // t ≤ t1
+    [ dx - A.w * dt, (p[1] - A.w * (p[0] - A.t0)) - A.x0 ],// ξ ≥ x0
+    [ -(dx - A.w * dt), A.x1 - (p[1] - A.w * (p[0] - A.t0)) ] // ξ ≤ x1
+  ];
+  for (const [a, b] of cons) {
+    if (Math.abs(a) < 1e-12) { if (b < 0) return null; continue; }
+    const u = -b / a;
+    if (a > 0) u0 = Math.max(u0, u); else u1 = Math.min(u1, u);
+    if (u0 > u1) return null;
+  }
+  return [u0, u1];
+}
+
+function measure(){
+  let tA = 0, dA = 0, touched = 0;
+  const clipped = [];   // for drawing
+  trajs.forEach(tr => {
+    let touch = false;
+    for (let i = 1; i < tr.length; i++) {
+      const r = clipSeg(tr[i-1], tr[i]);
+      if (!r) continue;
+      const [u0, u1] = r;
+      const ddt = (tr[i][0] - tr[i-1][0]) * (u1 - u0);
+      const ddx = (tr[i][1] - tr[i-1][1]) * (u1 - u0);
+      if (ddt <= 0 && ddx <= 0) continue;
+      tA += ddt; dA += ddx; touch = true;
+      clipped.push([
+        [tr[i-1][0] + (tr[i][0]-tr[i-1][0])*u0, tr[i-1][1] + (tr[i][1]-tr[i-1][1])*u0],
+        [tr[i-1][0] + (tr[i][0]-tr[i-1][0])*u1, tr[i-1][1] + (tr[i][1]-tr[i-1][1])*u1]
+      ]);
+    }
+    if (touch) touched++;
+  });
+  const area = (A.t1 - A.t0) * (A.x1 - A.x0);   // shear preserves area
+  return { tA, dA, area, touched, clipped };
+}
+
+// ── canvas ──────────────────────────────────────────────────────────
+const C = el('tsd'), cx = C.getContext('2d');
+const W = C.width, H = C.height, P = { l: 62, r: 16, t: 30, b: 46 };
+const pw = W - P.l - P.r, ph = H - P.t - P.b;
+const SX = t => P.l + t / T_MAX * pw;
+const SY = x => P.t + ph - x / X_MAX * ph;
+const invT = px => (px - P.l) / pw * T_MAX;
+const invX = py => (P.t + ph - py) / ph * X_MAX;
+
+function regionPoly(){
+  const dw = A.w * (A.t1 - A.t0);
+  return [ [A.t0, A.x0], [A.t0, A.x1], [A.t1, A.x1 + dw], [A.t1, A.x0 + dw] ];
+}
+
+function draw(){
+  cx.clearRect(0, 0, W, H);
+  cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // grid + axes
+  cx.strokeStyle = '#eef0f4'; cx.lineWidth = 1;
+  cx.fillStyle = '#9aa1ad'; cx.font = '11px ' + SANS;
+  for (let t = 0; t <= T_MAX; t += 20) {
+    cx.beginPath(); cx.moveTo(SX(t), P.t); cx.lineTo(SX(t), P.t + ph); cx.stroke();
+    cx.textAlign = 'center'; cx.fillText(t + ' s', SX(t), H - 24);
+  }
+  for (let x = 0; x <= X_MAX; x += 400) {
+    cx.beginPath(); cx.moveTo(P.l, SY(x)); cx.lineTo(P.l + pw, SY(x)); cx.stroke();
+    cx.textAlign = 'right'; cx.fillText(x, P.l - 6, SY(x) + 4);
+  }
+  cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1.4; cx.strokeRect(P.l, P.t, pw, ph);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS;
+  cx.textAlign = 'center'; cx.fillText('time t (s)', P.l + pw / 2, H - 6);
+  cx.save(); cx.translate(15, P.t + ph / 2); cx.rotate(-Math.PI / 2); cx.fillText('position x (ft)', 0, 0); cx.restore();
+
+  // bottleneck box
+  cx.fillStyle = 'rgba(180,83,9,0.10)';
+  cx.fillRect(SX(BOT.t0), SY(BOT.x1), SX(BOT.t1) - SX(BOT.t0), SY(BOT.x0) - SY(BOT.x1));
+  cx.fillStyle = '#b45309'; cx.font = '600 10px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('temporary bottleneck', SX(BOT.t0) + 4, SY(BOT.x1) - 4);
+
+  // trajectories (gray)
+  cx.strokeStyle = '#aeb7c4'; cx.lineWidth = 1.4; cx.lineJoin = 'round';
+  trajs.forEach(tr => {
+    cx.beginPath();
+    tr.forEach((p, i) => { const x = SX(p[0]), y = SY(p[1]); if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y); });
+    cx.stroke();
+  });
+
+  const m = measure();
+
+  // region A
+  const poly = regionPoly();
+  cx.beginPath();
+  poly.forEach((p, i) => { const x = SX(p[0]), y = SY(p[1]); if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y); });
+  cx.closePath();
+  cx.fillStyle = 'rgba(20,145,155,0.10)'; cx.fill();
+  cx.strokeStyle = '#14919b'; cx.lineWidth = 2; cx.stroke();
+  cx.fillStyle = '#0f7b82'; cx.font = '700 14px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('A', SX(poly[1][0]) + 6, SY(poly[1][1]) + 18);
+
+  // clipped trajectory pieces (teal, thicker)
+  cx.strokeStyle = '#0e7c86'; cx.lineWidth = 3;
+  m.clipped.forEach(([a, b]) => {
+    cx.beginPath(); cx.moveTo(SX(a[0]), SY(a[1])); cx.lineTo(SX(b[0]), SY(b[1])); cx.stroke();
+  });
+
+  // corner handles (only the two un-sheared corners + two sheared)
+  cx.fillStyle = '#0f7b82';
+  poly.forEach(p => { cx.fillRect(SX(p[0]) - 5, SY(p[1]) - 5, 10, 10); });
+
+  // title
+  cx.fillStyle = '#1f2937'; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('drag A to move · drag a corner to resize · teal = trajectory pieces inside A (they are d(A) and t(A))', P.l, 18);
+
+  updateCards(m);
+}
+
+function fmt(v, d){ return v.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d }); }
+function updateCards(m){
+  el('cArea').innerHTML = fmt(m.area, 0) + '<small> ft·s</small>';
+  el('cT').innerHTML = fmt(m.tA, 1) + '<small> veh·s</small>';
+  el('cD').innerHTML = fmt(m.dA, 0) + '<small> veh·ft</small>';
+  const k = m.tA / m.area;           // veh per ft
+  const q = m.dA / m.area;           // veh per s
+  const v = m.tA > 0 ? m.dA / m.tA : 0;
+  el('cK').innerHTML = fmt(k * 5280, 1) + '<small> veh/mi</small>';
+  el('cQ').innerHTML = fmt(q * 3600, 0) + '<small> veh/hr</small>';
+  el('cV').innerHTML = m.tA > 0 ? fmt(MPH(v), 1) + '<small> mph</small>' : '—';
+  el('identity').textContent = m.tA > 0
+    ? `q = k·v exact:  ${fmt(k*5280,1)} veh/mi × ${fmt(MPH(v),1)} mph = ${fmt(k*5280*MPH(v),0)} = q ✓`
+    : 'q = k·v exact — move A onto some trajectories';
+  el('conv1').textContent = m.touched + ' vehicles';
+  // conventional comparison per preset
+  const tSpan = A.t1 - A.t0, xSpan = A.x1 - A.x0;
+  if (preset === 'photo') {
+    el('convTitle2').textContent = 'photo: k = n/L (Eq. 4.1)';
+    el('conv2').textContent = fmt(m.touched / (xSpan / 5280), 1) + ' veh/mi';
+  } else if (preset === 'detector') {
+    el('convTitle2').textContent = 'detector: q = m/T';
+    el('conv2').textContent = fmt(m.touched / tSpan * 3600, 0) + ' veh/hr';
+  } else if (preset === 'mov') {
+    el('convTitle2').textContent = 'observer travels at w';
+    el('conv2').textContent = fmt(A.w * 1, 0) + ' mph';
+  } else {
+    el('convTitle2').textContent = 'region dimensions';
+    el('conv2').textContent = fmt(xSpan, 0) + ' ft × ' + fmt(tSpan, 0) + ' s';
+  }
+}
+
+// ── interaction: move / resize with pointer ─────────────────────────
+let drag = null;
+function corners(){ return regionPoly().map(p => [SX(p[0]), SY(p[1])]); }
+function inPoly(px, py){
+  const t = invT(px), x = invX(py);
+  const xi = x - A.w * (t - A.t0);
+  return t >= A.t0 && t <= A.t1 && xi >= A.x0 && xi <= A.x1;
+}
+C.addEventListener('pointerdown', e => {
+  const r = C.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
+  const cs = corners();
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(px - cs[i][0]) < 12 && Math.abs(py - cs[i][1]) < 12) {
+      drag = { mode: 'corner', i, px, py }; C.setPointerCapture(e.pointerId); return;
+    }
+  }
+  if (inPoly(px, py)) { drag = { mode: 'move', px, py, A0: { ...A } }; C.setPointerCapture(e.pointerId); }
+});
+C.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const r = C.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
+  const t = invT(px), x = invX(py);
+  if (drag.mode === 'move') {
+    const dt = t - invT(drag.px), dx = x - invX(drag.py);
+    let t0 = drag.A0.t0 + dt, t1 = drag.A0.t1 + dt;
+    let x0 = drag.A0.x0 + dx, x1 = drag.A0.x1 + dx;
+    const tw = t1 - t0, xw = x1 - x0;
+    t0 = Math.max(0, Math.min(t0, T_MAX - tw)); t1 = t0 + tw;
+    x0 = Math.max(0, Math.min(x0, X_MAX - xw)); x1 = x0 + xw;
+    A.t0 = t0; A.t1 = t1; A.x0 = x0; A.x1 = x1;
+  } else {
+    // corners: 0=(t0,x0) 1=(t0,x1) 2=(t1,x1+dw) 3=(t1,x0+dw)
+    const xi = x - A.w * (t - A.t0);
+    if (drag.i === 0) { A.t0 = Math.min(t, A.t1 - 1); A.x0 = Math.max(0, Math.min(xi, A.x1 - 20)); }
+    if (drag.i === 1) { A.t0 = Math.min(t, A.t1 - 1); A.x1 = Math.min(X_MAX, Math.max(xi, A.x0 + 20)); }
+    if (drag.i === 2) { A.t1 = Math.max(t, A.t0 + 1); A.x1 = Math.min(X_MAX, Math.max(xi, A.x0 + 20)); }
+    if (drag.i === 3) { A.t1 = Math.max(t, A.t0 + 1); A.x0 = Math.max(0, Math.min(xi, A.x1 - 20)); }
+    A.t0 = Math.max(0, A.t0); A.t1 = Math.min(T_MAX, A.t1);
+  }
+  setPreset(null);
+  draw();
+});
+const endDrag = () => { drag = null; };
+C.addEventListener('pointerup', endDrag);
+C.addEventListener('pointercancel', endDrag);
+
+// ── presets ─────────────────────────────────────────────────────────
+const NOTES = {
+  rect: 'A road section of length L watched for time T. k(A) is then the time-average of the photo densities (Eq. 4.5); q(A) is the space-average of the detector flows (Eq. 4.9).',
+  photo: 'A thin vertical strip ≈ an instantaneous photograph. k(A) → n/L, and v(A) → the arithmetic mean of the speeds seen in the photo (Eq. 4.13) — the classic space-mean speed. Slide it across the shockwave and watch k jump.',
+  detector: 'A thin horizontal strip ≈ a point detector watching for T. q(A) → m/T, and v(A) → the harmonic mean of the passing speeds (Eq. 4.16) — always ≤ the arithmetic (time-mean) speed.',
+  mov: 'A parallelogram travelling at observer speed w. Set w near the backward wave speed (≈ −6 mph) and the region rides along the shockwave: traffic inside looks stationary. This is the seed of moving-observer methods and of wave analysis in §4.3.'
+};
+function setPreset(p){
+  preset = p || 'custom';
+  document.querySelectorAll('.preset').forEach(b => b.classList.toggle('on', b.dataset.p === preset));
+  el('presetNote').textContent = NOTES[preset] || 'Custom region — every quantity recomputes live from the clipped trajectory pieces (drawn in teal).';
+}
+document.querySelectorAll('.preset').forEach(b => b.addEventListener('click', () => {
+  const p = b.dataset.p;
+  if (p === 'rect')     { A = { t0: 40, t1: 75, x0: 550, x1: 1150, w: A.w }; }
+  if (p === 'photo')    { A = { t0: 44.6, t1: 45.4, x0: 200, x1: 1800, w: 0 }; el('wSlider').value = 0; }
+  if (p === 'detector') { A = { t0: 20, t1: 100, x0: 990, x1: 1010, w: 0 }; el('wSlider').value = 0; }
+  if (p === 'mov')      { A = { t0: 30, t1: 80, x0: 700, x1: 1100, w: -6 * 5280 / 3600 }; el('wSlider').value = -6; }
+  el('wVal').textContent = Math.round(el('wSlider').value) + ' mph';
+  setPreset(p);
+  draw();
+}));
+el('wSlider').addEventListener('input', () => {
+  A.w = parseFloat(el('wSlider').value) * 5280 / 3600;   // mph → ft/s
+  el('wVal').textContent = el('wSlider').value + ' mph';
+  if (preset !== 'mov') setPreset(null);
+  draw();
+});
+
+setPreset('rect');
+draw();
+
+// chapter navigation drawer
+(function(){
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>
