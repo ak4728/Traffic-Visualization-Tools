@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fundamental Diagrams — Traffic Modeling Training</title>
+<title>Ch.4 — Time-Independent Models: Fundamental Diagrams</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
@@ -27,6 +27,13 @@
   .stats { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
   .stat-chip { border-radius: 8px; padding: 5px 12px; font-size: 0.82em; font-weight: 600; color: #fff; }
   .readout { text-align: center; color: #6b7280; font-size: 0.82em; margin-top: 8px; }
+  .deriv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 10px 13px; font-size: 0.86em; color: #374151; line-height: 1.6; }
+  .eqbox b { color: #0f7b82; }
+  .eqbox .eq { display: block; text-align: center; font-size: 1.05em; margin: 6px 0; color: #1f2937; font-weight: 600; }
+  .eqbox .live { color: #0e6e63; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .note { font-size: 0.93em; color: #6b7280; }
+  @media (max-width: 1100px){ .deriv { grid-template-columns: 1fr; } }
   .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
   .help .tip { display: none; position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 340px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
   .help:hover .tip { display: block; }
@@ -62,17 +69,18 @@
   <a href="Optimization.html">Optimization &amp; Assignment</a>
   <h4>Ch. 4 — Traffic Flow Theory</h4>
   <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
-  <h4>Ch. X — Fundamental Diagrams</h4>
-  <a href="FundamentalDiagrams.html">Fundamental Diagrams — I-25 Data</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
 </nav>
 
 <div class="container">
   <header>
-    <h1>Fundamental Diagrams</h1>
-    <span class="subtitle">Ch. X — speed, flow &amp; density on I-25 NB (CDOT station 000501, 672 hourly obs, Aug 2026) — drag the model parameters and watch R²
+    <h1>Time-Independent Models — Fundamental Diagrams</h1>
+    <span class="subtitle">Ch. 4 §4.2 — stationary traffic states on I-25 NB (CDOT station 000501, 672 hourly obs, Aug 2026) — drag the model parameters and watch R²
       <span class="help">?<span class="tip">
+        Daganzo §4.2.1: if traffic is stationary, its states (q, k, v) lie on <i>one curve</i> — a property of the road, not of the traffic. k (or v) parameterizes the curve; q cannot, because every flow occurs at two speeds. The upper branch is <b>unrestricted</b> flow, the lower is <b>queued (restricted)</b> — caused from downstream.<br><br>
         Each dot is one real hour on I-25 NB south of 6th Ave, Denver. Density is derived as k = q/u.
-        <b>Blue</b> = uncongested hours, <b>red</b> = congested (queue discharge) — note how they form the two branches of every diagram.<br><br>
+        <b>Blue</b> = unrestricted hours, <b>red</b> = queued (queue discharge) — note how they form the two branches of every diagram.<br><br>
+        Graphical readings (Fig. 4.4): on v–k, flow = <i>area</i> of the rectangle to the origin; on q–k, speed = <i>slope of the ray</i> from the origin (and the curve's own slope w is a wave speed); on v–q, 1/k = slope of the ray.<br><br>
         <b>Greenshields (1935)</b>: linear u = u<sub>f</sub>(1 − k/k<sub>j</sub>) → parabolic q-k. Capacity = u<sub>f</sub>k<sub>j</sub>/4 at k = k<sub>j</sub>/2.<br>
         <b>Greenberg (1959)</b>: u = u<sub>c</sub>·ln(k<sub>j</sub>/k) — good in congestion, blows up (u→∞) as k→0.<br>
         <b>Underwood (1961)</b>: u = u<sub>f</sub>·e<sup>−k/k<sub>c</sub></sup> — good in free flow, never reaches jam.<br><br>
@@ -92,6 +100,25 @@
     <div class="controls" id="params"></div>
     <div class="stats" id="stats"></div>
     <div class="readout" id="readout"></div>
+    <div class="deriv">
+      <div class="eqbox">
+        <b>Greenshields (1935) — the derivation, live from your sliders</b> <span class="note">(Daganzo Eqs. 4.19–4.21)</span><br>
+        <b>Postulate</b> (§4.2.1): stationary states lie on one curve, a property of the road itself. Assume the simplest v–k relation — a straight line between the two observable anchors, free-flow speed u<sub>f</sub> and jam density k<sub>j</sub>:
+        <span class="eq">v(k) = u<sub>f</sub>·(1 − k/k<sub>j</sub>)  =  <span class="live" id="dvEq">—</span>&nbsp;&nbsp;(Eq. 4.19)</span>
+        Now apply the identity that Edie's definitions make <i>exact</i> for stationary regions (§4.1): <b>q = k·v</b>. Substituting v(k):
+        <span class="eq">q(k) = u<sub>f</sub>·k·(1 − k/k<sub>j</sub>)&nbsp;&nbsp;(Eq. 4.21)</span>
+        — a parabola in k. Set dq/dk = u<sub>f</sub>(1 − 2k/k<sub>j</sub>) = 0:
+        <span class="eq">k₀ = k<sub>j</sub>/2 = <span class="live" id="dvKo">—</span> · v₀ = u<sub>f</sub>/2 = <span class="live" id="dvVo">—</span> · q<sub>max</sub> = u<sub>f</sub>k<sub>j</sub>/4 = <span class="live" id="dvQm">—</span></span>
+        Substituting k = q/v instead gives the v–q parabola, q = k<sub>j</sub>·v·(1 − v/u<sub>f</sub>) (Eq. 4.20): the <b>unrestricted branch</b> is v &gt; u<sub>f</sub>/2, the <b>queued branch</b> v &lt; u<sub>f</sub>/2. The ▲ markers on all three charts are this capacity point.
+      </div>
+      <div class="eqbox" style="border-left-color:#b45309">
+        <b>Reality check — why Greenshields is "of historical interest"</b><br>
+        <span class="note">
+        The parabola is forced to be symmetric: capacity must sit exactly at k₀/k<sub>j</sub> = 1/2. Daganzo notes real freeways have <b>k₀/k<sub>j</sub> ≈ 1/6</b> — flow rises steeply to capacity, then falls off gradually. You can see it in the I-25 dots on the q–k chart: the apex sits near k ≈ 150–190 veh/mi, while fitting the queued branch pushes k<sub>j</sub> toward 450+ — a ratio near 1/3, not 1/2. Drag u<sub>f</sub> and k<sub>j</sub>: you can match <i>either</i> the apex <i>or</i> the queued tail, never both. That tension is the whole argument for asymmetric shapes (and for the triangular diagram used in traffic dynamics, §4.3–4.4).<br><br>
+        Two more representations complete Fig. 4.4: <b>pace vs. flow</b> (p = 1/v — the ancestor of Chapter 3's volume-delay functions, which keep only the unrestricted branch and ignore the queued one — a known source of trouble in congested networks) and <b>speed vs. spacing</b> (s = 1/k — the car-following view from Chapter 1, where capacity is the slope of the tangent ray from the origin).
+        </span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -255,11 +282,22 @@ function drawChart(ch){
     }
     cx.stroke();
   });
+  // Greenshields capacity point (k0 = kj/2, v0 = uf/2, qm = uf·kj/4) as ▲
+  if(MODELS.gs.on){
+    const uf=MODELS.gs.params.uf.val, kj=MODELS.gs.params.kj.val, qm=uf*kj/4;
+    const pt = ch.id==='cUQ' ? [qm, uf/2] : ch.id==='cQK' ? [kj/2, qm] : [kj/2, uf/2];
+    const mx=s.X(pt[0]), my=s.Y(pt[1]);
+    cx.fillStyle='#40663c';
+    cx.beginPath(); cx.moveTo(mx, my-7); cx.lineTo(mx-6, my+5); cx.lineTo(mx+6, my+5); cx.closePath(); cx.fill();
+    cx.strokeStyle='#fff'; cx.lineWidth=1.2; cx.stroke();
+    cx.font='700 11px '+SANS; cx.textAlign='left'; cx.fillStyle='#40663c';
+    cx.fillText(ch.id==='cQK' ? 'qm = '+Math.round(qm).toLocaleString() : 'capacity pt', mx+9, my-2);
+  }
   cx.restore();
   // legend (top-right, compact)
   let ly=P.t+14; cx.font='600 11px '+SANS; cx.textAlign='right';
-  cx.fillStyle='rgba(44,83,120,0.85)'; cx.fillText('● uncongested', C.width-P.r-8, ly); ly+=15;
-  cx.fillStyle='rgba(164,22,26,0.85)'; cx.fillText('● congested', C.width-P.r-8, ly); ly+=15;
+  cx.fillStyle='rgba(44,83,120,0.85)'; cx.fillText('● unrestricted branch', C.width-P.r-8, ly); ly+=15;
+  cx.fillStyle='rgba(164,22,26,0.85)'; cx.fillText('● queued branch', C.width-P.r-8, ly); ly+=15;
   Object.values(MODELS).forEach(m=>{
     if(!m.on) return;
     cx.fillStyle=m.col; cx.fillText('— '+m.name, C.width-P.r-8, ly); ly+=15;
@@ -314,6 +352,12 @@ function drawStats(){
   el('readout').textContent =
     `672 real hours · density derived as k = q/u · R² scores each model's predicted speed at the observed densities`+
     (gs.on ? ` · Greenshields: u = ${gs.params.uf.val}·(1 − k/${gs.params.kj.val}), capacity at k = ${Math.round(gs.params.kj.val/2)} veh/mi` : '');
+  // live values in the derivation panel
+  const gp=gs.params;
+  el('dvEq').textContent = gp.uf.val+' · (1 − k/'+gp.kj.val+') mph';
+  el('dvKo').textContent = Math.round(gp.kj.val/2)+' veh/mi';
+  el('dvVo').textContent = (gp.uf.val/2).toFixed(1)+' mph';
+  el('dvQm').textContent = Math.round(gp.uf.val*gp.kj.val/4).toLocaleString()+' veh/hr';
 }
 function drawAll(){
   CHARTS.forEach(drawChart);
