@@ -7,6 +7,10 @@ Contents.txt
 data/
 traffic-modeling-training/Volume Speed Data/
 
+# Reference book (copyrighted) — never committed
+traffic-modeling-training/Daganzo*.pdf
+*.pdf
+
 # Python
 __pycache__/
 *.py[cod]
