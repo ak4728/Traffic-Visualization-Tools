@@ -645,15 +645,19 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     L5:{pts:['b','D1'], name:'b→D1'},
     L6:{pts:['b','D2'], name:'b→D2'}
   };
-  // BPR middle routes
-  const RT={ N:{tf:5, c:900}, S:{tf:6, c:1100} };
+  // BPR middle routes (freeway scale: two parallel 2-lane roadways)
+  const RT={ N:{tf:5, c:3600}, S:{tf:6, c:4400} };
   const bpr=(tf,v,c)=>tf*(1+0.15*Math.pow(v/c,4));
 
   // hidden true OD + counted links generated from it
-  const TRUE={ '11':600, '12':300, '21':200, '22':500 };  // O1D1, O1D2, O2D1, O2D2
-  const SEED={ '11':400, '12':400, '21':350, '22':300 };
+  const TRUE={ '11':2400, '12':1200, '21':800, '22':2000 };  // O1D1, O1D2, O2D1, O2D2
+  const SEED={ '11':1600, '12':1600, '21':1400, '22':1200 };
   let X={}, it=0, rmseHist=[], lastSplit=0.5;
   let counts={};
+  // one persistent %RMSE curve per method, so runs can be compared directly
+  let histBy={ single:[], multi:[], grad:[] };
+  const METHOD_COLS={ single:'#b45309', multi:'#0e7c86', grad:'#4f3f5c' };
+  const METHOD_SHORT={ single:'Single Path', multi:'Multiple Paths', grad:'Gradient' };
 
   function assign(x){
     const F=x['11']+x['12']+x['21']+x['22'];
@@ -748,6 +752,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     it++;
     const a2=assign(X);
     rmseHist.push(rmse(a2.vols));
+    histBy[method]=rmseHist;
   }
 
   function step(){ stopRun(); iterate(); render(); }
@@ -764,17 +769,24 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       iterate(); render();
     }, 1000/parseFloat(el('odSpd').value));
   }
-  function reset(){
+  // softReset: back to the seed matrix but KEEP other methods' curves
+  // (method switches call this, so Single vs Multiple can be compared);
+  // the Reset button wipes the comparison too
+  function softReset(){
     stopRun();
     X={...SEED}; it=0; rmseHist=[]; lastDiag={method:null, per:{}, F:0, eta:0};
     const a=assign(X); rmseHist.push(rmse(a.vols)); lastSplit=a.s;
     COUNTED.forEach(l=>{ lastDiag.F+=(a.vols[l]-counts[l])**2; });
     render();
   }
+  function reset(){
+    histBy={ single:[], multi:[], grad:[] };
+    softReset();
+  }
 
   const METHOD_INFO={
-    single:'<b>Single Path</b> — after each assignment, every O-D pair looks only at its <i>current shortest path</i>. For each counted link on that path it computes count ÷ assigned volume, averages the ratios, and scales its flow by that factor (damped, ^0.7 — shown as ×f in the matrix). Simple and fast, but pairs sharing the shortest route all move together, so it can stall when paths overlap.',
-    multi:'<b>Multiple Paths</b> — the same ratio idea, but over <i>all used paths</i>, each weighted by its flow share (here the N/S split s). Both routes now pull on every estimate, which usually reaches a lower %RMSE than Single Path. This is the recommended default when the seed matrix is uncertain.',
+    single:'<b>Single Path</b> — after each assignment, every O-D pair looks only at its <i>current shortest path</i> — on the network the dashed halo marks the one middle route being corrected from, and the gray ✕ chip marks the route whose count is <i>completely ignored</i> this iteration. For each counted link on that path it computes count ÷ assigned volume, averages the ratios, and scales its flow by that factor (damped, ^0.7 — shown as ×f in the matrix). Simple and fast, but the ignored route\'s error can only be fixed indirectly, so it converges slower and can stall — run it, then switch to Multiple Paths: both %RMSE curves stay on the convergence chart for comparison.',
+    multi:'<b>Multiple Paths</b> — the same ratio idea, but over <i>all used paths</i>: both middle routes carry a ✓ chip with their weight (the live N/S split s and 1−s), and both counts pull on every estimate at once. That is the whole difference from Single Path — no counted link is ever ignored — and it is why its %RMSE curve (teal on the convergence chart, next to Single Path\'s amber) usually drops faster and further. Recommended default when the seed matrix is uncertain.',
     grad:'<b>Gradient</b> — minimizes the objective <b>F = Σ (volume − count)²</b> over the counted links. Each pair\'s gradient <b>∂F/∂x = Σ 2(v−cnt)</b> summed over the links it uses (the N/S links weighted by split s), and flows step downhill: <b>x ← max(0, x − η·∂F/∂x)</b> with an adaptive step η. The <b>∇ and Δ shown in each matrix cell</b> are this iteration\'s gradient and the applied change; the F card tracks the objective falling. Because updates are additive and gentle, Gradient is the method of choice when you <i>trust the seed matrix</i>.'
   };
   function explain(){ el('odExplain').innerHTML=METHOD_INFO[el('odMethod').value]; }
@@ -800,7 +812,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       }
       linkCols[l]=col;
       cx.strokeStyle=col;
-      cx.lineWidth=Math.max(3, v/70);
+      cx.lineWidth=Math.max(3, v/280);
       cx.lineJoin='round'; cx.lineCap='round';
       cx.beginPath();
       const ps=L.pts.map(pt);
@@ -808,6 +820,48 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       for(let i=1;i<ps.length;i++) cx.lineTo(ps[i][0],ps[i][1]);
       cx.stroke();
     });
+    // pass 1.5: show which middle route(s) the method actually listens to —
+    // Single Path corrects only from the current shortest route (dashed halo);
+    // Multiple Paths weights both routes by the live split
+    const method=el('odMethod').value;
+    function halo(l, col){
+      const ps=LINKS[l].pts.map(pt);
+      cx.save();
+      cx.strokeStyle=col; cx.globalAlpha=0.3; cx.setLineDash([12,8]);
+      cx.lineWidth=Math.max(3, a.vols[l]/280)+9; cx.lineJoin='round'; cx.lineCap='round';
+      cx.beginPath();
+      cx.moveTo(ps[0][0],ps[0][1]);
+      for(let i=1;i<ps.length;i++) cx.lineTo(ps[i][0],ps[i][1]);
+      cx.stroke();
+      cx.restore();
+    }
+    function chip(x,y,txt,bg,fg){
+      cx.font='700 12px '+SANS;
+      const w2=cx.measureText(txt).width;
+      cx.save();
+      cx.shadowColor='rgba(16,24,40,0.14)'; cx.shadowBlur=5; cx.shadowOffsetY=1;
+      cx.fillStyle=bg;
+      cx.beginPath(); cx.roundRect(x-w2/2-8, y-13, w2+16, 19, 9); cx.fill();
+      cx.restore();
+      cx.fillStyle=fg; cx.textAlign='center';
+      cx.fillText(txt, x, y+1);
+    }
+    let methodChips=[];
+    if(method==='single'){
+      const short = a.tN<=a.tS ? 'LN' : 'LS';
+      const ignored = short==='LN' ? 'LS' : 'LN';
+      halo(short, '#0e7c86');
+      methodChips=[
+        [WPN[0], WPN[1]-58, short==='LN'?'✓ shortest — the ONLY route Single Path corrects from':'✕ ignored by Single Path (its count pulls nothing)', short==='LN'?'#e3f4f2':'#f3f4f6', short==='LN'?'#0e6e63':'#8a94a3'],
+        [WPS[0], WPS[1]+82,short==='LS'?'✓ shortest — the ONLY route Single Path corrects from':'✕ ignored by Single Path (its count pulls nothing)', short==='LS'?'#e3f4f2':'#f3f4f6', short==='LS'?'#0e6e63':'#8a94a3']
+      ];
+    } else if(method==='multi'){
+      halo('LN', '#0e7c86'); halo('LS', '#0e7c86');
+      methodChips=[
+        [WPN[0], WPN[1]-58, '✓ weighted w = '+(a.s*100).toFixed(0)+'% — both routes pull every estimate', '#e3f4f2', '#0e6e63'],
+        [WPS[0], WPS[1]+82,'✓ weighted w = '+((1-a.s)*100).toFixed(0)+'% — both routes pull every estimate', '#e3f4f2', '#0e6e63']
+      ];
+    }
     // pass 2: moving vehicles (colored by O-D pair)
     odCars.forEach(c=>{
       const [x,y]=carXY2(c);
@@ -836,6 +890,8 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       const tSfx = l==='LN' ? ' · t = '+a.tN.toFixed(2)+' min' : l==='LS' ? ' · t = '+a.tS.toFixed(2)+' min' : '';
       cx.fillText(L.name+(counted?' — vol / count':' — no count')+tSfx, mid[0], mid[1]+off+19);
     });
+    // method chips on top of everything
+    methodChips.forEach(c2=>chip(c2[0],c2[1],c2[2],c2[3],c2[4]));
     // O-D colour legend
     let lx=20;
     cx.font='600 12px '+SANS; cx.textAlign='left';
@@ -869,10 +925,12 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     qx.setTransform(2,0,0,2,0,0);
     const w=260,h=150,L=30,R=8,T=18,B=20;
     const pw=w-L-R, ph=h-T-B;
-    const maxI=Math.max(10, rmseHist.length);
-    const maxR=Math.max(5, Math.ceil(Math.max(...rmseHist)/5)*5);
+    const allR=[...rmseHist];
+    let maxI=Math.max(10, rmseHist.length);
+    Object.values(histBy).forEach(h=>{ allR.push(...h); maxI=Math.max(maxI, h.length); });
+    const maxR=Math.max(5, Math.ceil(Math.max(1,...allR)/5)*5);
     qx.font='600 8px '+SANS; qx.fillStyle='#9aa1ad'; qx.textAlign='left';
-    qx.fillText('CONVERGENCE — %RMSE vs iteration', 8, 11);
+    qx.fillText('CONVERGENCE — %RMSE — curves persist per method: run each & compare', 8, 11);
     qx.fillStyle='#9aa1ad'; qx.font='italic 7px '+SANS;
     qx.textAlign='left'; qx.fillText('y: %RMSE', L+4, T+9);
     qx.textAlign='right'; qx.fillText('x: iteration →', L+pw-4, T+ph-4);
@@ -889,13 +947,33 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     qx.strokeStyle='#1d7a6f'; qx.setLineDash([4,3]);
     qx.beginPath(); qx.moveTo(L,yThr); qx.lineTo(L+pw,yThr); qx.stroke();
     qx.setLineDash([]);
-    qx.strokeStyle='#c1121f'; qx.lineWidth=2; qx.lineJoin='round';
-    qx.beginPath();
-    rmseHist.forEach((r,i)=>{
-      const x=L+(i/Math.max(1,maxI-1))*pw, y=T+ph-(Math.min(r,maxR)/maxR)*ph;
-      if(i===0) qx.moveTo(x,y); else qx.lineTo(x,y);
+    // one curve per method (current method drawn on top, thicker)
+    const curM=el('odMethod').value;
+    const order=Object.keys(histBy).filter(m=>m!==curM).concat([curM]);
+    order.forEach(m=>{
+      const h = m===curM ? rmseHist : histBy[m];
+      if(!h || h.length<1) return;
+      const cur = m===curM;
+      qx.strokeStyle=METHOD_COLS[m]; qx.lineWidth=cur?2.2:1.3;
+      qx.globalAlpha=cur?1:0.65; qx.lineJoin='round';
+      qx.beginPath();
+      h.forEach((r,i)=>{
+        const x=L+(i/Math.max(1,maxI-1))*pw, y=T+ph-(Math.min(r,maxR)/maxR)*ph;
+        if(i===0) qx.moveTo(x,y); else qx.lineTo(x,y);
+      });
+      qx.stroke();
+      qx.globalAlpha=1;
     });
-    qx.stroke();
+    // legend with each method's latest %RMSE
+    let ly2=T+8;
+    qx.font='600 7px '+SANS; qx.textAlign='right';
+    Object.keys(histBy).forEach(m=>{
+      const h = m===curM ? rmseHist : histBy[m];
+      if(!h || h.length<1) return;
+      qx.fillStyle=METHOD_COLS[m];
+      qx.fillText(`${m===curM?'▶ ':''}${METHOD_SHORT[m]}: ${h[h.length-1].toFixed(1)}%`, L+pw-3, ly2);
+      ly2+=10;
+    });
   }
 
   function odTable(){
@@ -943,7 +1021,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   el('odStep').addEventListener('click', step);
   el('odRun').addEventListener('click', run);
   el('odReset').addEventListener('click', reset);
-  el('odMethod').addEventListener('change', ()=>{ explain(); reset(); });
+  el('odMethod').addEventListener('change', ()=>{ explain(); softReset(); });
   el('odIter').addEventListener('input', ()=>el('odIterVal').textContent=el('odIter').value);
   el('odConv').addEventListener('input', ()=>{ el('odConvVal').textContent=parseFloat(el('odConv').value).toFixed(1)+'%'; render(); });
   el('odSpd').addEventListener('input', ()=>{
@@ -998,7 +1076,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const a=assign(X);
     // spawn per O-D pair at the CURRENT estimated rate (NegBin, bursty)
     Object.keys(X).forEach(od=>{
-      const n=rNegBin2(X[od]/3600*sdt);
+      const n=rNegBin2(X[od]/14400*sdt);   // 1 drawn car per 4 real veh
       for(let i2=0;i2<n && odCars.length<260;i2++){
         odCars.push({od, phase:0, u:Math.random()*0.05, mid: Math.random()<a.s?'N':'S'});
       }
