@@ -478,18 +478,14 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const c=r/5/p;
     return (c<1.5?1:c<3.5?2:c<7.5?5:10)*p;
   }
-  function autoY(){
-    let yMax=tf();
-    Object.keys(FN).forEach(f=>{ if(FN[f].on) yMax=Math.max(yMax, evalFn(f,2)); });
-    if(obsOn) I25_OBS.forEach(o=>{ yMax=Math.max(yMax, o[1]*tf()*1.05); });
-    return Math.min(Math.ceil(yMax/2)*2, 90);
-  }
-  function ensureView(){ if(!view) view={x0:0, x1:2, y0:0, y1:autoY()}; }
+  // default view: v/c up to 1.25, travel time up to 5 min
+  const DEF_X1=1.25, DEF_Y1=5;
+  function ensureView(){ if(!view) view={x0:0, x1:DEF_X1, y0:0, y1:DEF_Y1}; }
 
   function draw(){
     const t0=tf();
-    const x0=view?view.x0:0, x1=view?view.x1:2;
-    const y0=view?view.y0:0, y1=view?view.y1:autoY();
+    const x0=view?view.x0:0, x1=view?view.x1:DEF_X1;
+    const y0=view?view.y0:0, y1=view?view.y1:DEF_Y1;
     const s=scaffold(cx,W,H,P,x0,x1,y0,y1,'v/c ratio','travel time on link (min)',niceStep(x1-x0),niceStep(y1-y0));
     cx.save();
     cx.beginPath(); cx.rect(P.l,P.t,s.pw,s.ph); cx.clip();
