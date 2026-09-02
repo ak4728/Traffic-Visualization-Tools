@@ -61,6 +61,7 @@
   <h4>Ch. 1 — Time-Space Diagrams</h4>
   <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
   <a href="DilemmaZone.html">Dilemma Zone</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 2 — Cumulative Plots</h4>
   <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
   <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
@@ -71,7 +72,6 @@
   <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
   <a href="ConservationLaw.html">The Conservation Law</a>
   <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
-  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 5 — Control</h4>
   <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
   <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
@@ -157,22 +157,26 @@ let seed = 5;
 function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
 function expo(mean){ return -Math.log(1 - rnd()) * mean; }
 
+let rampCars = [];                             // {d px-from-nose, state 'q'|'launch', born}
 function reset(){
   cars = []; simT = 0; rampQ = 0; dMain = 0; dRamp = 0; passed = 0;
+  rampCars = [];
   seed = 5;
   nextMain = 0.5; nextRampArr = expo(3600 / (+el('qr').value)); nextGreen = 0;
   // pre-populate
   for (let x = 40; x < LRD; x += 60) cars.push({ x, v: V0 * 0.95 });
   cars.sort((a, b) => b.x - a.x);           // front first
 }
+function idmA(v, s, dv){
+  s = Math.max(s, 0.01);
+  const sStar = S0 + Math.max(0, v * T + v * dv / (2 * Math.sqrt(A0 * B0)));
+  return A0 * (1 - Math.pow(v / V0, 4) - Math.pow(sStar / s, 2));
+}
 function idm(dt){
   for (let i = 0; i < cars.length; i++){
     const c2 = cars[i];
-    let s = 1e9, dv = 0;
-    if (i > 0){ s = cars[i - 1].x - c2.x - CARLEN; dv = c2.v - cars[i - 1].v; }
-    if (s <= 0) s = 0.01;
-    const sStar = S0 + Math.max(0, c2.v * T + c2.v * dv / (2 * Math.sqrt(A0 * B0)));
-    const a = A0 * (1 - Math.pow(c2.v / V0, 4) - Math.pow(sStar / s, 2));
+    const a = i > 0 ? idmA(c2.v, cars[i - 1].x - c2.x - CARLEN, c2.v - cars[i - 1].v)
+                    : idmA(c2.v, 1e9, 0);
     c2.v = Math.max(0, c2.v + a * dt);
   }
   cars.forEach(c2 => { c2.x += c2.v * dt; });
@@ -192,29 +196,46 @@ function step(dt){
       if (lastX > CARLEN + S0 + 6) cars.push({ x: 0, v: Math.min(V0, Math.max(5, lastX / T)) });
       nextMain = expo(3600 / (+el('qm').value));
     }
-    // ramp arrivals
+    // ramp arrivals: spawn at the visible foot and roll up to the queue
     nextRampArr -= h;
-    if (nextRampArr <= 0){ rampQ++; nextRampArr = expo(3600 / (+el('qr').value)); }
-    // metered release: one car per green if a merge slot exists
+    if (nextRampArr <= 0){
+      rampCars.push({ d: R_LEN - 6, state: 'q', born: simT });
+      nextRampArr = expo(3600 / (+el('qr').value));
+    }
+    // ramp car kinematics (px along the centerline, toward the nose at d = 0)
+    for (let i = 0; i < rampCars.length; i++){
+      const rc = rampCars[i];
+      const target = i === 0 ? (rc.state === 'q' ? R_STOP : 3) : Math.max(rampCars[i - 1].d + 19, R_STOP + 19 * i);
+      if (rc.d > target) rc.d = Math.max(target, rc.d - 75 * h);
+    }
+    // meter: one launch per green, from the stop bar
     nextGreen -= h;
-    if (nextGreen <= 0 && rampQ > 0){
+    if (nextGreen <= 0 && rampCars.length && rampCars[0].state === 'q' && rampCars[0].d <= R_STOP + 2){
+      rampCars[0].state = 'launch';
+      nextGreen = 60 / (+el('mr').value);
+    }
+    // launched car reaches the nose → merge only if the gap REALLY works
+    // (MOBIL-style safety: neither the new follower nor the merger would
+    // have to brake beyond a safe limit) — otherwise it yields at the nose
+    if (rampCars.length && rampCars[0].state === 'launch' && rampCars[0].d <= 4){
       let up = null, down = null;
       cars.forEach(c2 => {
         if (c2.x <= XM && (up === null || c2.x > up.x)) up = c2;
         if (c2.x > XM && (down === null || c2.x < down.x)) down = c2;
       });
-      const gapUp = up ? XM - up.x : 1e9;
-      const gapDn = down ? down.x - XM : 1e9;
-      if (gapUp > 14 && gapDn > 8){
-        const vIn = Math.min(V0 * 0.6, down ? down.v + 3 : V0 * 0.6);
-        cars.push({ x: XM, v: Math.max(8, vIn), mt: simT });   // mt: merge animation start
+      const vIn = Math.max(6, Math.min(20, down ? down.v + 2 : 16, up ? up.v + 2 : 16));
+      const gDn = down ? down.x - XM - CARLEN : 1e9;
+      const gUp = up ? XM - up.x - CARLEN : 1e9;
+      const aSelf = idmA(vIn, gDn, vIn - (down ? down.v : V0));
+      const aFoll = up ? idmA(up.v, gUp, up.v - vIn) : 0;
+      if (gDn > 4 && gUp > 4 && aFoll > -2.5 && aSelf > -3.5){
+        cars.push({ x: XM, v: vIn, mt: simT });
         cars.sort((a2, b2) => b2.x - a2.x);
-        rampQ--;
-        nextGreen = 60 / (+el('mr').value);
-      } else {
-        nextGreen = 0.4;                     // retry soon; meter stays red
+        rampCars.shift();
       }
+      // else: keep yielding at the nose until a workable gap appears
     }
+    rampQ = rampCars.length;
     idm(h);
     cars.sort((a2, b2) => b2.x - a2.x);
     // delay accumulation (veh-s): mainline shortfall from free flow + ramp queue
@@ -242,6 +263,18 @@ const W = C.width, H = C.height;
 let lastRAF = null, frame = 0;
 const XP = x => 30 + x / LRD * (W - 60);
 
+// ── ramp geometry (canvas coords), shared by physics & drawing ──────
+const RY = 110;
+const MXpx = XP(XM);
+const R_TIPL = MXpx - 54, R_TIPR = MXpx + 52;
+const R_CT = [(R_TIPL + R_TIPR) / 2, RY + 16];
+const R_FOOT = [MXpx - 300, RY + 150];
+const R_LEN = Math.hypot(R_CT[0] - R_FOOT[0], R_CT[1] - R_FOOT[1]);
+const R_UX = (R_CT[0] - R_FOOT[0]) / R_LEN, R_UY = (R_CT[1] - R_FOOT[1]) / R_LEN;
+const R_PX = R_UY * 15, R_PY = -R_UX * 15;
+const R_ANG = Math.atan2(R_CT[1] - R_FOOT[1], R_CT[0] - R_FOOT[0]);
+const R_STOP = 74;                               // stop bar distance from nose (px)
+
 function speedColor(v){
   const u = Math.max(0, Math.min(1, v / V0));
   if (u < 0.5){ const s = u / 0.5; return `rgb(${164 + 32 * s | 0},${22 + 98 * s | 0},${26 + 4 * s | 0})`; }
@@ -252,74 +285,64 @@ function draw(){
   cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
   cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
   cx.fillText('1.2 km freeway — merge at 800 m · color = speed · the meter releases one car per green', 30, 24);
-  const y = 110;
+  const y = RY;
   // ── on-ramp: tapered wedge that meets the freeway edge flush ──
-  const mx = XP(XM);
-  const foot = [mx - 300, y + 150];
-  const tipL = [mx - 54, y + 16], tipR = [mx + 52, y + 16];   // taper straddles the insertion point
-  const CT = [(tipL[0] + tipR[0]) / 2, y + 16];               // centerline tip
-  const dxr = CT[0] - foot[0], dyr = CT[1] - foot[1];
-  const lenR = Math.hypot(dxr, dyr);
-  const ux = dxr / lenR, uy = dyr / lenR;
-  const pxr = uy * 15, pyr = -ux * 15;                        // half-width, toward tipL side
-  const ang = Math.atan2(dyr, dxr);
   cx.fillStyle = '#f0f2f6';
   cx.beginPath();
-  cx.moveTo(foot[0] + pxr, foot[1] + pyr);
-  cx.lineTo(tipL[0], tipL[1]);
-  cx.lineTo(tipR[0], tipR[1]);
-  cx.lineTo(foot[0] - pxr, foot[1] - pyr);
+  cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY);
+  cx.lineTo(R_TIPL, y + 16);
+  cx.lineTo(R_TIPR, y + 16);
+  cx.lineTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY);
   cx.closePath(); cx.fill();
   cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1.2;
-  cx.beginPath(); cx.moveTo(foot[0] + pxr, foot[1] + pyr); cx.lineTo(tipL[0], tipL[1]); cx.stroke();
-  cx.beginPath(); cx.moveTo(foot[0] - pxr, foot[1] - pyr); cx.lineTo(tipR[0], tipR[1]); cx.stroke();
-  cx.beginPath(); cx.moveTo(foot[0] + pxr, foot[1] + pyr); cx.lineTo(foot[0] - pxr, foot[1] - pyr); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY); cx.lineTo(R_TIPL, y + 16); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY); cx.lineTo(R_TIPR, y + 16); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY); cx.lineTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY); cx.stroke();
   // ── freeway drawn on top so the wedge tucks under its edge ──
   cx.fillStyle = '#f0f2f6'; cx.fillRect(30, y - 16, W - 60, 32);
   cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1;
   cx.strokeRect(30, y - 16, W - 60, 32);
-  // dashed gore line where the ramp joins (band bottom stays dashed there)
   cx.strokeStyle = '#fff'; cx.lineWidth = 2;
-  cx.beginPath(); cx.moveTo(tipL[0], y + 16); cx.lineTo(tipR[0], y + 16); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_TIPL, y + 16); cx.lineTo(R_TIPR, y + 16); cx.stroke();
   cx.strokeStyle = '#c9ced6'; cx.setLineDash([6, 5]); cx.lineWidth = 1.4;
-  cx.beginPath(); cx.moveTo(tipL[0], y + 16); cx.lineTo(tipR[0], y + 16); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_TIPL, y + 16); cx.lineTo(R_TIPR, y + 16); cx.stroke();
   cx.setLineDash([]);
-  // ── meter stop bar + signal, partway down the ramp ──
-  const dStop = 74;
-  const sbx = CT[0] - ux * dStop, sby = CT[1] - uy * dStop;
-  cx.save(); cx.translate(sbx, sby); cx.rotate(ang);
+  // ── meter stop bar + signal ──
+  const sbx = R_CT[0] - R_UX * R_STOP, sby = R_CT[1] - R_UY * R_STOP;
+  cx.save(); cx.translate(sbx, sby); cx.rotate(R_ANG);
   cx.fillStyle = '#374151'; cx.fillRect(-2, -13, 4, 26);
   cx.restore();
-  const green = running && nextGreen <= 0.05;
+  const launching = rampCars.length && rampCars[0].state === 'launch';
   cx.beginPath(); cx.arc(sbx + 17, sby + 15, 8, 0, Math.PI * 2);
-  cx.fillStyle = rampQ > 0 && green ? '#1d7a6f' : '#c1121f'; cx.fill();
+  cx.fillStyle = launching ? '#1d7a6f' : '#c1121f'; cx.fill();
   cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
-  // ── ramp queue: cars behind the stop bar, along the centerline ──
-  for (let i = 0; i < Math.min(rampQ, 12); i++){
-    const d = dStop + 26 + i * 19;
-    const rx = CT[0] - ux * d, ry = CT[1] - uy * d;
-    cx.save(); cx.translate(rx, ry); cx.rotate(ang);
+  // ── ramp cars: arrive at the foot (fade in), roll up, launch, yield ──
+  rampCars.slice(0, 14).forEach(rc => {
+    const rx = R_CT[0] - R_UX * rc.d, ry = R_CT[1] - R_UY * rc.d;
+    cx.save(); cx.translate(rx, ry); cx.rotate(R_ANG);
+    cx.globalAlpha = Math.min(1, (simT - rc.born) / 0.6);
     cx.fillStyle = '#b45309';
     cx.beginPath(); cx.roundRect(-9, -6, 18, 12, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+    cx.globalAlpha = 1;
     cx.restore();
-  }
-  if (rampQ > 12){
+  });
+  if (rampCars.length > 14){
     cx.fillStyle = '#a4161a'; cx.font = '700 12px ' + SANS; cx.textAlign = 'left';
-    cx.fillText('+' + (rampQ - 12) + ' more waiting', foot[0] - 10, foot[1] + 28);
+    cx.fillText('+' + (rampCars.length - 14) + ' more waiting', R_FOOT[0] - 148, R_FOOT[1] + 4);
   }
-  // mainline cars — fresh merges glide from the stop bar onto the lane
-  const MDUR = 1.1;                                    // sim-seconds of merge glide
+  // mainline cars — fresh merges blend from the ramp nose onto the lane
+  const MDUR = 0.5;                                    // short lateral blend only
   cars.forEach(c2 => {
     const tx = XP(c2.x), ty = y;
     let px2 = tx, py2 = ty, rot = 0;
     if (c2.mt !== undefined && simT - c2.mt < MDUR){
       let f = (simT - c2.mt) / MDUR;
       f = f * f * (3 - 2 * f);                         // smoothstep
-      const gx0 = sbx - ux * 22, gy0 = sby - uy * 22;  // start at front-of-queue spot
+      const gx0 = R_CT[0] - R_UX * 3, gy0 = R_CT[1] - R_UY * 3;
       px2 = gx0 + (tx - gx0) * f;
       py2 = gy0 + (ty - gy0) * f;
-      rot = ang * (1 - f);
+      rot = R_ANG * (1 - f);
     }
     cx.save(); cx.translate(px2, py2); cx.rotate(rot);
     cx.fillStyle = speedColor(c2.v);

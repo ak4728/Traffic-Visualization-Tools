@@ -58,6 +58,7 @@
   <h4>Ch. 1 — Time-Space Diagrams</h4>
   <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
   <a href="DilemmaZone.html">Dilemma Zone</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 2 — Cumulative Plots</h4>
   <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
   <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
@@ -68,7 +69,6 @@
   <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
   <a href="ConservationLaw.html">The Conservation Law</a>
   <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
-  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 5 — Control</h4>
   <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
   <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
@@ -199,7 +199,7 @@ function frameCount(dt){
   const span = Math.max(4 * sdTh, 100), x0 = q - span, x1 = q + span;
   const P = { l: 66, r: 20, t: 130, h: 400 };
   const pw = W - P.l - P.r;
-  const nb = 36, bw = (x1 - x0) / nb, bins = new Array(nb).fill(0);
+  const nb = 60, bw = (x1 - x0) / nb, bins = new Array(nb).fill(0);
   ests.forEach(e => { const b = Math.floor((e - x0) / bw); if (b >= 0 && b < nb) bins[b]++; });
   const M = Math.max(ests.length, 1);
   const yPk = Math.exp(0) / (sdTh * Math.sqrt(2 * Math.PI));
@@ -233,7 +233,7 @@ function frameCount(dt){
   const P2 = { l: 66, r: 660, t: 600, h: 130 };
   const pw2 = W - P2.l - P2.r;
   if (hws.length > 5){
-    const hMax = 4 / lam, nb2 = 26, bw2 = hMax / nb2, b2 = new Array(nb2).fill(0);
+    const hMax = 4 / lam, nb2 = 44, bw2 = hMax / nb2, b2 = new Array(nb2).fill(0);
     hws.forEach(h2 => { const b = Math.floor(h2 / bw2); if (b >= 0 && b < nb2) b2[b]++; });
     const y2 = Math.max(lam * 1.2, Math.max(...b2) / hws.length / bw2 * 1.15);
     const X2 = v => P2.l + v / hMax * pw2, Y2 = v => P2.t + P2.h - v / y2 * P2.h;

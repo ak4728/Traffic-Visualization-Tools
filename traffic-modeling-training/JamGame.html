@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ch.4 Game — Dissolve the Phantom Jam</title>
+<title>Ch.1 Game — Dissolve the Phantom Jam</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
@@ -65,6 +65,7 @@
   <h4>Ch. 1 — Time-Space Diagrams</h4>
   <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
   <a href="DilemmaZone.html">Dilemma Zone</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 2 — Cumulative Plots</h4>
   <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
   <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
@@ -75,7 +76,6 @@
   <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
   <a href="ConservationLaw.html">The Conservation Law</a>
   <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
-  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 5 — Control</h4>
   <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
   <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
@@ -92,7 +92,7 @@
 <div class="container">
   <header>
     <h1>🎮 Dissolve the Phantom Jam</h1>
-    <span class="subtitle">Ch. 4 game — stop-and-go waves on a ring road (IDM car-following)
+    <span class="subtitle">Ch. 1 game — the closed loop, playable: stop-and-go waves on a ring road (IDM car-following)
       <span class="help">?<span class="tip">
         Cars drive around a 600 m ring following the <b>Intelligent Driver Model</b> (Treiber): each car accelerates toward its desired speed but keeps a safe dynamic gap s* = s₀ + vT + vΔv/(2√(ab)) to its leader. Above a critical density the equilibrium is <b>unstable</b>: one tap of the brakes grows into a backward-travelling stop-and-go wave — a jam with no cause, the phenomenon behind Chapter 4's congested branch.<br><br>
         <b>Your job:</b> hit ⚡ to trigger the jam, then dissolve it using the <b>speed limit</b>. A well-chosen temporary limit stops cars from racing into the back of the queue faster than it discharges, starving the wave until it evaporates — the principle behind variable speed limits on managed motorways. Then release the limit and see whether the jam returns.<br><br>
@@ -253,7 +253,7 @@ function drawTSD(){
     const px = P.l + (smp[0] - t0) / TWIN * pw;
     for (let i = 0; i < smp[1].length; i++){
       tp.fillStyle = speedColor(smp[2][i]);
-      tp.fillRect(px - 1.4, P.t + ph - smp[1][i] / L * ph - 1.4, 2.8, 2.8);
+      tp.fillRect(px - 0.8, P.t + ph - smp[1][i] / L * ph - 0.8, 1.6, 1.6);
     }
   });
   tp.strokeStyle = '#d6dae2'; tp.lineWidth = 1.2; tp.strokeRect(P.l, P.t, pw, ph);
