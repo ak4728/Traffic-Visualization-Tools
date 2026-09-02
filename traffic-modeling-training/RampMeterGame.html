@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.5 Game — Ramp Metering</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 140px; accent-color: #14919b; }
+  .action { padding: 6px 14px; border-radius: 9px; border: none; background: #14919b; color: #fff; font-size: 0.84em; font-weight: 700; cursor: pointer; }
+  .action:hover { background: #0f7b82; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.66em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.08em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .banner { text-align: center; font-size: 1em; padding: 9px; border-radius: 9px; background: #e8f6f5; color: #0e6e63; font-weight: 700; margin-bottom: 8px; }
+  .banner.bad { background: #fdecea; color: #a4161a; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 380px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  .help .tip a { color: #0f7b82; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
+  <h4>Ch. 5 — Control</h4>
+  <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
+  <h4>Ch. 6 — Observation &amp; Measurement</h4>
+  <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
+  <h4>Ch. 7 — Scheduled Transportation</h4>
+  <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>🎮 Ramp Metering</h1>
+    <span class="subtitle">Ch. 5 game — protect the mainline without strangling the ramp
+      <span class="help">?<span class="tip">
+        A 1.2 km freeway (IDM cars) with a busy on-ramp. Every merging car disturbs the mainline; too many merges too fast and the disturbances grow into a breakdown that rolls upstream — then <i>everybody</i> loses. Too slow a meter and the ramp queue explodes instead.<br><br>
+        <b>Your control:</b> the metering rate (one car per green). Total delay = mainline slowdown + ramp waiting, in vehicle-minutes, accumulated over a 3-minute episode.<br><br>
+        <b>Goal:</b> finish an episode with less total delay than the "no meter" baseline — then try to beat your own best. The sweet spot releases just under the spare mainline capacity at the merge, which is exactly the logic of ALINEA-style feedback metering.<br><br>
+        Inspired by the ramp-metering game at <a href="https://traffic-simulation.de/rampMeteringGame.html" target="_blank">traffic-simulation.de</a> (M. Treiber &amp; A. Kesting).
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="road" width="1240" height="720"></canvas>
+      <div class="controls">
+        <button class="action" id="go">▶ Start 3-minute episode</button>
+        <div class="control-group"><label>metering rate</label><input type="range" id="mr" min="2" max="24" step="1" value="10"><span class="val" id="mrV"></span></div>
+        <div class="control-group"><label>mainline demand</label><input type="range" id="qm" min="1200" max="2100" step="100" value="1800"><span class="val" id="qmV"></span></div>
+        <div class="control-group"><label>ramp demand</label><input type="range" id="qr" min="300" max="900" step="50" value="600"><span class="val" id="qrV"></span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="banner" id="banner">set your metering rate, then start the episode</div>
+        <div class="cards">
+          <div class="card"><h3>episode clock</h3><div class="value" id="c1">—</div></div>
+          <div class="card"><h3>speed at merge</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3>ramp queue</h3><div class="value" id="c3">—</div></div>
+          <div class="card"><h3>mainline delay</h3><div class="value" id="c4">—</div></div>
+          <div class="card"><h3>ramp delay</h3><div class="value" id="c5">—</div></div>
+          <div class="card"><h3>TOTAL delay</h3><div class="value" id="c6">—</div></div>
+        </div>
+        <div class="cards" style="grid-template-columns:1fr 1fr">
+          <div class="card"><h3>best episode (lowest total)</h3><div class="value" id="cBest">—</div></div>
+          <div class="card"><h3>throughput past merge</h3><div class="value" id="cThr">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox">
+          <b>The tradeoff you are steering</b><br>
+          <span class="note">The merge is a bottleneck: mainline demand + ramp releases must stay below its capacity or the freeway breaks down and discharges <i>below</i> capacity (the capacity-drop). Metering rations the ramp so the sum stays just under the line — mainline delay is bought down with ramp delay. The optimum is not "meter hard": every vehicle held on the ramp is delay too.</span>
+        </div>
+        <div class="eqbox" style="border-left-color:#b45309">
+          <b>Playbook</b><br>
+          <span class="note">1) Run once with the meter wide open (24/min ≈ no meter) — watch the breakdown roll upstream. 2) Run at 6/min — mainline flows but the ramp queue balloons. 3) Find the rate that minimizes the total. 4) Raise mainline demand to 2,000 and find it again — the optimal rate falls as spare capacity shrinks.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+
+// ── IDM freeway with one on-ramp ────────────────────────────────────
+const LRD = 1200, XM = 800;                 // road length m, merge position
+const CARLEN = 5, V0 = 30, T = 1.25, S0 = 2, A0 = 1.1, B0 = 1.6;
+const MPH = ms => ms * 2.23694;
+const EPI = 180;                            // episode length s
+
+let cars = [], simT = 0, running = false;
+let nextMain = 0, nextRampArr = 0, nextGreen = 0;
+let rampQ = 0, dMain = 0, dRamp = 0, passed = 0, best = null;
+let seed = 5;
+function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+function expo(mean){ return -Math.log(1 - rnd()) * mean; }
+
+function reset(){
+  cars = []; simT = 0; rampQ = 0; dMain = 0; dRamp = 0; passed = 0;
+  seed = 5;
+  nextMain = 0.5; nextRampArr = expo(3600 / (+el('qr').value)); nextGreen = 0;
+  // pre-populate
+  for (let x = 40; x < LRD; x += 60) cars.push({ x, v: V0 * 0.95 });
+  cars.sort((a, b) => b.x - a.x);           // front first
+}
+function idm(dt){
+  for (let i = 0; i < cars.length; i++){
+    const c2 = cars[i];
+    let s = 1e9, dv = 0;
+    if (i > 0){ s = cars[i - 1].x - c2.x - CARLEN; dv = c2.v - cars[i - 1].v; }
+    if (s <= 0) s = 0.01;
+    const sStar = S0 + Math.max(0, c2.v * T + c2.v * dv / (2 * Math.sqrt(A0 * B0)));
+    const a = A0 * (1 - Math.pow(c2.v / V0, 4) - Math.pow(sStar / s, 2));
+    c2.v = Math.max(0, c2.v + a * dt);
+  }
+  cars.forEach(c2 => { c2.x += c2.v * dt; });
+  for (let i = cars.length - 1; i >= 0; i--){
+    if (cars[i].x > LRD){ cars.splice(i, 1); passed++; }
+  }
+}
+function step(dt){
+  if (!running) return;
+  const sub = 4, h = dt / sub;
+  for (let k = 0; k < sub; k++){
+    simT += h;
+    // mainline inflow
+    nextMain -= h;
+    if (nextMain <= 0){
+      const lastX = cars.length ? Math.min(...cars.map(c2 => c2.x)) : 1e9;
+      if (lastX > CARLEN + S0 + 6) cars.push({ x: 0, v: Math.min(V0, Math.max(5, lastX / T)) });
+      nextMain = expo(3600 / (+el('qm').value));
+    }
+    // ramp arrivals
+    nextRampArr -= h;
+    if (nextRampArr <= 0){ rampQ++; nextRampArr = expo(3600 / (+el('qr').value)); }
+    // metered release: one car per green if a merge slot exists
+    nextGreen -= h;
+    if (nextGreen <= 0 && rampQ > 0){
+      let up = null, down = null;
+      cars.forEach(c2 => {
+        if (c2.x <= XM && (up === null || c2.x > up.x)) up = c2;
+        if (c2.x > XM && (down === null || c2.x < down.x)) down = c2;
+      });
+      const gapUp = up ? XM - up.x : 1e9;
+      const gapDn = down ? down.x - XM : 1e9;
+      if (gapUp > 14 && gapDn > 8){
+        const vIn = Math.min(V0 * 0.6, down ? down.v + 3 : V0 * 0.6);
+        cars.push({ x: XM, v: Math.max(8, vIn) });
+        cars.sort((a2, b2) => b2.x - a2.x);
+        rampQ--;
+        nextGreen = 60 / (+el('mr').value);
+      } else {
+        nextGreen = 0.4;                     // retry soon; meter stays red
+      }
+    }
+    idm(h);
+    cars.sort((a2, b2) => b2.x - a2.x);
+    // delay accumulation (veh-s): mainline shortfall from free flow + ramp queue
+    let short = 0;
+    cars.forEach(c2 => { short += Math.max(0, 1 - c2.v / (V0 * 0.97)); });
+    dMain += short * h;
+    dRamp += rampQ * h;
+  }
+  if (simT >= EPI){
+    running = false;
+    const tot = (dMain + dRamp) / 60;
+    if (best === null || tot < best) best = tot;
+    finalBanner(tot);
+  }
+}
+function finalBanner(tot){
+  const b2 = el('banner');
+  b2.className = 'banner' + (tot > 60 ? ' bad' : '');
+  b2.textContent = '🏁 episode over — total delay ' + tot.toFixed(1) + ' veh·min' + (best !== null && tot <= best ? '  ·  new best!' : '  ·  best ' + best.toFixed(1));
+}
+
+// ── drawing ─────────────────────────────────────────────────────────
+const C = el('road'), cx = C.getContext('2d');
+const W = C.width, H = C.height;
+let lastRAF = null, frame = 0;
+const XP = x => 30 + x / LRD * (W - 60);
+
+function speedColor(v){
+  const u = Math.max(0, Math.min(1, v / V0));
+  if (u < 0.5){ const s = u / 0.5; return `rgb(${164 + 32 * s | 0},${22 + 98 * s | 0},${26 + 4 * s | 0})`; }
+  const s = (u - 0.5) / 0.5;
+  return `rgb(${196 - 182 * s | 0},${120 + 25 * s | 0},${30 + 125 * s | 0})`;
+}
+function draw(){
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('1.2 km freeway — merge at 800 m · color = speed · the meter releases one car per green', 30, 24);
+  const y = 120;
+  // freeway
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(30, y - 16, W - 60, 32);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(30, y - 16, W - 60, 32);
+  // ramp
+  cx.save();
+  cx.translate(XP(XM), y + 16);
+  cx.rotate(0.5);
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(-6, 0, 26, 150);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(-6, 0, 26, 150);
+  cx.restore();
+  // meter signal
+  const green = running && nextGreen <= 0.05;
+  cx.beginPath(); cx.arc(XP(XM) + 34, y + 52, 8, 0, Math.PI * 2);
+  cx.fillStyle = rampQ > 0 && green ? '#1d7a6f' : '#c1121f'; cx.fill();
+  cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+  // ramp queue as stacked cars
+  for (let i = 0; i < Math.min(rampQ, 14); i++){
+    const u = 40 + i * 16;
+    const rx = XP(XM) + Math.sin(0.5) * u, ry = y + 16 + Math.cos(0.5) * u;
+    cx.save(); cx.translate(rx, ry); cx.rotate(0.5 - Math.PI / 2);
+    cx.fillStyle = '#b45309';
+    cx.beginPath(); cx.roundRect(-9, -6, 18, 12, 3); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+    cx.restore();
+  }
+  if (rampQ > 14){
+    cx.fillStyle = '#a4161a'; cx.font = '700 12px ' + SANS;
+    cx.fillText('+' + (rampQ - 14) + ' more', XP(XM) + 120, y + 240);
+  }
+  // mainline cars
+  cars.forEach(c2 => {
+    cx.fillStyle = speedColor(c2.v);
+    cx.beginPath(); cx.roundRect(XP(c2.x) - 10, y - 7, 20, 14, 3); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+  });
+  // speed profile strip
+  const P = { l: 30, r: 30, t: 420, h: 240 };
+  const pw = W - P.l - P.r;
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
+  cx.fillStyle = '#9aa1ad'; cx.font = '10px ' + SANS;
+  [0, 25, 50, 65].forEach(v => {
+    const yy = P.t + P.h - v / 70 * P.h;
+    cx.strokeStyle = '#eef0f4'; cx.beginPath(); cx.moveTo(P.l, yy); cx.lineTo(P.l + pw, yy); cx.stroke();
+    cx.textAlign = 'right'; cx.fillText(v, P.l - 3, yy + 3);
+  });
+  cx.strokeStyle = '#b45309'; cx.setLineDash([5, 4]);
+  cx.beginPath(); cx.moveTo(P.l + XM / LRD * pw, P.t); cx.lineTo(P.l + XM / LRD * pw, P.t + P.h); cx.stroke(); cx.setLineDash([]);
+  cx.strokeStyle = '#0e7c86'; cx.lineWidth = 2.2; cx.lineJoin = 'round';
+  cx.beginPath();
+  const sorted = [...cars].sort((a2, b2) => a2.x - b2.x);
+  sorted.forEach((c2, i) => {
+    const px = P.l + c2.x / LRD * pw, py = P.t + P.h - Math.min(MPH(c2.v), 70) / 70 * P.h;
+    if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+  });
+  cx.stroke();
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('speed along the road (mph) — a breakdown shows up as a valley rolling left from the merge (dashed)', P.l, P.t - 8);
+}
+
+function loop(ts){
+  if (lastRAF === null) lastRAF = ts;
+  let dt = (ts - lastRAF) / 1000; lastRAF = ts;
+  dt = Math.min(dt, 0.05);
+  frame++;
+  step(dt * 3);                              // time ×3 → 60 s episode real time
+  draw();
+  if (frame % 6 === 0){
+    let vm = V0, nNear = 0;
+    cars.forEach(c2 => { if (Math.abs(c2.x - XM) < 120){ vm = Math.min(vm, c2.v); nNear++; } });
+    el('c1').textContent = running ? simT.toFixed(0) + ' / ' + EPI + ' s' : (simT > 0 ? 'done' : '—');
+    el('c2').textContent = nNear ? MPH(vm).toFixed(0) + ' mph' : '—';
+    el('c3').textContent = rampQ + ' veh';
+    el('c4').textContent = (dMain / 60).toFixed(1) + ' veh·min';
+    el('c5').textContent = (dRamp / 60).toFixed(1) + ' veh·min';
+    el('c6').textContent = ((dMain + dRamp) / 60).toFixed(1) + ' veh·min';
+    el('cBest').textContent = best === null ? '—' : best.toFixed(1) + ' veh·min';
+    el('cThr').textContent = simT > 5 ? Math.round(passed / simT * 3600) + ' veh/hr' : '—';
+    if (running){
+      const b2 = el('banner');
+      if (MPH(vm) < 25 && nNear > 2){ b2.className = 'banner bad'; b2.textContent = '🚨 breakdown at the merge — the wave is rolling upstream'; }
+      else { b2.className = 'banner'; b2.textContent = '🟢 episode running — keep the merge above ~45 mph without drowning the ramp'; }
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+el('go').addEventListener('click', () => { reset(); running = true; });
+const fmt = () => {
+  el('mrV').textContent = el('mr').value + ' veh/min';
+  el('qmV').textContent = el('qm').value + ' veh/hr';
+  el('qrV').textContent = el('qr').value + ' veh/hr';
+};
+['mr','qm','qr'].forEach(id => el(id).addEventListener('input', fmt));
+fmt(); reset();
+requestAnimationFrame(loop);
+
+// chapter navigation drawer
+(function(){
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>

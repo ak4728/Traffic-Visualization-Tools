@@ -69,8 +69,10 @@
   <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
   <a href="ConservationLaw.html">The Conservation Law</a>
   <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 5 — Control</h4>
   <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
   <h4>Ch. 6 — Observation &amp; Measurement</h4>
   <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
   <h4>Ch. 7 — Scheduled Transportation</h4>
@@ -132,290 +134,358 @@
 const el = id => document.getElementById(id);
 const SANS = "'Segoe UI', system-ui, sans-serif";
 let mode = 'sig';
-const S = 1800;                       // sat flow veh/hr, both approaches
+const S = 1800;
 
 const C = el('main'), cx = C.getContext('2d');
 const W = C.width, H = C.height;
 const SC = el('side'), sx2 = SC.getContext('2d');
 
-// ── helpers ─────────────────────────────────────────────────────────
-function axes(ctx,W2,H2,P,xMax,yMax,xl,yl,xs,ys,xFmt){
-  const pw=W2-P.l-P.r, ph=H2-P.t-P.b;
-  const X=v=>P.l+v/xMax*pw, Y=v=>P.t+ph-v/yMax*ph;
-  ctx.strokeStyle='#eef0f4'; ctx.lineWidth=1;
-  ctx.fillStyle='#9aa1ad'; ctx.font='11px '+SANS;
-  for(let v=0;v<=xMax+1e-9;v+=xs){ ctx.beginPath(); ctx.moveTo(X(v),P.t); ctx.lineTo(X(v),P.t+ph); ctx.stroke(); ctx.textAlign='center'; ctx.fillText(xFmt?xFmt(v):v, X(v), P.t+ph+16); }
-  for(let v=0;v<=yMax+1e-9;v+=ys){ ctx.beginPath(); ctx.moveTo(P.l,Y(v)); ctx.lineTo(P.l+pw,Y(v)); ctx.stroke(); ctx.textAlign='right'; ctx.fillText(Math.round(v), P.l-6, Y(v)+4); }
-  ctx.strokeStyle='#d6dae2'; ctx.lineWidth=1.3; ctx.strokeRect(P.l,P.t,pw,ph);
-  ctx.fillStyle='#4b5563'; ctx.font='600 12px '+SANS; ctx.textAlign='center';
-  ctx.fillText(xl, P.l+pw/2, H2-5);
-  ctx.save(); ctx.translate(14,P.t+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText(yl,0,0); ctx.restore();
-  return {X,Y,pw,ph};
+let seedA = 11;
+function rndA(){ seedA = (seedA * 16807) % 2147483647; return seedA / 2147483647; }
+function expo(mean){ return -Math.log(1 - rndA()) * mean; }
+
+// ── animation state ─────────────────────────────────────────────────
+const SLX = 780, VPX = 85, GAPPX = 30, HSAT = 3600 / S;   // 2 s discharge headway
+let simT = 0, lastRAF = null, paramsDirty = true, frame = 0;
+let laneA = [], laneB = [], nextA = 0, nextB = 0, lastCrossA = -9, lastCrossB = -9;
+let mains = [], nextMain = 0, lastMerge = -9, mergeCount = 0, mergeT0 = 0;
+
+function resetAnim(){
+  simT = 0; seedA = 11;
+  laneA = []; laneB = [];
+  nextA = expo(3600 / (+el('q1').value));
+  nextB = expo(3600 / (+el('q2').value));
+  lastCrossA = -9; lastCrossB = -9;
+  mains = []; nextMain = expo(3600 / (+el('qm').value));
+  lastMerge = -9; mergeCount = 0; mergeT0 = 0;
 }
 
-// ── signal mode ─────────────────────────────────────────────────────
 function sigParams(){
-  const q1=+el('q1').value, q2=+el('q2').value, Cc=+el('cc').value, L=+el('ll').value;
-  const y1=q1/S, y2=q2/S, Y=y1+y2;
-  const G1=(Cc-L)*y1/Y, G2=(Cc-L)*y2/Y;
-  const x1=q1*Cc/(S*G1), x2=q2*Cc/(S*G2);
-  return {q1,q2,Cc,L,y1,y2,Y,G1,G2,x1,x2,Cmin:L/(1-Y),Cw:(1.5*L+5)/(1-Y)};
+  const q1 = +el('q1').value, q2 = +el('q2').value, Cc = +el('cc').value, L = +el('ll').value;
+  const y1 = q1 / S, y2 = q2 / S, Y = y1 + y2;
+  const G1 = (Cc - L) * y1 / Y, G2 = (Cc - L) * y2 / Y;
+  const x1 = q1 * Cc / (S * G1), x2 = q2 * Cc / (S * G2);
+  return { q1, q2, Cc, L, y1, y2, Y, G1, G2, x1, x2, Cmin: L / (1 - Y), Cw: (1.5 * L + 5) / (1 - Y) };
 }
-function delayAt(Cc,p){
-  // deterministic uniform + stochastic overflow term, flow-weighted
-  const {q1,q2,L,y1,y2,Y}=p;
-  const G1=(Cc-L)*y1/Y, G2=(Cc-L)*y2/Y;
-  let tot=0, qs=0;
-  [[q1,G1],[q2,G2]].forEach(([q,G])=>{
-    const r=Cc-G, x=q*Cc/(S*G);
-    if(x>=1){ tot+=Infinity; return; }
-    const dU=r*r/(2*Cc*(1-q/S));                       // uniform (D/D/1)
-    const qs2=q/3600;
-    const dR=x*x/(2*qs2*(1-x));                        // overflow (random)
-    tot+=q*(dU+dR); qs+=q;
+function phaseOf(p, t){
+  const tc = ((t % p.Cc) + p.Cc) % p.Cc;
+  if (tc < p.G1) return 'A';
+  if (tc < p.G1 + p.L / 2) return 'R';
+  if (tc < p.G1 + p.L / 2 + p.G2) return 'B';
+  return 'R';
+}
+function delayAt(Cc, p){
+  const { q1, q2, L, y1, y2, Y } = p;
+  const G1 = (Cc - L) * y1 / Y, G2 = (Cc - L) * y2 / Y;
+  let tot = 0, qs = 0;
+  [[q1, G1], [q2, G2]].forEach(([q, G]) => {
+    const r = Cc - G, x = q * Cc / (S * G);
+    if (x >= 1){ tot += Infinity; return; }
+    const dU = r * r / (2 * Cc * (1 - q / S));
+    const dR = x * x / (2 * (q / 3600) * (1 - x));
+    tot += q * (dU + dR); qs += q;
   });
-  return tot/qs;
+  return tot / qs;
 }
-function drawSig(){
-  const p=sigParams();
-  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
-  const nCyc=3, T=p.Cc*nCyc;
-  // two stacked queueing diagrams
-  [[p.q1,p.G1,'Approach 1',60],[p.q2,p.G2,'Approach 2',400]].forEach(([q,G,name,top],idx)=>{
-    const P={l:64,r:20,t:top,b:0};
-    const ph=280, pw=W-P.l-P.r;
-    const qv=q/3600, sv=S/3600, r=p.Cc-G;
-    const NMAX=Math.max(qv*T*1.15, 8);
-    const X=t=>P.l+t/T*pw, Y=n=>top+ph-n/NMAX*ph;
-    cx.strokeStyle='#eef0f4';
-    for(let c2=0;c2<=nCyc;c2++){ cx.beginPath(); cx.moveTo(X(c2*p.Cc),top); cx.lineTo(X(c2*p.Cc),top+ph); cx.stroke(); }
-    cx.strokeStyle='#d6dae2'; cx.strokeRect(P.l,top,pw,ph);
-    // phase bar (approach 1 green first)
-    for(let c2=0;c2<nCyc;c2++){
-      const g0 = idx===0 ? c2*p.Cc : c2*p.Cc + p.Cc - G;
-      cx.fillStyle='#1d7a6f'; cx.fillRect(X(g0),top+ph+4,X(g0+G)-X(g0),6);
-      cx.fillStyle='#a4161a';
-      if(idx===0) cx.fillRect(X(g0+G),top+ph+4,X((c2+1)*p.Cc)-X(g0+G),6);
-      else { cx.fillRect(X(c2*p.Cc),top+ph+4,X(g0)-X(c2*p.Cc),6); }
+
+function drawVehH(x, y, col){
+  cx.fillStyle = col;
+  cx.beginPath(); cx.roundRect(x - 12, y - 7, 24, 14, 3); cx.fill();
+  cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+  cx.fillStyle = 'rgba(255,255,255,0.75)';
+  cx.fillRect(x + 3, y - 5, 3, 10); cx.fillRect(x - 7, y - 5, 2.4, 10);
+}
+
+// advance one lane of the signal animation; returns updated lastCross
+function advLane(cars, green, lastCross, dt, mean, spawnKey){
+  for (let i = 0; i < cars.length; i++){
+    let target = cars[i].x + VPX * dt;
+    if (i > 0) target = Math.min(target, cars[i - 1].x - GAPPX);
+    if (cars[i].x < SLX && target >= SLX){
+      if (!green || simT < lastCross + HSAT) target = Math.min(target, SLX - 4);
+      else lastCross = simT;
     }
-    // arrivals
-    cx.strokeStyle='#2c5378'; cx.lineWidth=2.2;
-    cx.beginPath(); cx.moveTo(X(0),Y(0)); cx.lineTo(X(T),Y(qv*T)); cx.stroke();
-    // departures: green window per cycle (approach1 green at cycle start; approach2 at end)
-    cx.strokeStyle='#0e7c86'; cx.lineWidth=2.4;
-    cx.beginPath(); cx.moveTo(X(0),Y(0));
-    let N=0, tt=0;
-    const step=0.25;
-    cx.fillStyle='rgba(164,22,26,0.10)';
-    let areaPath=[];
-    while(tt<T){
-      const c2=Math.floor(tt/p.Cc), tc=tt-c2*p.Cc;
-      const green = idx===0 ? tc<G : tc>=(p.Cc-G);
-      const arr=qv*tt;
-      if(green && N<arr) N=Math.min(arr, N+sv*step);
-      cx.lineTo(X(tt),Y(N));
-      areaPath.push([tt,N]);
-      tt+=step;
+    cars[i].x = target;
+  }
+  while (cars.length && cars[0].x > W + 30) cars.shift();
+  return lastCross;
+}
+
+// ── SIGNAL MODE frame ───────────────────────────────────────────────
+function frameSig(dt){
+  const p = sigParams();
+  simT += dt * 6;                       // time ×6
+  const ph = phaseOf(p, simT);
+  // spawn + move
+  nextA -= dt * 6; nextB -= dt * 6;
+  if (nextA <= 0){ if (!laneA.length || laneA[laneA.length - 1].x > GAPPX){ laneA.push({ x: -20 }); } nextA = expo(3600 / p.q1); }
+  if (nextB <= 0){ if (!laneB.length || laneB[laneB.length - 1].x > GAPPX){ laneB.push({ x: -20 }); } nextB = expo(3600 / p.q2); }
+  lastCrossA = advLane(laneA, ph === 'A', lastCrossA, dt * 6);
+  lastCrossB = advLane(laneB, ph === 'B', lastCrossB, dt * 6);
+
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // animation band
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('live signal (time ×6) — Poisson arrivals queue on red, discharge every 2 s of green', 20, 22);
+  [[laneA, 60, 'Approach 1', 'A'], [laneB, 122, 'Approach 2', 'B']].forEach(([cars, y, name, key]) => {
+    cx.fillStyle = '#f0f2f6'; cx.fillRect(0, y - 14, W, 28);
+    cx.strokeStyle = '#d6dae2'; cx.strokeRect(0, y - 14, W, 28);
+    cx.fillStyle = '#374151'; cx.fillRect(SLX, y - 14, 4, 28);   // stop line
+    const green = ph === key;
+    cx.fillStyle = green ? '#1d7a6f' : '#c1121f';
+    cx.beginPath(); cx.arc(SLX + 18, y - 22, 7, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+    cars.forEach(c2 => drawVehH(c2.x, y, key === 'A' ? '#2c5378' : '#b45309'));
+    cx.fillStyle = '#6b7280'; cx.font = '600 11px ' + SANS;
+    cx.fillText(name + ' — queue ' + cars.filter(c2 => c2.x < SLX).length, 20, y - 20);
+  });
+  // cycle progress bar
+  const tc = ((simT % p.Cc) + p.Cc) % p.Cc;
+  cx.fillStyle = '#eef1f6'; cx.fillRect(20, 158, W - 40, 8);
+  const seg = (a, b, col) => { cx.fillStyle = col; cx.fillRect(20 + a / p.Cc * (W - 40), 158, (b - a) / p.Cc * (W - 40), 8); };
+  seg(0, p.G1, '#2c5378'); seg(p.G1, p.G1 + p.L / 2, '#c9ced6');
+  seg(p.G1 + p.L / 2, p.G1 + p.L / 2 + p.G2, '#b45309'); seg(p.Cc - p.L / 2, p.Cc, '#c9ced6');
+  cx.fillStyle = '#1f2937'; cx.fillRect(20 + tc / p.Cc * (W - 40) - 2, 154, 4, 16);
+
+  drawQueueDiagrams(p);
+  if (paramsDirty || frame % 45 === 0) sideAndCardsSig(p);
+}
+
+function drawQueueDiagrams(p){
+  const nCyc = 3, T = p.Cc * nCyc;
+  [[p.q1, p.G1, 'Approach 1', 216, 0], [p.q2, p.G2, 'Approach 2', 500, 1]].forEach(([q, G, name, top, idx]) => {
+    const Pl = 64, Pr = 20, ph2 = 218, pw = W - Pl - Pr;
+    const qv = q / 3600, sv = S / 3600;
+    const NMAX = Math.max(qv * T * 1.15, 8);
+    const X = t => Pl + t / T * pw, Y = n => top + ph2 - n / NMAX * ph2;
+    cx.strokeStyle = '#eef0f4';
+    for (let c2 = 0; c2 <= nCyc; c2++){ cx.beginPath(); cx.moveTo(X(c2 * p.Cc), top); cx.lineTo(X(c2 * p.Cc), top + ph2); cx.stroke(); }
+    cx.strokeStyle = '#d6dae2'; cx.strokeRect(Pl, top, pw, ph2);
+    for (let c2 = 0; c2 < nCyc; c2++){
+      const g0 = idx === 0 ? c2 * p.Cc : c2 * p.Cc + p.Cc - G;
+      cx.fillStyle = '#1d7a6f'; cx.fillRect(X(g0), top + ph2 + 4, X(g0 + G) - X(g0), 6);
+      cx.fillStyle = '#c1121f';
+      if (idx === 0) cx.fillRect(X(g0 + G), top + ph2 + 4, X((c2 + 1) * p.Cc) - X(g0 + G), 6);
+      else cx.fillRect(X(c2 * p.Cc), top + ph2 + 4, X(g0) - X(c2 * p.Cc), 6);
+    }
+    cx.strokeStyle = '#2c5378'; cx.lineWidth = 2.2;
+    cx.beginPath(); cx.moveTo(X(0), Y(0)); cx.lineTo(X(T), Y(qv * T)); cx.stroke();
+    cx.strokeStyle = '#0e7c86'; cx.lineWidth = 2.4;
+    let N = 0, tt = 0; const step = 0.25, area = [];
+    cx.beginPath(); cx.moveTo(X(0), Y(0));
+    while (tt < T){
+      const c2 = Math.floor(tt / p.Cc), t2 = tt - c2 * p.Cc;
+      const green = idx === 0 ? t2 < G : t2 >= (p.Cc - G);
+      if (green && N < qv * tt) N = Math.min(qv * tt, N + sv * step);
+      cx.lineTo(X(tt), Y(N)); area.push([tt, N]); tt += step;
     }
     cx.stroke();
-    // shade delay area between curves
-    cx.beginPath();
-    cx.moveTo(X(0),Y(0));
-    areaPath.forEach(([t2,n2])=>cx.lineTo(X(t2),Y(n2)));
-    cx.lineTo(X(T),Y(qv*T));
-    cx.lineTo(X(0),Y(0));
-    cx.fill();
-    cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS; cx.textAlign='left';
-    cx.fillText(name+'  ·  q = '+q+' veh/hr · green '+G.toFixed(1)+' s · x = '+ (q*p.Cc/(S*G)).toFixed(2), P.l, top-8);
-    cx.fillStyle='#9aa1ad'; cx.font='italic 10px '+SANS;
-    cx.fillText('blue: cumulative arrivals · teal: departures · shaded: total delay', P.l+250, top-8);
+    cx.fillStyle = 'rgba(164,22,26,0.10)';
+    cx.beginPath(); cx.moveTo(X(0), Y(0));
+    area.forEach(([t2, n2]) => cx.lineTo(X(t2), Y(n2)));
+    cx.lineTo(X(T), Y(qv * T)); cx.closePath(); cx.fill();
+    cx.fillStyle = '#1f2937'; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
+    cx.fillText(name + '  ·  q = ' + q + ' veh/hr · green ' + G.toFixed(1) + ' s · x = ' + (q * p.Cc / (S * G)).toFixed(2) + '   (blue arrivals · teal departures · shaded delay)', Pl, top - 6);
   });
-  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
-  cx.fillText('time (3 cycles shown) — green/red bars under each diagram', W/2, H-8);
+}
 
-  // side: delay vs C
-  sx2.clearRect(0,0,SC.width,SC.height); sx2.fillStyle='#fff'; sx2.fillRect(0,0,SC.width,SC.height);
-  const P2={l:56,r:14,t:26,b:40};
-  let dMax=0; const pts=[];
-  for(let Cc=Math.ceil(p.Cmin+2); Cc<=180; Cc+=2){
-    const d=delayAt(Cc,p);
-    if(isFinite(d)){ pts.push([Cc,d]); dMax=Math.max(dMax,Math.min(d,200)); }
+function sideAndCardsSig(p){
+  sx2.clearRect(0, 0, SC.width, SC.height); sx2.fillStyle = '#fff'; sx2.fillRect(0, 0, SC.width, SC.height);
+  const P2 = { l: 56, r: 14, t: 26, b: 40 };
+  const pw2 = SC.width - P2.l - P2.r, ph2 = SC.height - P2.t - P2.b;
+  let dMax = 0; const pts = [];
+  for (let Cc = Math.ceil(p.Cmin + 2); Cc <= 180; Cc += 2){
+    const d = delayAt(Cc, p);
+    if (isFinite(d)){ pts.push([Cc, d]); dMax = Math.max(dMax, Math.min(d, 200)); }
   }
-  dMax=Math.min(Math.max(dMax*1.05,20),200);
-  const s2=axes(sx2,SC.width,SC.height,P2,180,dMax,'cycle length C (s)','avg delay per vehicle (s)',30,Math.ceil(dMax/5/5)*5);
-  sx2.strokeStyle='#2c5378'; sx2.lineWidth=2.4; sx2.lineJoin='round';
+  dMax = Math.min(Math.max(dMax * 1.05, 20), 200);
+  const X = v => P2.l + v / 180 * pw2, Y = v => P2.t + ph2 - v / dMax * ph2;
+  sx2.strokeStyle = '#eef0f4'; sx2.fillStyle = '#9aa1ad'; sx2.font = '11px ' + SANS;
+  for (let v = 0; v <= 180; v += 30){ sx2.beginPath(); sx2.moveTo(X(v), P2.t); sx2.lineTo(X(v), P2.t + ph2); sx2.stroke(); sx2.textAlign = 'center'; sx2.fillText(v, X(v), P2.t + ph2 + 16); }
+  const ys = Math.ceil(dMax / 5 / 5) * 5;
+  for (let v = 0; v <= dMax; v += ys){ sx2.beginPath(); sx2.moveTo(P2.l, Y(v)); sx2.lineTo(P2.l + pw2, Y(v)); sx2.stroke(); sx2.textAlign = 'right'; sx2.fillText(v, P2.l - 6, Y(v) + 4); }
+  sx2.strokeStyle = '#d6dae2'; sx2.strokeRect(P2.l, P2.t, pw2, ph2);
+  sx2.fillStyle = '#4b5563'; sx2.font = '600 12px ' + SANS; sx2.textAlign = 'center';
+  sx2.fillText('cycle length C (s)', P2.l + pw2 / 2, SC.height - 5);
+  sx2.save(); sx2.translate(14, P2.t + ph2 / 2); sx2.rotate(-Math.PI / 2); sx2.fillText('avg delay (s/veh)', 0, 0); sx2.restore();
+  sx2.strokeStyle = '#2c5378'; sx2.lineWidth = 2.4; sx2.lineJoin = 'round';
   sx2.beginPath();
-  pts.forEach(([Cc,d],i)=>{ const x=s2.X(Cc), y=s2.Y(Math.min(d,dMax)); if(i===0) sx2.moveTo(x,y); else sx2.lineTo(x,y); });
+  pts.forEach(([Cc, d], i) => { const px = X(Cc), py = Y(Math.min(d, dMax)); if (i === 0) sx2.moveTo(px, py); else sx2.lineTo(px, py); });
   sx2.stroke();
-  // markers
-  const dNow=delayAt(p.Cc,p);
-  [[p.Cmin,'#a4161a','C_min'],[p.Cw,'#40663c','Webster C*']].forEach(([Cc,col,name])=>{
-    if(Cc>0&&Cc<=180){
-      sx2.strokeStyle=col; sx2.setLineDash([6,5]); sx2.lineWidth=1.5;
-      sx2.beginPath(); sx2.moveTo(s2.X(Cc),P2.t); sx2.lineTo(s2.X(Cc),P2.t+s2.ph); sx2.stroke(); sx2.setLineDash([]);
-      sx2.fillStyle=col; sx2.font='600 11px '+SANS; sx2.textAlign='left';
-      sx2.fillText(name+' = '+Cc.toFixed(0)+' s', s2.X(Cc)+4, P2.t+14+(name==='C_min'?0:16));
+  [[p.Cmin, '#a4161a', 'C_min'], [p.Cw, '#40663c', 'Webster C*']].forEach(([Cc, col, name], i) => {
+    if (Cc > 0 && Cc <= 180){
+      sx2.strokeStyle = col; sx2.setLineDash([6, 5]); sx2.lineWidth = 1.5;
+      sx2.beginPath(); sx2.moveTo(X(Cc), P2.t); sx2.lineTo(X(Cc), P2.t + ph2); sx2.stroke(); sx2.setLineDash([]);
+      sx2.fillStyle = col; sx2.font = '600 11px ' + SANS; sx2.textAlign = 'left';
+      sx2.fillText(name + ' = ' + Cc.toFixed(0) + ' s', X(Cc) + 4, P2.t + 14 + i * 16);
     }
   });
-  if(isFinite(dNow)){
-    sx2.fillStyle='#0f7b82';
-    sx2.beginPath(); sx2.arc(s2.X(p.Cc),s2.Y(Math.min(dNow,dMax)),6,0,Math.PI*2); sx2.fill();
+  const dNow = delayAt(p.Cc, p);
+  if (isFinite(dNow)){ sx2.fillStyle = '#0f7b82'; sx2.beginPath(); sx2.arc(X(p.Cc), Y(Math.min(dNow, dMax)), 6, 0, Math.PI * 2); sx2.fill(); }
+  sx2.fillStyle = '#1f2937'; sx2.font = '600 12px ' + SANS; sx2.textAlign = 'left';
+  sx2.fillText('delay vs cycle (split rule 5.15a) — the U-shape is the whole story', P2.l, 16);
+
+  el('story').innerHTML = '<b>Pretimed control</b> (§5.2.2). Splits follow Eq. 5.15a: green in proportion to the flow ratios y<sub>i</sub> = q<sub>i</sub>/s. Watch the animation: queues build on red and drain at the 2-second saturation headway on green. The delay curve combines the deterministic red-wait (grows with C) and the overflow term (explodes as C → C<sub>min</sub>). Webster\'s C* sits near the bottom — roughly <i>twice</i> C<sub>min</sub>.';
+  const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+  setc(1, 'flow ratios y₁ + y₂', (p.Y).toFixed(2) + (p.Y >= 1 ? ' — over capacity!' : ''));
+  setc(2, 'C_min = L/(1−Σy)', p.Y < 1 ? p.Cmin.toFixed(0) + '<small> s</small>' : '∞');
+  setc(3, 'Webster C* (5.15b)', p.Y < 1 ? p.Cw.toFixed(0) + '<small> s</small>' : '—');
+  setc(4, 'greens G₁ / G₂', p.G1.toFixed(0) + ' / ' + p.G2.toFixed(0) + '<small> s</small>');
+  setc(5, 'degrees of saturation', p.x1.toFixed(2) + ' / ' + p.x2.toFixed(2));
+  setc(6, 'avg delay @ current C', isFinite(dNow) ? dNow.toFixed(1) + '<small> s/veh</small>' : 'oversaturated');
+  document.querySelectorAll('#cardRow .card')[5].className = 'card' + ((p.x1 >= 1 || p.x2 >= 1) ? ' warn' : '');
+  paramsDirty = false;
+}
+
+// ── GAP MODE ────────────────────────────────────────────────────────
+let seedG = 7;
+function rndG(){ seedG = (seedG * 16807) % 2147483647; return seedG / 2147483647; }
+function minorCap(q, Hc, M, T){
+  seedG = 7;
+  const lam = q / 3600; let t = 0, n = 0;
+  while (t < T){ const h = -Math.log(1 - rndG()) / lam; t += h; n += Math.max(0, Math.floor((h - Hc + M) / M)); }
+  return n / T * 3600;
+}
+const MX = 620, VG = 70;
+function frameGap(dt){
+  const qM = +el('qm').value, Hc = +el('hc').value, M = +el('mm').value;
+  simT += dt * 4;                        // time ×4
+  nextMain -= dt * 4;
+  if (nextMain <= 0){ if (!mains.length || mains[mains.length - 1].x > 30){ mains.push({ x: -20, minor: false }); } nextMain = expo(3600 / qM); }
+  mains.forEach((c2, i) => {
+    let target = c2.x + VG * dt * 4;
+    if (i > 0) target = Math.min(target, mains[i - 1].x - 28);
+    c2.x = target;
+  });
+  while (mains.length && mains[0].x > W + 30) mains.shift();
+  // merge decision: nearest upstream main car
+  let upX = -1e9;
+  mains.forEach(c2 => { if (c2.x < MX - 14 && c2.x > upX) upX = c2.x; });
+  const tGap = (MX - 14 - upX) / VG;
+  const blocked = mains.some(c2 => c2.x > MX - 26 && c2.x < MX + 20);
+  if (tGap >= Hc && !blocked && simT >= lastMerge + M){
+    // insert minor car at merge point, keeping mains sorted by x desc
+    let ins = mains.length;
+    for (let i = 0; i < mains.length; i++){ if (mains[i].x < MX){ ins = i; break; } }
+    mains.splice(ins, 0, { x: MX, minor: true });
+    lastMerge = simT; mergeCount++;
   }
-  sx2.fillStyle='#1f2937'; sx2.font='600 12px '+SANS; sx2.textAlign='left';
-  sx2.fillText('delay vs cycle (split rule 5.15a applied) — the U-shape is the whole story', P2.l, 16);
+  const obsCap = simT > 30 ? mergeCount / simT * 3600 : 0;
 
-  el('story').innerHTML='<b>Pretimed control</b> (§5.2.2). Splits follow Eq. 5.15a: green in proportion to the flow ratios y<sub>i</sub> = q<sub>i</sub>/s. The delay curve combines the deterministic red-wait (grows with C) and the overflow term (explodes as C → C<sub>min</sub>, where every green barely clears its queue). Webster\'s C* sits near the bottom — roughly <i>twice</i> C<sub>min</sub>.';
-  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
-  setc(1,'flow ratios y₁ + y₂',(p.y1+p.y2).toFixed(2)+(p.Y>=1?' — over capacity!':''));
-  setc(2,'C_min = L/(1−Σy)',p.Y<1?p.Cmin.toFixed(0)+'<small> s</small>':'∞');
-  setc(3,'Webster C* (5.15b)',p.Y<1?p.Cw.toFixed(0)+'<small> s</small>':'—');
-  setc(4,'greens G₁ / G₂',p.G1.toFixed(0)+' / '+p.G2.toFixed(0)+'<small> s</small>');
-  setc(5,'degrees of saturation',p.x1.toFixed(2)+' / '+p.x2.toFixed(2));
-  setc(6,'avg delay @ current C',isFinite(dNow)?dNow.toFixed(1)+'<small> s/veh</small>':'oversaturated');
-  document.querySelectorAll('#cardRow .card')[5].className = 'card'+((p.x1>=1||p.x2>=1)?' warn':'');
-}
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('live merge (time ×4) — the amber minor car enters only when the next main car is ≥ Hc seconds away', 20, 22);
+  const y = 70;
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(0, y - 14, W, 28);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(0, y - 14, W, 28);
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(MX - 14, y + 14, 28, 56);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(MX - 14, y + 14, 28, 56);
+  // queued minor cars (endless queue)
+  for (let i = 0; i < 3; i++){
+    cx.fillStyle = '#b45309';
+    cx.beginPath(); cx.roundRect(MX - 7, y + 22 + i * 17, 14, 13, 3); cx.fill();
+    cx.strokeStyle = '#fff'; cx.stroke();
+  }
+  mains.forEach(c2 => drawVehH(c2.x, y, c2.minor ? '#b45309' : '#2c5378'));
+  cx.fillStyle = '#6b7280'; cx.font = '600 11px ' + SANS;
+  cx.fillText('observed minor throughput: ' + Math.round(obsCap) + ' veh/hr (running)', 20, y + 34);
+  cx.fillText('gap to next main car: ' + (tGap > 900 ? '∞' : Math.max(0, tGap).toFixed(1) + ' s') + '  (needs ≥ ' + Hc + ' s)', 20, y + 50);
 
-// ── gap acceptance mode ─────────────────────────────────────────────
-let seedG=7;
-function rndG(){ seedG=(seedG*16807)%2147483647; return seedG/2147483647; }
-function genHeadways(q, T){
-  const lam=q/3600, hs=[];
-  let t=0;
-  seedG=7;
-  while(t<T){ const h=-Math.log(1-rndG())/lam; hs.push(h); t+=h; }
-  return hs;
+  drawGapCharts(qM, Hc, M, obsCap);
+  frame % 30 === 0 || paramsDirty ? cardsGap(qM, Hc, M, obsCap) : null;
 }
-function minorCap(q,Hc,M,T){
-  const hs=genHeadways(q,T);
-  let n=0;
-  hs.forEach(h=>{ n+=Math.max(0, Math.floor((h-Hc+M)/M)); });
-  return n/T*3600;
-}
-function drawGap(){
-  const qM=+el('qm').value, Hc=+el('hc').value, M=+el('mm').value;
-  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
-  // timeline 0..120 s
-  const T0=120, P={l:64,r:20,t:60};
-  const pw=W-P.l-P.r;
-  const X=t=>P.l+t/T0*pw;
-  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
-  cx.fillText('main street (ticks) and the minor-street vehicles its gaps admit (dots) — first 120 s', P.l, 34);
-  // road band
-  cx.fillStyle='#f0f2f6'; cx.fillRect(P.l,P.t,pw,60);
-  cx.strokeStyle='#d6dae2'; cx.strokeRect(P.l,P.t,pw,60);
-  const hs=genHeadways(qM,600);
-  let t=0; const mains=[];
-  for(const h of hs){ t+=h; if(t>T0) break; mains.push(t); }
-  cx.strokeStyle='#2c5378'; cx.lineWidth=2.5;
-  mains.forEach(tm=>{ cx.beginPath(); cx.moveTo(X(tm),P.t+4); cx.lineTo(X(tm),P.t+56); cx.stroke(); });
-  // minor entries
-  cx.fillStyle='#b45309';
-  let prev=0, nShown=0;
-  mains.concat([T0]).forEach(tm=>{
-    const h=tm-prev;
-    const n=Math.max(0, Math.floor((h-Hc+M)/M));
-    for(let i2=0;i2<n;i2++){
-      const te=prev+Hc+(i2)*M - M + M;  // first at prev+Hc, then every M
-      if(te<tm && te<T0){ cx.beginPath(); cx.arc(X(prev+Hc+i2*M - 0),P.t+30,5,0,Math.PI*2); cx.fill(); nShown++; }
-    }
-    prev=tm;
-  });
-  cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
-  cx.fillText('each gap h fits  n = max{0, ⌊(h − Hc + M)/M⌋}  minor vehicles (Table 5.1)', P.l, P.t+80);
-
-  // capacity vs main flow chart on main canvas bottom
-  const P3={l:64,r:20,t:200,b:60};
-  const ph3=H-P3.t-P3.b, pw3=W-P3.l-P3.r;
-  const capNow=minorCap(qM,Hc,M,3600);
-  let cMax=1200;
-  const X3=q=>P3.l+(q-200)/(1400-200)*pw3, Y3=c2=>P3.t+ph3-c2/cMax*ph3;
-  cx.strokeStyle='#eef0f4';
-  for(let q=200;q<=1400;q+=200){ cx.beginPath(); cx.moveTo(X3(q),P3.t); cx.lineTo(X3(q),P3.t+ph3); cx.stroke(); cx.fillStyle='#9aa1ad'; cx.textAlign='center'; cx.fillText(q,X3(q),P3.t+ph3+16); }
-  for(let c2=0;c2<=cMax;c2+=200){ cx.beginPath(); cx.moveTo(P3.l,Y3(c2)); cx.lineTo(P3.l+pw3,Y3(c2)); cx.stroke(); cx.fillStyle='#9aa1ad'; cx.textAlign='right'; cx.fillText(c2,P3.l-6,Y3(c2)+4); }
-  cx.strokeStyle='#d6dae2'; cx.strokeRect(P3.l,P3.t,pw3,ph3);
-  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
-  cx.fillText('main-street flow q_M (veh/hr)', P3.l+pw3/2, H-24);
-  cx.save(); cx.translate(16,P3.t+ph3/2); cx.rotate(-Math.PI/2); cx.fillText('minor-street capacity (veh/hr)',0,0); cx.restore();
-  cx.strokeStyle='#0e7c86'; cx.lineWidth=2.6; cx.lineJoin='round';
+function drawGapCharts(qM, Hc, M, obsCap){
+  // capacity vs main flow (recomputed only when dirty → cache)
+  if (paramsDirty || !drawGapCharts.cache || drawGapCharts.key !== qM + '|' + Hc + '|' + M){
+    const curve = [];
+    for (let q = 200; q <= 1400; q += 50) curve.push([q, minorCap(q, Hc, M, 1800)]);
+    drawGapCharts.cache = { curve, capNow: minorCap(qM, Hc, M, 3600) };
+    drawGapCharts.key = qM + '|' + Hc + '|' + M;
+  }
+  const { curve, capNow } = drawGapCharts.cache;
+  const P3 = { l: 64, r: 20, t: 210, b: 60 };
+  const ph3 = H - P3.t - P3.b, pw3 = W - P3.l - P3.r, cMax = 1200;
+  const X3 = q => P3.l + (q - 200) / 1200 * pw3, Y3 = c2 => P3.t + ph3 - c2 / cMax * ph3;
+  cx.strokeStyle = '#eef0f4'; cx.fillStyle = '#9aa1ad'; cx.font = '11px ' + SANS;
+  for (let q = 200; q <= 1400; q += 200){ cx.beginPath(); cx.moveTo(X3(q), P3.t); cx.lineTo(X3(q), P3.t + ph3); cx.stroke(); cx.textAlign = 'center'; cx.fillText(q, X3(q), P3.t + ph3 + 16); }
+  for (let c2 = 0; c2 <= cMax; c2 += 200){ cx.beginPath(); cx.moveTo(P3.l, Y3(c2)); cx.lineTo(P3.l + pw3, Y3(c2)); cx.stroke(); cx.textAlign = 'right'; cx.fillText(c2, P3.l - 6, Y3(c2) + 4); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P3.l, P3.t, pw3, ph3);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'center';
+  cx.fillText('main-street flow q_M (veh/hr)', P3.l + pw3 / 2, H - 24);
+  cx.save(); cx.translate(16, P3.t + ph3 / 2); cx.rotate(-Math.PI / 2); cx.fillText('minor-street capacity (veh/hr)', 0, 0); cx.restore();
+  cx.strokeStyle = '#0e7c86'; cx.lineWidth = 2.6; cx.lineJoin = 'round';
   cx.beginPath();
-  for(let q=200;q<=1400;q+=50){
-    const c2=minorCap(q,Hc,M,3600);
-    const x=X3(q), y=Y3(Math.min(c2,cMax));
-    if(q===200) cx.moveTo(x,y); else cx.lineTo(x,y);
-  }
+  curve.forEach(([q, c2], i) => { const px = X3(q), py = Y3(Math.min(c2, cMax)); if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py); });
   cx.stroke();
-  cx.fillStyle='#b45309';
-  cx.beginPath(); cx.arc(X3(qM),Y3(Math.min(capNow,cMax)),7,0,Math.PI*2); cx.fill();
-  cx.strokeStyle='#fff'; cx.lineWidth=1.5; cx.stroke();
-  cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS; cx.textAlign='left';
-  cx.fillText('minor-street capacity vs main flow (Poisson headways, 1 hr simulated)', P3.l, P3.t-8);
-
-  // side: comparison with a signal (Eq. 5.2)
-  sx2.clearRect(0,0,SC.width,SC.height); sx2.fillStyle='#fff'; sx2.fillRect(0,0,SC.width,SC.height);
-  const P4={l:56,r:14,t:26,b:40};
-  const s4=axes(sx2,SC.width,SC.height,P4,180,2000,'cycle length C (s)','combined capacity (veh/hr)',30,400);
-  const L=8;
-  sx2.strokeStyle='#40663c'; sx2.lineWidth=2.4;
-  sx2.beginPath();
-  for(let Cc=20;Cc<=180;Cc+=4){
-    const cap=S*(1-L/Cc);
-    const x=s4.X(Cc), y=s4.Y(Math.max(0,cap));
-    if(Cc===20) sx2.moveTo(x,y); else sx2.lineTo(x,y);
+  cx.fillStyle = '#40663c';
+  cx.beginPath(); cx.arc(X3(qM), Y3(Math.min(capNow, cMax)), 7, 0, Math.PI * 2); cx.fill();
+  cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+  // live observed dot
+  if (obsCap > 0){
+    cx.fillStyle = '#b45309';
+    cx.beginPath(); cx.arc(X3(qM), Y3(Math.min(obsCap, cMax)), 6, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = '#fff'; cx.stroke();
+    cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+    cx.fillText('live sim', X3(qM) + 10, Y3(Math.min(obsCap, cMax)) + 4);
   }
-  sx2.stroke();
-  const combined=qM+capNow;
-  sx2.strokeStyle='#b45309'; sx2.setLineDash([6,5]);
-  sx2.beginPath(); sx2.moveTo(P4.l,s4.Y(Math.min(combined,2000))); sx2.lineTo(P4.l+s4.pw,s4.Y(Math.min(combined,2000))); sx2.stroke();
-  sx2.setLineDash([]);
-  sx2.fillStyle='#40663c'; sx2.font='600 11px '+SANS; sx2.textAlign='left';
-  sx2.fillText('signalized: s(1 − L/C)  (Eq. 5.2, L = 8 s)', P4.l+8, P4.t+16);
-  sx2.fillStyle='#b45309';
-  sx2.fillText('unsignalized combined q_M + capacity = '+Math.round(combined)+' veh/hr', P4.l+8, s4.Y(Math.min(combined,2000))-6);
-  sx2.fillStyle='#1f2937'; sx2.font='600 12px '+SANS;
-  sx2.fillText('why signalize: combined throughput comparison', P4.l, 16);
-
-  el('story').innerHTML='<b>Gap acceptance</b> (§5.1). Minor-street drivers accept a gap only if it exceeds H<sub>c</sub>; queued followers move up every M seconds. A switch from minor to main traffic wastes (H<sub>c</sub> − M) seconds — exactly the role of lost time at a signal. <b>Bunching the main street helps</b>: the same 10 cars in a platoon leave one big usable gap, which is precisely what a signal manufactures. The green curve shows the signalized combined capacity s(1 − L/C) growing with C.';
-  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
-  setc(1,'minor capacity',Math.round(capNow)+'<small> veh/hr</small>');
-  setc(2,'main flow',qM+'<small> veh/hr</small>');
-  setc(3,'combined (unsignalized)',Math.round(combined)+'<small> veh/hr</small>');
-  setc(4,'switch waste Hc − M',(Hc-M).toFixed(1)+'<small> s</small>');
-  setc(5,'signal @ C=90s: s(1−L/C)',Math.round(S*(1-8/90))+'<small> veh/hr</small>');
-  setc(6,'shown in first 120 s','—');
-  document.querySelectorAll('#cardRow .card')[5].className='card';
+  cx.fillStyle = '#1f2937'; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('minor-street capacity vs main flow — teal: Table 5.1 prediction · amber dot: the animation, converging live', P3.l, P3.t - 8);
+}
+function cardsGap(qM, Hc, M, obsCap){
+  const capNow = drawGapCharts.cache ? drawGapCharts.cache.capNow : 0;
+  el('story').innerHTML = '<b>Gap acceptance</b> (§5.1). Minor-street drivers accept a gap only if it exceeds H<sub>c</sub>; queued followers move up every M seconds. A switch from minor to main traffic wastes (H<sub>c</sub> − M) seconds — exactly the role of lost time at a signal. <b>Bunching the main street helps</b>: a platoon leaves one big usable gap, which is precisely what a signal manufactures (combined capacity s(1 − L/C), Eq. 5.2).';
+  const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+  setc(1, 'predicted minor capacity', Math.round(capNow) + '<small> veh/hr</small>');
+  setc(2, 'live animated throughput', Math.round(obsCap) + '<small> veh/hr</small>');
+  setc(3, 'main flow', qM + '<small> veh/hr</small>');
+  setc(4, 'switch waste Hc − M', (Hc - M).toFixed(1) + '<small> s</small>');
+  setc(5, 'signal @ C=90s: s(1−L/C)', Math.round(S * (1 - 8 / 90)) + '<small> veh/hr</small>');
+  setc(6, 'combined (unsignalized)', Math.round(qM + capNow) + '<small> veh/hr</small>');
+  document.querySelectorAll('#cardRow .card')[5].className = 'card';
+  paramsDirty = false;
 }
 
-function draw(){ if(mode==='sig') drawSig(); else drawGap(); updateVals(); }
+// ── main loop ───────────────────────────────────────────────────────
+function loop(ts){
+  if (lastRAF === null) lastRAF = ts;
+  let dt = (ts - lastRAF) / 1000; lastRAF = ts;
+  dt = Math.min(dt, 0.05);
+  frame++;
+  if (mode === 'sig') frameSig(dt); else frameGap(dt);
+  requestAnimationFrame(loop);
+}
+
 function updateVals(){
-  el('q1V').textContent=el('q1').value+' veh/hr';
-  el('q2V').textContent=el('q2').value+' veh/hr';
-  el('ccV').textContent=el('cc').value+' s';
-  el('llV').textContent=el('ll').value+' s';
-  el('qmV').textContent=el('qm').value+' veh/hr';
-  el('hcV').textContent=el('hc').value+' s';
-  el('mmV').textContent=el('mm').value+' s';
+  el('q1V').textContent = el('q1').value + ' veh/hr';
+  el('q2V').textContent = el('q2').value + ' veh/hr';
+  el('ccV').textContent = el('cc').value + ' s';
+  el('llV').textContent = el('ll').value + ' s';
+  el('qmV').textContent = el('qm').value + ' veh/hr';
+  el('hcV').textContent = el('hc').value + ' s';
+  el('mmV').textContent = el('mm').value + ' s';
 }
-document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
-  mode=b.dataset.m;
-  document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('on',x===b));
-  el('gSig').style.display = mode==='sig'?'contents':'none';
-  el('gGap').style.display = mode==='gap'?'contents':'none';
-  draw();
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.m;
+  document.querySelectorAll('.mode').forEach(x => x.classList.toggle('on', x === b));
+  el('gSig').style.display = mode === 'sig' ? 'contents' : 'none';
+  el('gGap').style.display = mode === 'gap' ? 'contents' : 'none';
+  paramsDirty = true; resetAnim(); updateVals();
 }));
-['q1','q2','cc','ll','qm','hc','mm'].forEach(id=>el(id).addEventListener('input',draw));
-draw();
+['q1','q2','cc','ll','qm','hc','mm'].forEach(id => el(id).addEventListener('input', () => { paramsDirty = true; resetAnim(); updateVals(); }));
+updateVals(); resetAnim();
+requestAnimationFrame(loop);
 
 // chapter navigation drawer
 (function(){
-  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
-  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
-  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
-  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
-  b.addEventListener('mouseenter',open);
-  d.addEventListener('mouseleave',close);
-  s.addEventListener('click',close);
-  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
-  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
 })();
 </script>
 </body>

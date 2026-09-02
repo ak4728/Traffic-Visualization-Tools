@@ -68,8 +68,10 @@
   <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
   <a href="ConservationLaw.html">The Conservation Law</a>
   <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 5 — Control</h4>
   <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
   <h4>Ch. 6 — Observation &amp; Measurement</h4>
   <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
   <h4>Ch. 7 — Scheduled Transportation</h4>
@@ -127,219 +129,290 @@
 'use strict';
 const el = id => document.getElementById(id);
 const SANS = "'Segoe UI', system-ui, sans-serif";
-let mode='count';
-let seed=99;
-function rnd(){ seed=(seed*16807)%2147483647; return seed/2147483647; }
+let mode = 'count';
+let seed = 99;
+function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
 function rPois(mu){
-  if(mu>30){ // normal approx
-    let u=0,v=0; while(u===0)u=rnd(); v=rnd();
-    return Math.max(0, Math.round(mu+Math.sqrt(mu)*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)));
+  if (mu > 30){
+    let u = 0, v = 0; while (u === 0) u = rnd(); v = rnd();
+    return Math.max(0, Math.round(mu + Math.sqrt(mu) * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)));
   }
-  const L=Math.exp(-mu); let k=0,p=1;
-  do{ k++; p*=rnd(); }while(p>L);
-  return k-1;
+  const L = Math.exp(-mu); let k = 0, p = 1;
+  do { k++; p *= rnd(); } while (p > L);
+  return k - 1;
 }
 
 const C = el('main'), cx = C.getContext('2d');
 const W = C.width, H = C.height;
+let lastRAF = null, frame = 0, paramsDirty = true;
 
-function axes(P,xMin,xMax,yMax,xl,yl,xs,ys){
-  const pw=W-P.l-P.r, ph=P.h;
-  const X=v=>P.l+(v-xMin)/(xMax-xMin)*pw, Y=v=>P.t+ph-v/yMax*ph;
-  cx.strokeStyle='#eef0f4'; cx.lineWidth=1;
-  cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS;
-  for(let v=Math.ceil(xMin/xs)*xs; v<=xMax+1e-9; v+=xs){ cx.beginPath(); cx.moveTo(X(v),P.t); cx.lineTo(X(v),P.t+ph); cx.stroke(); cx.textAlign='center'; cx.fillText(Math.round(v), X(v), P.t+ph+16); }
-  for(let v=0; v<=yMax+1e-9; v+=ys){ cx.beginPath(); cx.moveTo(P.l,Y(v)); cx.lineTo(W-P.r,Y(v)); cx.stroke(); cx.textAlign='right'; cx.fillText(+v.toFixed(2), P.l-6, Y(v)+4); }
-  cx.strokeStyle='#d6dae2'; cx.lineWidth=1.3; cx.strokeRect(P.l,P.t,pw,ph);
-  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
-  cx.fillText(xl, P.l+pw/2, P.t+ph+34);
-  cx.save(); cx.translate(16,P.t+ph/2); cx.rotate(-Math.PI/2); cx.fillText(yl,0,0); cx.restore();
-  return {X,Y,pw,ph};
+// ── COUNT MODE: live detector builds the histogram ──────────────────
+const DX = 860, VPXC = 95, TSC = 40;      // detector x, px/sim-s, time ×40
+let cars = [], nextCar = 0, simT = 0, winStart = 0, winN = 0, ests = [], hws = [], lastCrossT = null;
+function resetCount(){
+  seed = 99; cars = []; nextCar = 0; simT = 0; winStart = 0; winN = 0; ests = []; hws = []; lastCrossT = null;
 }
-
-// ── counting error mode ─────────────────────────────────────────────
-function drawCount(){
-  const q=+el('qq').value, T=+el('tt').value;
-  const lam=q/3600, mu=lam*T;
-  seed=99;
-  const M=400, ests=[];
-  for(let i=0;i<M;i++) ests.push(rPois(mu)/T*3600);
-  const mean=ests.reduce((a,b)=>a+b,0)/M;
-  const sd=Math.sqrt(ests.reduce((a,b)=>a+(b-mean)*(b-mean),0)/M);
-  const sdTh=3600*Math.sqrt(mu)/T;
-  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
-  // histogram of q-hat
-  const span=Math.max(4*sdTh, 100);
-  const x0=q-span, x1=q+span;
-  const nb=36, bw=(x1-x0)/nb, bins=new Array(nb).fill(0);
-  ests.forEach(e=>{ const b=Math.floor((e-x0)/bw); if(b>=0&&b<nb) bins[b]++; });
-  const yMax=Math.max(...bins)/M/bw*1.25;
-  const P={l:66,r:20,t:46,h:430};
-  const s=axes(P,x0,x1,yMax,'flow estimate q̂ = N/T · 3600 (veh/hr)','probability density',Math.round(span/2/50)*50||50,yMax/4);
-  bins.forEach((b,i)=>{
-    const d=b/M/bw;
-    cx.fillStyle='rgba(44,83,120,0.55)';
-    cx.fillRect(s.X(x0+i*bw), s.Y(d), s.X(x0+(i+1)*bw)-s.X(x0+i*bw)-1, s.Y(0)-s.Y(d));
+function frameCount(dt){
+  const q = +el('qq').value, T = +el('tt').value;
+  const lam = q / 3600;
+  const sdt = dt * TSC;
+  simT += sdt;
+  nextCar -= sdt;
+  if (nextCar <= 0){ cars.push({ x: -20, c: false }); nextCar = -Math.log(1 - rnd()) / lam; }
+  cars.forEach(c2 => { c2.x += VPXC * sdt * 0.18; });   // visual speed decoupled from sim time
+  cars.forEach(c2 => {
+    if (!c2.c && c2.x >= DX){
+      c2.c = true; winN++;
+      if (lastCrossT !== null && hws.length < 1500) hws.push(simT - lastCrossT);
+      lastCrossT = simT;
+    }
   });
-  // normal overlay
-  cx.strokeStyle='#a4161a'; cx.lineWidth=2.4;
+  // NOTE: counting is driven by sim time directly (Poisson), the drawn cars are a visual echo
+  while (cars.length && cars[0].x > W + 30) cars.shift();
+  if (simT - winStart >= T){
+    if (ests.length < 600) ests.push(winN / T * 3600);
+    winStart = simT; winN = 0;
+  }
+
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // road + detector
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('live count (time ×' + TSC + ') — every ' + T + ' s window drops one estimate q̂ = N/T into the histogram below', 20, 22);
+  const y = 62;
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(0, y - 14, W, 28);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(0, y - 14, W, 28);
+  cx.fillStyle = '#a4161a'; cx.fillRect(DX, y - 20, 4, 40);
+  cars.forEach(c2 => {
+    cx.fillStyle = c2.c ? '#8a94a3' : '#2c5378';
+    cx.beginPath(); cx.roundRect(c2.x - 12, y - 7, 24, 14, 3); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+  });
+  cx.fillStyle = '#6b7280'; cx.font = '600 12px ' + SANS;
+  cx.fillText('window #' + (ests.length + 1) + ':  N = ' + winN + ' veh   ·   t = ' + (simT - winStart).toFixed(0) + ' / ' + T + ' s   ·   windows collected: ' + ests.length + (ests.length >= 600 ? ' (full — move a slider to restart)' : ''), 20, y + 34);
+
+  // histogram
+  const mu = lam * T, sdTh = 3600 * Math.sqrt(Math.max(mu, 1e-9)) / T;
+  const span = Math.max(4 * sdTh, 100), x0 = q - span, x1 = q + span;
+  const P = { l: 66, r: 20, t: 130, h: 400 };
+  const pw = W - P.l - P.r;
+  const nb = 36, bw = (x1 - x0) / nb, bins = new Array(nb).fill(0);
+  ests.forEach(e => { const b = Math.floor((e - x0) / bw); if (b >= 0 && b < nb) bins[b]++; });
+  const M = Math.max(ests.length, 1);
+  const yPk = Math.exp(0) / (sdTh * Math.sqrt(2 * Math.PI));
+  const yMax = Math.max(yPk * 1.25, Math.max(...bins, 1) / M / bw * 1.2);
+  const X = v => P.l + (v - x0) / (x1 - x0) * pw, Y = v => P.t + P.h - v / yMax * P.h;
+  cx.strokeStyle = '#eef0f4'; cx.fillStyle = '#9aa1ad'; cx.font = '11px ' + SANS;
+  const xs = Math.max(50, Math.round(span / 2 / 50) * 50);
+  for (let v = Math.ceil(x0 / xs) * xs; v <= x1; v += xs){ cx.beginPath(); cx.moveTo(X(v), P.t); cx.lineTo(X(v), P.t + P.h); cx.stroke(); cx.textAlign = 'center'; cx.fillText(Math.round(v), X(v), P.t + P.h + 16); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
+  bins.forEach((b, i) => {
+    const d = b / M / bw;
+    cx.fillStyle = 'rgba(44,83,120,0.55)';
+    cx.fillRect(X(x0 + i * bw), Y(d), X(x0 + (i + 1) * bw) - X(x0 + i * bw) - 1, Y(0) - Y(d));
+  });
+  cx.strokeStyle = '#a4161a'; cx.lineWidth = 2.4;
   cx.beginPath();
-  for(let i=0;i<=200;i++){
-    const x=x0+(x1-x0)*i/200;
-    const d=Math.exp(-(x-q)*(x-q)/(2*sdTh*sdTh))/(sdTh*Math.sqrt(2*Math.PI));
-    if(i===0) cx.moveTo(s.X(x),s.Y(Math.min(d,yMax))); else cx.lineTo(s.X(x),s.Y(Math.min(d,yMax)));
+  for (let i = 0; i <= 200; i++){
+    const x = x0 + (x1 - x0) * i / 200;
+    const d = Math.exp(-(x - q) * (x - q) / (2 * sdTh * sdTh)) / (sdTh * Math.sqrt(2 * Math.PI));
+    if (i === 0) cx.moveTo(X(x), Y(Math.min(d, yMax))); else cx.lineTo(X(x), Y(Math.min(d, yMax)));
   }
   cx.stroke();
-  cx.strokeStyle='#40663c'; cx.setLineDash([6,5]); cx.lineWidth=1.6;
-  cx.beginPath(); cx.moveTo(s.X(q),P.t); cx.lineTo(s.X(q),P.t+P.h); cx.stroke(); cx.setLineDash([]);
-  cx.fillStyle='#40663c'; cx.font='600 11px '+SANS; cx.textAlign='left';
-  cx.fillText('true q = '+q, s.X(q)+5, P.t+16);
-  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
-  cx.fillText('400 simulated counting windows of T = '+T+' s  ·  red curve: normal with σ = 3600·√(qT)/T', P.l, 26);
+  cx.strokeStyle = '#40663c'; cx.setLineDash([6, 5]);
+  cx.beginPath(); cx.moveTo(X(q), P.t); cx.lineTo(X(q), P.t + P.h); cx.stroke(); cx.setLineDash([]);
+  cx.fillStyle = '#40663c'; cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('true q = ' + q, X(q) + 5, P.t + 16);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'center';
+  cx.fillText('flow estimate q̂ (veh/hr) — histogram fills as windows complete; red: normal, σ = 3600·√(qT)/T', P.l + pw / 2, P.t + P.h + 36);
 
-  // headway histogram (bottom)
-  const P2={l:66,r:640,t:560,h:150};
-  seed=7;
-  const hws=[]; for(let i=0;i<600;i++) hws.push(-Math.log(1-rnd())/lam);
-  const hMax=4/lam, nb2=26, bw2=hMax/nb2, b2=new Array(nb2).fill(0);
-  hws.forEach(h=>{ const b=Math.floor(h/bw2); if(b<nb2) b2[b]++; });
-  const y2=Math.max(...b2)/600/bw2*1.2;
-  const pw2=W-P2.l-P2.r;
-  const X2=v=>P2.l+v/hMax*pw2, Y2=v=>P2.t+P2.h-v/y2*P2.h;
-  cx.strokeStyle='#d6dae2'; cx.strokeRect(P2.l,P2.t,pw2,P2.h);
-  b2.forEach((b,i)=>{
-    const d=b/600/bw2;
-    cx.fillStyle='rgba(180,83,9,0.5)';
-    cx.fillRect(X2(i*bw2), Y2(d), X2(bw2)-X2(0)-1, Y2(0)-Y2(d));
-  });
-  cx.strokeStyle='#7a4b8f'; cx.lineWidth=2;
-  cx.beginPath();
-  for(let i=0;i<=100;i++){ const h=hMax*i/100, d=lam*Math.exp(-lam*h); const y=Y2(Math.min(d,y2)); if(i===0) cx.moveTo(X2(h),y); else cx.lineTo(X2(h),y); }
-  cx.stroke();
-  cx.fillStyle='#4b5563'; cx.font='600 11px '+SANS; cx.textAlign='left';
-  cx.fillText('headways: exponential ("forgetful", §6.1.5) — x: headway (s), y: density', P2.l, P2.t-6);
+  // headway histogram (bottom-left)
+  const P2 = { l: 66, r: 660, t: 600, h: 130 };
+  const pw2 = W - P2.l - P2.r;
+  if (hws.length > 5){
+    const hMax = 4 / lam, nb2 = 26, bw2 = hMax / nb2, b2 = new Array(nb2).fill(0);
+    hws.forEach(h2 => { const b = Math.floor(h2 / bw2); if (b >= 0 && b < nb2) b2[b]++; });
+    const y2 = Math.max(lam * 1.2, Math.max(...b2) / hws.length / bw2 * 1.15);
+    const X2 = v => P2.l + v / hMax * pw2, Y2 = v => P2.t + P2.h - v / y2 * P2.h;
+    cx.strokeStyle = '#d6dae2'; cx.strokeRect(P2.l, P2.t, pw2, P2.h);
+    b2.forEach((b, i) => {
+      const d = b / hws.length / bw2;
+      cx.fillStyle = 'rgba(180,83,9,0.5)';
+      cx.fillRect(X2(i * bw2), Y2(Math.min(d, y2)), X2(bw2) - X2(0) - 1, Y2(0) - Y2(Math.min(d, y2)));
+    });
+    cx.strokeStyle = '#7a4b8f'; cx.lineWidth = 2;
+    cx.beginPath();
+    for (let i = 0; i <= 100; i++){ const h2 = hMax * i / 100, d = lam * Math.exp(-lam * h2); const yy = Y2(Math.min(d, y2)); if (i === 0) cx.moveTo(X2(h2), yy); else cx.lineTo(X2(h2), yy); }
+    cx.stroke();
+  }
+  cx.fillStyle = '#4b5563'; cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('measured headways (' + hws.length + ') vs exponential — "forgetful" arrivals, §6.1.5', P2.l, P2.t - 6);
 
-  const eps=1.96/Math.sqrt(mu);
-  el('story').innerHTML='<b>How good is a count?</b> A Poisson count has variance = mean (§6.1.4), so q̂ = N/T carries a relative error of <b>1/√N</b> — visible above: the histogram of 400 independent windows matches the normal curve with σ = 3600√(qT)/T. Counting <i>longer</i> is the only cure, and it pays off slowly: error halves only when the count quadruples.';
-  el('lesson').innerHTML='<b>Rule of thumb</b> — for ±ε relative error at 95% confidence you must count about <b>N ≈ (1.96/ε)²</b> vehicles: ±10% → ~384 veh, ±5% → ~1,537 veh. At '+q+' veh/hr that means '+(384/q*60).toFixed(0)+' and '+(1537/q*60).toFixed(0)+' minutes of counting respectively. This is why 15-minute counts of low-volume movements are so noisy — and why the I-25 calibration in Chapter 4 used a whole month.';
-  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
-  setc(1,'expected count / window',mu.toFixed(0)+'<small> veh</small>');
-  setc(2,'sim mean of q̂',Math.round(mean)+'<small> veh/hr</small>');
-  setc(3,'sim σ of q̂',Math.round(sd)+'<small> veh/hr</small>');
-  setc(4,'theory σ = 3600√(qT)/T',Math.round(sdTh)+'<small> veh/hr</small>');
-  setc(5,'95% relative error',' ±'+(eps*100).toFixed(1)+'%');
-  setc(6,'to reach ±10% / ±5%','384 / 1,537<small> veh</small>');
+  if (paramsDirty || frame % 30 === 0) cardsCount(q, T, mu, sdTh);
+}
+function cardsCount(q, T, mu, sdTh){
+  const M = ests.length;
+  const mean = M ? ests.reduce((a, b) => a + b, 0) / M : 0;
+  const sd = M > 1 ? Math.sqrt(ests.reduce((a, b) => a + (b - mean) * (b - mean), 0) / M) : 0;
+  const eps = 1.96 / Math.sqrt(Math.max(mu, 1e-9));
+  el('story').innerHTML = '<b>How good is a count?</b> A Poisson count has variance = mean (§6.1.4), so q̂ = N/T carries a relative error of <b>1/√N</b>. Watch the histogram converge onto the red normal curve as windows complete — and notice how wide it stays when T is short. Counting <i>longer</i> is the only cure, and it pays off slowly: error halves only when the count quadruples.';
+  el('lesson').innerHTML = '<b>Rule of thumb</b> — for ±ε relative error at 95% confidence you must count about <b>N ≈ (1.96/ε)²</b> vehicles: ±10% → ~384 veh, ±5% → ~1,537 veh. At ' + q + ' veh/hr that means ' + (384 / q * 60).toFixed(0) + ' and ' + (1537 / q * 60).toFixed(0) + ' minutes of counting respectively. This is why 15-minute counts of low-volume movements are so noisy — and why the I-25 calibration in Chapter 4 used a whole month.';
+  const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+  setc(1, 'expected count / window', mu.toFixed(0) + '<small> veh</small>');
+  setc(2, 'windows collected', M + '');
+  setc(3, 'running mean of q̂', M ? Math.round(mean) + '<small> veh/hr</small>' : '—');
+  setc(4, 'running σ vs theory', M > 1 ? Math.round(sd) + ' / ' + Math.round(sdTh) + '<small> veh/hr</small>' : '— / ' + Math.round(sdTh));
+  setc(5, '95% relative error', '±' + (eps * 100).toFixed(1) + '%');
+  setc(6, 'to reach ±10% / ±5%', '384 / 1,537<small> veh</small>');
+  paramsDirty = false;
 }
 
-// ── correlated samples mode ─────────────────────────────────────────
+// ── CORR MODE ───────────────────────────────────────────────────────
 function queueSeries(x, nCyc){
-  // signal overflow queue per cycle: n' = max(0, n + a − m), a ~ Poisson
-  const m=20, muA=x*m;
-  let n=0; const out=[];
-  for(let i=0;i<nCyc;i++){ n=Math.max(0, n+rPois(muA)-m); out.push(n); }
+  const m = 20, muA = x * m;
+  let n = 0; const out = [];
+  for (let i = 0; i < nCyc; i++){ n = Math.max(0, n + rPois(muA) - m); out.push(n); }
   return out;
 }
-function drawCorr(){
-  const x=+el('xx').value;
-  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
-  // long reference run to get "true" mean + a sample path to display
-  seed=123;
-  const warm=queueSeries(x,400);
-  const path=queueSeries(x,240);
-  seed=123;
-  const longRun=queueSeries(x,20000);
-  const truth=longRun.slice(2000).reduce((a,b)=>a+b,0)/(18000);
-  // sample path plot (top)
-  const P={l:66,r:20,t:46,h:250};
-  const yM=Math.max(...path, truth*2, 5)*1.15;
-  const s=axes(P,0,240,yM,'cycle number','overflow queue (veh)',40,Math.ceil(yM/4));
-  cx.strokeStyle='#2c5378'; cx.lineWidth=1.8; cx.lineJoin='round';
-  cx.beginPath();
-  path.forEach((n,i)=>{ if(i===0) cx.moveTo(s.X(i),s.Y(Math.min(n,yM))); else cx.lineTo(s.X(i),s.Y(Math.min(n,yM))); });
-  cx.stroke();
-  cx.strokeStyle='#40663c'; cx.setLineDash([6,5]);
-  cx.beginPath(); cx.moveTo(P.l,s.Y(truth)); cx.lineTo(W-P.r,s.Y(truth)); cx.stroke(); cx.setLineDash([]);
-  cx.fillStyle='#40663c'; cx.font='600 11px '+SANS; cx.textAlign='left';
-  cx.fillText('true mean queue = '+truth.toFixed(1)+' veh', P.l+8, s.Y(truth)-6);
-  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
-  cx.fillText('one day at the signal: the overflow queue remembers itself for many cycles (x = '+x.toFixed(2)+')', P.l, 26);
-
-  // estimator error vs window length (bottom): contiguous vs independent
-  const Ws=[2,4,8,16,32,64,128];
-  const M=250;
-  const errC=[], errI=[];
-  Ws.forEach(Wn=>{
-    let se=0;
-    for(let r=0;r<M;r++){
-      const run=queueSeries(x, Wn+50).slice(50);
-      const est=run.reduce((a,b)=>a+b,0)/Wn;
-      se+=(est-truth)*(est-truth);
+let corrCache = null, corrCursor = 0;
+function buildCorr(){
+  const x = +el('xx').value;
+  seed = 123;
+  const path = queueSeries(x, 240);
+  seed = 123;
+  const longRun = queueSeries(x, 20000);
+  const truth = longRun.slice(2000).reduce((a, b) => a + b, 0) / 18000;
+  const Ws = [2, 4, 8, 16, 32, 64, 128], M = 250, errC = [], errI = [];
+  Ws.forEach(Wn => {
+    let se = 0;
+    for (let r = 0; r < M; r++){
+      const run = queueSeries(x, Wn + 50).slice(50);
+      const est = run.reduce((a, b) => a + b, 0) / Wn;
+      se += (est - truth) * (est - truth);
     }
-    errC.push(Math.sqrt(se/M));
-    let se2=0;
-    for(let r=0;r<M;r++){
-      let sum=0;
-      for(let j=0;j<Wn;j++){ const run=queueSeries(x,55); sum+=run[54]; }
-      se2+=(sum/Wn-truth)*(sum/Wn-truth);
+    errC.push(Math.sqrt(se / M));
+    let se2 = 0;
+    for (let r = 0; r < M; r++){
+      let sum = 0;
+      for (let j = 0; j < Wn; j++){ const run = queueSeries(x, 55); sum += run[54]; }
+      se2 += (sum / Wn - truth) * (sum / Wn - truth);
     }
-    errI.push(Math.sqrt(se2/M));
+    errI.push(Math.sqrt(se2 / M));
   });
-  const P3={l:66,r:20,t:400,h:290};
-  const eM=Math.max(...errC,...errI)*1.15;
-  const s3=axes(P3,0,Ws[Ws.length-1],eM,'samples used, W (cycles or days)','RMS error of the mean-queue estimate (veh)',16,Math.max(eM/4,0.5));
-  const plot=(arr,col,name,dy)=>{
-    cx.strokeStyle=col; cx.lineWidth=2.4; cx.lineJoin='round';
+  corrCache = { x, path, truth, Ws, errC, errI };
+  corrCursor = 0;
+}
+function frameCorr(dt){
+  if (!corrCache || corrCache.x !== +el('xx').value) buildCorr();
+  const { path, truth, Ws, errC, errI } = corrCache;
+  corrCursor = Math.min(240, corrCursor + dt * 35);          // 35 cycles/s
+  if (corrCursor >= 240) corrCursor = 0;
+
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  const P = { l: 66, r: 20, t: 46, h: 250 };
+  const pw = W - P.l - P.r;
+  const yM = Math.max(...path, truth * 2, 5) * 1.15;
+  const X = v => P.l + v / 240 * pw, Y = v => P.t + P.h - v / yM * P.h;
+  cx.strokeStyle = '#eef0f4'; cx.fillStyle = '#9aa1ad'; cx.font = '11px ' + SANS;
+  for (let v = 0; v <= 240; v += 40){ cx.beginPath(); cx.moveTo(X(v), P.t); cx.lineTo(X(v), P.t + P.h); cx.stroke(); cx.textAlign = 'center'; cx.fillText(v, X(v), P.t + P.h + 16); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
+  cx.strokeStyle = '#2c5378'; cx.lineWidth = 1.8; cx.lineJoin = 'round';
+  cx.beginPath();
+  const upto = Math.floor(corrCursor);
+  path.slice(0, upto + 1).forEach((n, i) => { if (i === 0) cx.moveTo(X(i), Y(Math.min(n, yM))); else cx.lineTo(X(i), Y(Math.min(n, yM))); });
+  cx.stroke();
+  if (upto > 0){
+    cx.fillStyle = '#b45309';
+    cx.beginPath(); cx.arc(X(upto), Y(Math.min(path[upto], yM)), 6, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+  }
+  cx.strokeStyle = '#40663c'; cx.setLineDash([6, 5]);
+  cx.beginPath(); cx.moveTo(P.l, Y(truth)); cx.lineTo(W - P.r, Y(truth)); cx.stroke(); cx.setLineDash([]);
+  cx.fillStyle = '#40663c'; cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('true mean queue = ' + truth.toFixed(1) + ' veh', P.l + 8, Y(truth) - 6);
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS;
+  cx.fillText('one day at the signal, replaying cycle by cycle — a bad cycle drags the next ones with it (x = ' + corrCache.x.toFixed(2) + ')', P.l, 26);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'center';
+  cx.fillText('cycle number — y: overflow queue (veh)', P.l + pw / 2, P.t + P.h + 34);
+
+  const P3 = { l: 66, r: 20, t: 400, h: 290 };
+  const eM = Math.max(...errC, ...errI) * 1.15;
+  const X3 = v => P3.l + v / Ws[Ws.length - 1] * pw, Y3 = v => P3.t + P3.h - v / eM * P3.h;
+  cx.strokeStyle = '#eef0f4'; cx.fillStyle = '#9aa1ad'; cx.font = '11px ' + SANS;
+  for (let v = 0; v <= 128; v += 16){ cx.beginPath(); cx.moveTo(X3(v), P3.t); cx.lineTo(X3(v), P3.t + P3.h); cx.stroke(); cx.textAlign = 'center'; cx.fillText(v, X3(v), P3.t + P3.h + 16); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P3.l, P3.t, pw, P3.h);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'center';
+  cx.fillText('samples used, W — y: RMS error of the mean-queue estimate (veh)', P3.l + pw / 2, P3.t + P3.h + 34);
+  const plot = (arr, col, name, dy) => {
+    cx.strokeStyle = col; cx.lineWidth = 2.4; cx.lineJoin = 'round';
     cx.beginPath();
-    arr.forEach((e,i)=>{ const px=s3.X(Ws[i]), py=s3.Y(Math.min(e,eM)); if(i===0) cx.moveTo(px,py); else cx.lineTo(px,py); });
+    arr.forEach((e, i) => { const px = X3(Ws[i]), py = Y3(Math.min(e, eM)); if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py); });
     cx.stroke();
-    arr.forEach((e,i)=>{ cx.fillStyle=col; cx.beginPath(); cx.arc(s3.X(Ws[i]),s3.Y(Math.min(e,eM)),4,0,Math.PI*2); cx.fill(); });
-    cx.fillStyle=col; cx.font='600 12px '+SANS; cx.textAlign='left';
-    cx.fillText(name, P3.l+180, P3.t+18+dy);
+    arr.forEach((e, i) => { cx.fillStyle = col; cx.beginPath(); cx.arc(X3(Ws[i]), Y3(Math.min(e, eM)), 4, 0, Math.PI * 2); cx.fill(); });
+    cx.fillStyle = col; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
+    cx.fillText(name, P3.l + 180, P3.t + 18 + dy);
   };
-  plot(errC,'#a4161a','contiguous window of W cycles (one day)',0);
-  plot(errI,'#0e7c86','W independent days (one cycle each)',18);
-  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
-  cx.fillText('same number of samples — very different accuracy', P3.l, P3.t-10);
+  plot(errC, '#a4161a', 'contiguous window of W cycles (one day)', 0);
+  plot(errI, '#0e7c86', 'W independent days (one cycle each)', 18);
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS;
+  cx.fillText('same number of samples — very different accuracy', P3.l, P3.t - 10);
 
-  el('story').innerHTML='<b>Correlated samples</b> (§6.2.1.1). The overflow queue n′ = max(0, n + arrivals − capacity) carries memory: after a bad cycle, the next cycles are bad too. Successive samples are strongly correlated, so a contiguous average of W cycles behaves like far fewer than W independent observations — the red curve\'s error shrinks slowly and plateaus at small W. The teal curve — the same W samples taken on independent days — falls like 1/√W, the textbook rate.';
-  const ratio = errC[3]/errI[3];
-  el('lesson').innerHTML='<b>The relaxation-time connection</b> (§5.2.1, §6.2.2). The queue\'s memory lasts on the order of its relaxation time, which explodes as x → 1. At x = '+x.toFixed(2)+', W = 16 contiguous cycles carry the information of roughly <b>16/'+(ratio*ratio).toFixed(0)+' ≈ '+(16/(ratio*ratio)).toFixed(1)+' independent samples</b>. Push x toward 0.97 and watch the gap widen: near saturation, one long day tells you almost nothing about the long-run average — you need many days. This is the practical reason queue studies are replicated across days, not just extended within one.';
-  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
-  setc(1,'saturation x',x.toFixed(2));
-  setc(2,'true mean queue',truth.toFixed(1)+'<small> veh</small>');
-  setc(3,'RMS error @ W=16, contiguous',errC[3].toFixed(2)+'<small> veh</small>');
-  setc(4,'RMS error @ W=16, independent',errI[3].toFixed(2)+'<small> veh</small>');
-  setc(5,'effective sample ratio','×'+(1/(ratio*ratio)).toFixed(2));
-  setc(6,'capacity per cycle','20<small> veh (fixed)</small>');
+  if (paramsDirty || frame % 60 === 0) cardsCorr();
+}
+function cardsCorr(){
+  const { x, truth, errC, errI } = corrCache;
+  const ratio = errC[3] / errI[3];
+  el('story').innerHTML = '<b>Correlated samples</b> (§6.2.1.1). The overflow queue n′ = max(0, n + arrivals − capacity) carries memory: watch the orange cursor — after a bad cycle, the following cycles stay bad. A contiguous average of W cycles behaves like far fewer than W independent observations: the red curve\'s error shrinks slowly, while the teal curve (independent days) falls like 1/√W.';
+  el('lesson').innerHTML = '<b>The relaxation-time connection</b> (§5.2.1, §6.2.2). The queue\'s memory lasts on the order of its relaxation time, which explodes as x → 1. At x = ' + x.toFixed(2) + ', W = 16 contiguous cycles carry the information of roughly <b>' + (16 / (ratio * ratio)).toFixed(1) + ' independent samples</b>. Push x toward 0.97 and watch the gap widen: near saturation, one long day tells you almost nothing about the long-run average — replicate across days instead.';
+  const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+  setc(1, 'saturation x', x.toFixed(2));
+  setc(2, 'true mean queue', truth.toFixed(1) + '<small> veh</small>');
+  setc(3, 'RMS error @ W=16, contiguous', errC[3].toFixed(2) + '<small> veh</small>');
+  setc(4, 'RMS error @ W=16, independent', errI[3].toFixed(2) + '<small> veh</small>');
+  setc(5, 'effective sample ratio', '×' + (1 / (ratio * ratio)).toFixed(2));
+  setc(6, 'capacity per cycle', '20<small> veh (fixed)</small>');
+  paramsDirty = false;
 }
 
-function draw(){ if(mode==='count') drawCount(); else drawCorr(); updateVals(); }
+// ── loop ────────────────────────────────────────────────────────────
+function loop(ts){
+  if (lastRAF === null) lastRAF = ts;
+  let dt = (ts - lastRAF) / 1000; lastRAF = ts;
+  dt = Math.min(dt, 0.05);
+  frame++;
+  if (mode === 'count') frameCount(dt); else frameCorr(dt);
+  requestAnimationFrame(loop);
+}
 function updateVals(){
-  el('qqV').textContent=el('qq').value+' veh/hr';
-  el('ttV').textContent=el('tt').value+' s';
-  el('xxV').textContent=(+el('xx').value).toFixed(2);
+  el('qqV').textContent = el('qq').value + ' veh/hr';
+  el('ttV').textContent = el('tt').value + ' s';
+  el('xxV').textContent = (+el('xx').value).toFixed(2);
 }
-document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
-  mode=b.dataset.m;
-  document.querySelectorAll('.mode').forEach(y=>y.classList.toggle('on',y===b));
-  el('gCount').style.display = mode==='count'?'contents':'none';
-  el('gCorr').style.display = mode==='corr'?'contents':'none';
-  draw();
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.m;
+  document.querySelectorAll('.mode').forEach(y => y.classList.toggle('on', y === b));
+  el('gCount').style.display = mode === 'count' ? 'contents' : 'none';
+  el('gCorr').style.display = mode === 'corr' ? 'contents' : 'none';
+  paramsDirty = true; resetCount(); corrCache = null;
+  updateVals();
+  (mode === 'count' ? frameCount : frameCorr)(0);
 }));
-['qq','tt','xx'].forEach(id=>el(id).addEventListener('input',draw));
-draw();
+['qq','tt'].forEach(id => el(id).addEventListener('input', () => { paramsDirty = true; resetCount(); updateVals(); if (mode === 'count') frameCount(0); }));
+el('xx').addEventListener('input', () => { paramsDirty = true; corrCache = null; updateVals(); if (mode === 'corr') frameCorr(0); });
+updateVals(); resetCount();
+frameCount(0);
+requestAnimationFrame(loop);
 
 // chapter navigation drawer
 (function(){
-  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
-  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
-  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
-  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
-  b.addEventListener('mouseenter',open);
-  d.addEventListener('mouseleave',close);
-  s.addEventListener('click',close);
-  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
-  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
 })();
 </script>
 </body>

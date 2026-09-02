@@ -68,8 +68,10 @@
   <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
   <a href="ConservationLaw.html">The Conservation Law</a>
   <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 5 — Control</h4>
   <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
   <h4>Ch. 6 — Observation &amp; Measurement</h4>
   <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
   <h4>Ch. 7 — Scheduled Transportation</h4>
@@ -129,191 +131,295 @@
 'use strict';
 const el = id => document.getElementById(id);
 const SANS = "'Segoe UI', system-ui, sans-serif";
-let mode='wait';
-let seed=31;
-function rnd(){ seed=(seed*16807)%2147483647; return seed/2147483647; }
-function gauss(){ let u=0,v=0; while(u===0)u=rnd(); v=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+let mode = 'wait';
+let seed = 31;
+function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+function gauss(){ let u = 0, v = 0; while (u === 0) u = rnd(); v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 
 const C = el('main'), cx = C.getContext('2d');
 const W = C.width, H = C.height;
+let lastRAF = null, frame = 0, paramsDirty = true, simT = 0;
 
-// ── waiting time mode ───────────────────────────────────────────────
-function drawWait(){
-  const Hm=+el('hh').value, CV=+el('cv').value;
-  // generate K headways with mean Hm, cv CV (gamma-ish via lognormal, clipped)
-  seed=31;
-  const K=12, hs=[];
-  for(let i=0;i<K;i++){
-    let h=Hm*(1+CV*gauss());
-    hs.push(Math.max(Hm*0.15,h));
+// ── WAIT MODE ───────────────────────────────────────────────────────
+let waitCache = null;
+function buildWait(){
+  const Hm = +el('hh').value, CV = +el('cv').value;
+  seed = 31;
+  const K = 12, hs = [];
+  for (let i = 0; i < K; i++) hs.push(Math.max(Hm * 0.15, Hm * (1 + CV * gauss())));
+  const T = hs.reduce((a, b) => a + b, 0);
+  const deps = []; let t = 0; hs.forEach(h => { t += h; deps.push(t); });
+  const meanH = T / K;
+  const varH = hs.reduce((a, b) => a + (b - meanH) * (b - meanH), 0) / K;
+  const cvA = Math.sqrt(varH) / meanH;
+  const Wsim = hs.reduce((a, b) => a + b * b, 0) / (2 * T);
+  const Wform = meanH / 2 * (1 + cvA * cvA);
+  // passenger arrival times (uniform-rate visual: 2.6/min, jittered)
+  seed = 55;
+  const pax = []; let tp = 0;
+  while (tp < T){ tp += -Math.log(1 - rnd()) / 2.6; pax.push(tp); }
+  waitCache = { key: Hm + '|' + CV, hs, deps, T, meanH, cvA, Wsim, Wform, pax };
+  simT = 0;
+}
+function frameWait(dt){
+  const key = (+el('hh').value) + '|' + (+el('cv').value);
+  if (!waitCache || waitCache.key !== key) buildWait();
+  const { hs, deps, T, meanH, cvA, Wsim, Wform, pax } = waitCache;
+  simT += dt * (T / 18);                 // whole period in ~18 s
+  if (simT > T + 1){ simT = 0; }
+
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // ── stop animation band ──
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('the bus stop, live — passengers pile up during long headways (replaying ' + T.toFixed(0) + ' min of service)', 20, 22);
+  const roadY = 84;
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(0, roadY - 18, W, 36);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(0, roadY - 18, W, 36);
+  const stopX = 880;
+  cx.fillStyle = '#14919b'; cx.fillRect(stopX - 3, roadY - 30, 6, 12);
+  cx.fillStyle = '#0f7b82'; cx.font = '600 11px ' + SANS; cx.textAlign = 'center';
+  cx.fillText('STOP', stopX, roadY - 36);
+  // last departure before simT
+  let lastDep = 0, nextDep = T;
+  for (let i = 0; i < deps.length; i++){ if (deps[i] <= simT) lastDep = deps[i]; else { nextDep = deps[i]; break; } }
+  // waiting passengers = arrivals in (lastDep, simT]
+  const waiting = pax.filter(p => p > lastDep && p <= simT).length;
+  for (let i = 0; i < Math.min(waiting, 60); i++){
+    const col = i % 12, row = Math.floor(i / 12);
+    cx.fillStyle = '#4f3f5c';
+    cx.beginPath(); cx.arc(stopX - 30 - col * 13, roadY - 26 - row * 12, 4.4, 0, Math.PI * 2); cx.fill();
   }
-  const T=hs.reduce((a,b)=>a+b,0);
-  const meanH=T/K;
-  const varH=hs.reduce((a,b)=>a+(b-meanH)*(b-meanH),0)/K;
-  const cvA=Math.sqrt(varH)/meanH;
-  // exact mean wait for uniform arrivals: W = Σh²/(2Σh)
-  const Wsim=hs.reduce((a,b)=>a+b*b,0)/(2*T);
-  const Wform=meanH/2*(1+cvA*cvA);
+  // bus sprite: approaches during the last 1.2 min before each departure
+  const tIn = nextDep - simT;
+  if (tIn < 1.2){
+    const bx = stopX - (tIn / 1.2) * (stopX + 60) * 0.4 - 0;   // slides in
+    const bxx = stopX - (tIn / 1.2) * 320;
+    cx.fillStyle = '#b45309';
+    cx.beginPath(); cx.roundRect(bxx - 34, roadY - 12, 68, 24, 5); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+    cx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let wnd = 0; wnd < 4; wnd++) cx.fillRect(bxx - 26 + wnd * 15, roadY - 7, 9, 8);
+  }
+  cx.fillStyle = '#6b7280'; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('waiting now: ' + waiting + ' pax   ·   time in period: ' + simT.toFixed(1) + ' / ' + T.toFixed(0) + ' min   ·   next bus in ' + Math.max(0, nextDep - simT).toFixed(1) + ' min', 20, roadY + 40);
 
-  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
-  const P={l:66,r:20,t:50,b:60};
-  const pw=W-P.l-P.r, ph=H-P.t-P.b;
-  const lam=3; // pax/min for drawing
-  const NMAX=lam*T*1.06;
-  const X=t=>P.l+t/T*pw, Y=n=>P.t+ph-n/NMAX*ph;
-  cx.strokeStyle='#d6dae2'; cx.strokeRect(P.l,P.t,pw,ph);
-  // bus departure times + steps + shaded wait triangles
-  let t=0, N=0;
-  cx.fillStyle='rgba(164,22,26,0.12)';
-  hs.forEach(h=>{
-    const t2=t+h, n2=lam*t2;
-    // triangle between arrival line and step
-    cx.beginPath();
-    cx.moveTo(X(t),Y(lam*t));
-    cx.lineTo(X(t2),Y(lam*t2));
-    cx.lineTo(X(t2),Y(lam*t));
-    cx.closePath(); cx.fill();
-    t=t2;
+  // ── cumulative diagram, progressive ──
+  const P = { l: 66, r: 20, t: 170, b: 60 };
+  const pw = W - P.l - P.r, ph = H - P.t - P.b;
+  const lam = 2.6, NMAX = lam * T * 1.06;
+  const X = t2 => P.l + t2 / T * pw, Y = n => P.t + ph - n / NMAX * ph;
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, ph);
+  // shaded triangles up to simT
+  cx.fillStyle = 'rgba(164,22,26,0.12)';
+  let t0 = 0;
+  hs.forEach(h => {
+    const t1 = Math.min(t0 + h, simT);
+    if (t1 > t0){
+      cx.beginPath();
+      cx.moveTo(X(t0), Y(lam * t0));
+      cx.lineTo(X(t1), Y(lam * t1));
+      cx.lineTo(X(t1), Y(lam * t0));
+      cx.closePath(); cx.fill();
+    }
+    t0 += h;
   });
-  // arrival line
-  cx.strokeStyle='#2c5378'; cx.lineWidth=2.4;
-  cx.beginPath(); cx.moveTo(X(0),Y(0)); cx.lineTo(X(T),Y(lam*T)); cx.stroke();
-  // departure steps
-  cx.strokeStyle='#0e7c86'; cx.lineWidth=2.6;
-  cx.beginPath(); cx.moveTo(X(0),Y(0));
-  t=0;
-  hs.forEach(h=>{
-    const t2=t+h;
-    cx.lineTo(X(t2),Y(lam*t));   // horizontal to bus time
-    cx.lineTo(X(t2),Y(lam*t2));  // jump: bus takes everyone
-    t=t2;
+  cx.strokeStyle = '#2c5378'; cx.lineWidth = 2.4;
+  cx.beginPath(); cx.moveTo(X(0), Y(0)); cx.lineTo(X(Math.min(simT, T)), Y(lam * Math.min(simT, T))); cx.stroke();
+  cx.strokeStyle = '#0e7c86'; cx.lineWidth = 2.6;
+  cx.beginPath(); cx.moveTo(X(0), Y(0));
+  t0 = 0;
+  hs.forEach(h => {
+    const t1 = t0 + h;
+    if (t1 <= simT){ cx.lineTo(X(t1), Y(lam * t0)); cx.lineTo(X(t1), Y(lam * t1)); }
+    else if (t0 < simT){ cx.lineTo(X(Math.min(simT, t1)), Y(lam * t0)); }
+    t0 = t1;
   });
   cx.stroke();
-  // bus arrows
-  t=0;
-  cx.fillStyle='#b45309'; cx.font='700 14px '+SANS; cx.textAlign='center';
-  hs.forEach(h=>{ t+=h; cx.fillText('▲', X(t), P.t+ph+18); });
-  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS;
-  cx.fillText('time (min) — ▲ bus departures', P.l+pw/2, H-8);
-  cx.save(); cx.translate(16,P.t+ph/2); cx.rotate(-Math.PI/2); cx.fillText('cumulative passengers',0,0); cx.restore();
-  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
-  cx.fillText('Fig. 7.1 — arrivals (blue), bus departures (teal steps); the shaded triangles are the total wait: Σ λh²/2', P.l, 26);
-  cx.fillStyle='#9aa1ad'; cx.font='italic 11px '+SANS;
-  cx.fillText('long headways collect quadratically more waiting — that is the whole irregularity penalty', P.l, 42);
+  // cursor
+  cx.strokeStyle = '#b45309'; cx.setLineDash([5, 4]); cx.lineWidth = 1.5;
+  cx.beginPath(); cx.moveTo(X(Math.min(simT, T)), P.t); cx.lineTo(X(Math.min(simT, T)), P.t + ph); cx.stroke(); cx.setLineDash([]);
+  t0 = 0;
+  cx.fillStyle = '#b45309'; cx.font = '700 14px ' + SANS; cx.textAlign = 'center';
+  hs.forEach(h => { t0 += h; if (t0 <= simT) cx.fillText('▲', X(t0), P.t + ph + 18); });
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS;
+  cx.fillText('time (min) — ▲ bus departures · blue: arrivals · teal steps: departures · shaded: waiting (Fig. 7.1)', P.l + pw / 2, H - 8);
+  cx.save(); cx.translate(16, P.t + ph / 2); cx.rotate(-Math.PI / 2); cx.fillText('cumulative passengers', 0, 0); cx.restore();
 
-  el('story').innerHTML='<b>Waiting for an unscheduled arrival</b> (§7.1). Each headway h contributes a triangle of area λh²/2 to the total wait, but only λh passengers. Averaging, W = Σh²/2Σh = <b>(E[H]/2)(1 + CV²)</b>: with perfectly even service you wait half a headway; irregularity adds the CV² penalty because more people happen to arrive inside the <i>long</i> gaps.';
-  el('lesson').innerHTML='<b>Try it.</b> Set CV = 0: the triangles are identical and W = H/2. Push CV toward 1 (as bad as exponential/random departures): W doubles to a full headway — the schedule has effectively vanished. This is why headway <i>regularity</i> is worth as much as frequency, and it is the cost of the bunching on the other tab. Informed passengers who time their arrival avoid most of this wait, which is why published (and kept!) timetables matter most at long headways.';
-  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
-  setc(1,'realized mean headway',meanH.toFixed(1)+'<small> min</small>');
-  setc(2,'realized CV(H)',cvA.toFixed(2));
-  setc(3,'W from the diagram',Wsim.toFixed(2)+'<small> min</small>');
-  setc(4,'W = E[H]/2·(1+CV²)',Wform.toFixed(2)+'<small> min</small>');
-  setc(5,'perfectly regular W',(meanH/2).toFixed(2)+'<small> min</small>');
-  setc(6,'irregularity penalty','+'+((Wform/(meanH/2)-1)*100).toFixed(0)+'%');
+  if (paramsDirty || frame % 40 === 0){
+    el('story').innerHTML = '<b>Waiting for an unscheduled arrival</b> (§7.1). Each headway h contributes a triangle of area λh²/2 to the total wait, but only λh passengers. Averaging, W = Σh²/2Σh = <b>(E[H]/2)(1 + CV²)</b>: with perfectly even service you wait half a headway; irregularity adds the CV² penalty because more people happen to arrive inside the <i>long</i> gaps — watch the crowd build up above whenever a headway stretches.';
+    el('lesson').innerHTML = '<b>Try it.</b> Set CV = 0: the triangles are identical and W = H/2. Push CV toward 1 (as bad as random departures): W doubles to a full headway — the schedule has effectively vanished. Headway <i>regularity</i> is worth as much as frequency, and it is the cost of the bunching on the other tab.';
+    const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+    setc(1, 'realized mean headway', meanH.toFixed(1) + '<small> min</small>');
+    setc(2, 'realized CV(H)', cvA.toFixed(2));
+    setc(3, 'W from the diagram', Wsim.toFixed(2) + '<small> min</small>');
+    setc(4, 'W = E[H]/2·(1+CV²)', Wform.toFixed(2) + '<small> min</small>');
+    setc(5, 'perfectly regular W', (meanH / 2).toFixed(2) + '<small> min</small>');
+    setc(6, 'irregularity penalty', '+' + ((Wform / (meanH / 2) - 1) * 100).toFixed(0) + '%');
+    paramsDirty = false;
+  }
 }
 
-// ── bunching mode ───────────────────────────────────────────────────
+// ── BUNCH MODE ──────────────────────────────────────────────────────
+const NB = 6, NS = 25, H0 = 10, RUN = 2.0;
 function simBuses(beta, alpha){
-  // Daganzo Fig 7.6-style: buses over stops; dwell = beta * headway (pax collected)
-  // holding: depart no earlier than target headway fraction alpha restored
-  seed=77;
-  const NB=6, NS=25, H0=10, run=2.0;   // min headway target 10 min, 2 min between stops
-  const dep=[];                        // dep[b][s]
-  for(let b=0;b<NB;b++) dep.push(new Array(NS).fill(0));
-  for(let b=0;b<NB;b++) dep[b][0]=b*H0;
-  for(let s=1;s<NS;s++){
-    for(let b=0;b<NB;b++){
-      const arr=dep[b][s-1]+run+0.3*rnd();          // travel + noise
-      let hw = b===0 ? H0 : arr-(dep[b-1][s-1]+run); // headway proxy at arrival
-      hw=Math.max(0.5,hw);
-      const dwell = b===0 ? beta*H0 : beta*hw;      // lead bus keeps schedule
-      let d=arr+dwell;
-      if(alpha>0 && b>0){
-        const target=dep[b-1][s]+H0;                 // scheduled slot behind leader
-        d=Math.max(d, d+(target-d)*alpha);           // hold toward target
+  seed = 77;
+  const dep = [];
+  for (let b = 0; b < NB; b++) dep.push(new Array(NS).fill(0));
+  for (let b = 0; b < NB; b++) dep[b][0] = b * H0;
+  for (let s = 1; s < NS; s++){
+    for (let b = 0; b < NB; b++){
+      const arr = dep[b][s - 1] + RUN + 0.3 * rnd();
+      let hw = b === 0 ? H0 : arr - (dep[b - 1][s - 1] + RUN);
+      hw = Math.max(0.5, hw);
+      const dwell = b === 0 ? beta * H0 : beta * hw;
+      let d = arr + dwell;
+      if (alpha > 0 && b > 0){
+        const target = dep[b - 1][s] + H0;
+        d = Math.max(d, d + (target - d) * alpha);
       }
-      if(b>0) d=Math.max(d, dep[b-1][s]+0.5);        // no overtaking
-      dep[b][s]=d;
+      if (b > 0) d = Math.max(d, dep[b - 1][s] + 0.5);
+      dep[b][s] = d;
     }
   }
   return dep;
 }
-function drawBunch(){
-  const beta=+el('bb').value, alpha=+el('aa').value;
-  const dep=simBuses(beta,alpha);
-  const dep0=simBuses(beta,0);
-  const NB=dep.length, NS=dep[0].length;
-  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
-  const P={l:66,r:20,t:50,b:60};
-  const pw=W-P.l-P.r, ph=H-P.t-P.b;
-  const tMax=Math.max(dep[NB-1][NS-1], dep0[NB-1][NS-1])*1.03;
-  const X=s=>P.l+s/(NS-1)*pw, Y=t=>P.t+t/tMax*ph;   // time increases downward, like Fig 7.6
-  cx.strokeStyle='#eef0f4';
-  for(let s=0;s<NS;s+=5){ cx.beginPath(); cx.moveTo(X(s),P.t); cx.lineTo(X(s),P.t+ph); cx.stroke(); cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS; cx.textAlign='center'; cx.fillText(s, X(s), P.t+ph+16); }
-  for(let t=0;t<=tMax;t+=20){ cx.beginPath(); cx.moveTo(P.l,Y(t)); cx.lineTo(P.l+pw,Y(t)); cx.stroke(); cx.fillStyle='#9aa1ad'; cx.textAlign='right'; cx.fillText(Math.round(t), P.l-6, Y(t)+4); }
-  cx.strokeStyle='#d6dae2'; cx.strokeRect(P.l,P.t,pw,ph);
-  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
-  cx.fillText('stop number (route runs left → right)', P.l+pw/2, H-8);
-  cx.save(); cx.translate(16,P.t+ph/2); cx.rotate(-Math.PI/2); cx.fillText('time (min, increasing downward — as in Fig. 7.6)',0,0); cx.restore();
-  const cols=['#1f2937','#2c5378','#0e7c86','#b45309','#7a4b8f','#a4161a'];
-  dep.forEach((row,b)=>{
-    cx.strokeStyle=cols[b]; cx.lineWidth=2.2; cx.lineJoin='round';
+let bunchCache = null;
+function buildBunch(){
+  const beta = +el('bb').value, alpha = +el('aa').value;
+  const dep = simBuses(beta, alpha);
+  const dep0 = simBuses(beta, 0);
+  const tMax = Math.max(dep[NB - 1][NS - 1], dep0[NB - 1][NS - 1]) * 1.03;
+  bunchCache = { key: beta + '|' + alpha, beta, alpha, dep, dep0, tMax };
+  simT = 0;
+}
+function busPos(dep, b, t){
+  // returns stop-fraction position of bus b at time t (0..NS-1), or -1 if not started
+  if (t < dep[b][0]) return -1;
+  for (let s = 0; s < NS - 1; s++){
+    if (t < dep[b][s + 1]){
+      const travelEnd = dep[b][s] + RUN;
+      if (t <= travelEnd) return s + Math.min(1, (t - dep[b][s]) / RUN);
+      return s + 1;                              // dwelling at s+1
+    }
+  }
+  return NS - 1 + Math.min(1, (t - dep[b][NS - 1]) / RUN);
+}
+function frameBunch(dt){
+  const key = (+el('bb').value) + '|' + (+el('aa').value);
+  if (!bunchCache || bunchCache.key !== key) buildBunch();
+  const { beta, alpha, dep, dep0, tMax } = bunchCache;
+  simT += dt * (tMax / 20);                      // full route in ~20 s
+  if (simT > tMax + 2) simT = 0;
+
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // ── route band ──
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('the route, live (t = ' + simT.toFixed(0) + ' min) — a late bus meets a bigger crowd, dwells longer, falls later: watch them pair', 20, 22);
+  const roadY = 74;
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(30, roadY - 14, W - 60, 28);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(30, roadY - 14, W - 60, 28);
+  const XR = s => 30 + s / (NS - 1) * (W - 60);
+  cx.fillStyle = '#9aa1ad';
+  for (let s = 0; s < NS; s++){ cx.fillRect(XR(s) - 1, roadY + 10, 2, 8); }
+  const cols = ['#1f2937', '#2c5378', '#0e7c86', '#b45309', '#7a4b8f', '#a4161a'];
+  for (let b = 0; b < NB; b++){
+    const p = busPos(dep, b, simT);
+    if (p < 0 || p > NS - 1 + 0.99) continue;
+    const bx = XR(Math.min(p, NS - 1));
+    cx.fillStyle = cols[b];
+    cx.beginPath(); cx.roundRect(bx - 22, roadY - 10, 44, 20, 4); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+    cx.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let wnd = 0; wnd < 3; wnd++) cx.fillRect(bx - 16 + wnd * 12, roadY - 5, 7, 7);
+  }
+  cx.fillStyle = '#6b7280'; cx.font = '600 11px ' + SANS;
+  cx.fillText('stops 0 … 24 · lead (dark) bus keeps schedule · β = ' + beta.toFixed(2) + (alpha > 0 ? ' · holding α = ' + alpha.toFixed(1) : ' · no control'), 30, roadY + 34);
+
+  // ── trajectory diagram (progressive, time downward like Fig. 7.6) ──
+  const P = { l: 66, r: 20, t: 140, b: 60 };
+  const pw = W - P.l - P.r, ph = H - P.t - P.b;
+  const X = s => P.l + s / (NS - 1) * pw, Y = t2 => P.t + t2 / tMax * ph;
+  cx.strokeStyle = '#eef0f4';
+  for (let s = 0; s < NS; s += 5){ cx.beginPath(); cx.moveTo(X(s), P.t); cx.lineTo(X(s), P.t + ph); cx.stroke(); cx.fillStyle = '#9aa1ad'; cx.font = '11px ' + SANS; cx.textAlign = 'center'; cx.fillText(s, X(s), P.t + ph + 16); }
+  for (let t2 = 0; t2 <= tMax; t2 += 20){ cx.beginPath(); cx.moveTo(P.l, Y(t2)); cx.lineTo(P.l + pw, Y(t2)); cx.stroke(); cx.fillStyle = '#9aa1ad'; cx.textAlign = 'right'; cx.fillText(Math.round(t2), P.l - 6, Y(t2) + 4); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, ph);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'center';
+  cx.fillText('stop number — trajectories draw as the animation advances (time downward, as in Fig. 7.6)', P.l + pw / 2, H - 8);
+  cx.save(); cx.translate(16, P.t + ph / 2); cx.rotate(-Math.PI / 2); cx.fillText('time (min)', 0, 0); cx.restore();
+  for (let b = 0; b < NB; b++){
+    cx.strokeStyle = cols[b]; cx.lineWidth = 2.2; cx.lineJoin = 'round';
     cx.beginPath();
-    row.forEach((t,s)=>{ if(s===0) cx.moveTo(X(s),Y(t)); else cx.lineTo(X(s),Y(t)); });
+    let started = false;
+    for (let s = 0; s < NS; s++){
+      const t2 = dep[b][s];
+      if (t2 > simT) break;
+      if (!started){ cx.moveTo(X(s), Y(t2)); started = true; } else cx.lineTo(X(s), Y(t2));
+    }
     cx.stroke();
-  });
-  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
-  cx.fillText('six buses along 25 stops (Fig. 7.6 recreated) — dwell grows with headway, so gaps amplify', P.l, 26);
-  cx.fillStyle='#9aa1ad'; cx.font='italic 11px '+SANS;
-  cx.fillText(alpha>0?'holding control ON: late buses are not helped, but early buses wait — headways re-converge':'no control: watch trailing buses catch their leaders and pair', P.l, 42);
+  }
+  // cursor line
+  cx.strokeStyle = '#b45309'; cx.setLineDash([5, 4]); cx.lineWidth = 1.3;
+  cx.beginPath(); cx.moveTo(P.l, Y(Math.min(simT, tMax))); cx.lineTo(P.l + pw, Y(Math.min(simT, tMax))); cx.stroke(); cx.setLineDash([]);
 
-  // headway CV at final stop (with and without control)
-  const hwEnd=[], hwEnd0=[];
-  for(let b=1;b<NB;b++){ hwEnd.push(dep[b][NS-1]-dep[b-1][NS-1]); hwEnd0.push(dep0[b][NS-1]-dep0[b-1][NS-1]); }
-  const stats=a=>{ const m=a.reduce((x,y)=>x+y,0)/a.length; const v=a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length; return [m,Math.sqrt(v)/m]; };
-  const [mH,cvH]=stats(hwEnd), [mH0,cvH0]=stats(hwEnd0);
-  const H0=10;
-  const Wpen=+(H0/2*(1+cvH*cvH)).toFixed(2), Wpen0=+(H0/2*(1+cvH0*cvH0)).toFixed(2);
-
-  el('story').innerHTML='<b>Schedule instability</b> (§7.2.2.1). A bus that falls behind meets a longer headway, collects more passengers, dwells longer — and falls further behind, while its follower speeds up. The error grows <i>exponentially</i> with distance down the route until buses pair. The lead bus holds schedule (as in the book\'s Fig. 7.6), so pairing starts among the followers.';
-  el('lesson').innerHTML='<b>Control by slack</b>. Holding at stops (α > 0) restores headways by making <i>early</i> buses wait — buses can be slowed, never accelerated, so stability is bought with schedule slack and a longer nominal trip. Note the payoff through §7.1: at the last stop the uncontrolled headway CV of '+cvH0.toFixed(2)+' would push the average wait to '+Wpen0+' min, while control holds it at '+Wpen+' min. This wait-vs-speed tradeoff is the daily bread of transit operations planning.';
-  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
-  setc(1,'dwell sensitivity β',beta.toFixed(2));
-  setc(2,'holding strength α',alpha.toFixed(1));
-  setc(3,'headway CV @ last stop',cvH.toFixed(2));
-  setc(4,'without control',cvH0.toFixed(2));
-  setc(5,'implied avg wait (7.1)',Wpen+'<small> min</small>');
-  setc(6,'wait without control',Wpen0+'<small> min</small>');
+  if (paramsDirty || frame % 40 === 0){
+    const hwEnd = [], hwEnd0 = [];
+    for (let b = 1; b < NB; b++){ hwEnd.push(dep[b][NS - 1] - dep[b - 1][NS - 1]); hwEnd0.push(dep0[b][NS - 1] - dep0[b - 1][NS - 1]); }
+    const stats = a => { const m = a.reduce((x2, y2) => x2 + y2, 0) / a.length; const v = a.reduce((x2, y2) => x2 + (y2 - m) * (y2 - m), 0) / a.length; return [m, Math.sqrt(v) / m]; };
+    const [mH, cvH] = stats(hwEnd), [mH0, cvH0] = stats(hwEnd0);
+    const Wpen = +(H0 / 2 * (1 + cvH * cvH)).toFixed(2), Wpen0 = +(H0 / 2 * (1 + cvH0 * cvH0)).toFixed(2);
+    el('story').innerHTML = '<b>Schedule instability</b> (§7.2.2.1). A bus that falls behind meets a longer headway, collects more passengers, dwells longer — and falls further behind, while its follower speeds up. The error grows <i>exponentially</i> down the route until buses pair. The lead bus holds schedule (as in the book\'s Fig. 7.6), so pairing starts among the followers.';
+    el('lesson').innerHTML = '<b>Control by slack</b>. Holding at stops (α > 0) restores headways by making <i>early</i> buses wait — buses can be slowed, never accelerated, so stability is bought with schedule slack and a longer nominal trip. The payoff through §7.1: uncontrolled, the final-stop headway CV of ' + cvH0.toFixed(2) + ' pushes the average wait to ' + Wpen0 + ' min; with control it is ' + Wpen + ' min.';
+    const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+    setc(1, 'dwell sensitivity β', beta.toFixed(2));
+    setc(2, 'holding strength α', alpha.toFixed(1));
+    setc(3, 'headway CV @ last stop', cvH.toFixed(2));
+    setc(4, 'without control', cvH0.toFixed(2));
+    setc(5, 'implied avg wait (7.1)', Wpen + '<small> min</small>');
+    setc(6, 'wait without control', Wpen0 + '<small> min</small>');
+    paramsDirty = false;
+  }
 }
 
-function draw(){ if(mode==='wait') drawWait(); else drawBunch(); updateVals(); }
+// ── loop ────────────────────────────────────────────────────────────
+function loop(ts){
+  if (lastRAF === null) lastRAF = ts;
+  let dt = (ts - lastRAF) / 1000; lastRAF = ts;
+  dt = Math.min(dt, 0.05);
+  frame++;
+  if (mode === 'wait') frameWait(dt); else frameBunch(dt);
+  requestAnimationFrame(loop);
+}
 function updateVals(){
-  el('hhV').textContent=el('hh').value+' min';
-  el('cvV').textContent=(+el('cv').value).toFixed(2);
-  el('bbV').textContent=(+el('bb').value).toFixed(2);
-  el('aaV').textContent=(+el('aa').value).toFixed(1);
+  el('hhV').textContent = el('hh').value + ' min';
+  el('cvV').textContent = (+el('cv').value).toFixed(2);
+  el('bbV').textContent = (+el('bb').value).toFixed(2);
+  el('aaV').textContent = (+el('aa').value).toFixed(1);
 }
-document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
-  mode=b.dataset.m;
-  document.querySelectorAll('.mode').forEach(y=>y.classList.toggle('on',y===b));
-  el('gWait').style.display = mode==='wait'?'contents':'none';
-  el('gBunch').style.display = mode==='bunch'?'contents':'none';
-  draw();
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.m;
+  document.querySelectorAll('.mode').forEach(y => y.classList.toggle('on', y === b));
+  el('gWait').style.display = mode === 'wait' ? 'contents' : 'none';
+  el('gBunch').style.display = mode === 'bunch' ? 'contents' : 'none';
+  paramsDirty = true; simT = 0; waitCache = null; bunchCache = null;
+  updateVals();
+  (mode === 'wait' ? frameWait : frameBunch)(0);
 }));
-['hh','cv','bb','aa'].forEach(id=>el(id).addEventListener('input',draw));
-draw();
+['hh','cv','bb','aa'].forEach(id => el(id).addEventListener('input', () => { paramsDirty = true; updateVals(); (mode === 'wait' ? frameWait : frameBunch)(0); }));
+updateVals();
+frameWait(0);
+requestAnimationFrame(loop);
 
 // chapter navigation drawer
 (function(){
-  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
-  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
-  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
-  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
-  b.addEventListener('mouseenter',open);
-  d.addEventListener('mouseleave',close);
-  s.addEventListener('click',close);
-  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
-  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
 })();
 </script>
 </body>
