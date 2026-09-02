@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.4 — The Conservation Law</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  #tsd { cursor: grab; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 130px; accent-color: #14919b; }
+  .mode { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #d6dae2; background: #fff; color: #374151; font-size: 0.8em; font-weight: 600; cursor: pointer; }
+  .mode:hover { border-color: #14919b; color: #0f7b82; }
+  .mode.on { background: #14919b; border-color: transparent; color: #fff; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.68em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.08em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .identity { text-align: center; font-size: 0.92em; padding: 8px; border-radius: 9px; background: #e8f6f5; color: #0e6e63; font-weight: 700; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 360px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>The Conservation Law</h1>
+    <span class="subtitle">Ch. 4 §4.3 — vehicles are neither lost nor created: count them in, count them out
+      <span class="help">?<span class="tip">
+        Same simulated traffic as the Generalized Definitions page (a temporary bottleneck builds a queue and a backward shockwave).<br><br>
+        <b>Counting box</b> (Daganzo Fig. 4.8): drag/resize the box. Vehicles enter through the bottom side (m₁ — crossing the upstream location) or the left side (n₁ — already inside at the start), and leave through the top (m₂) or the right (n₂ — still inside at the end). Conservation says <b>m₁+n₁ = m₂+n₂</b> for <i>any</i> box — shrink it and (m₂−m₁)+(n₂−n₁)=0 becomes <b>∂q/∂x + ∂k/∂t = 0</b> (Eq. 4.28).<br><br>
+        <b>Moving observer</b> (Eq. 4.32): a traveller at speed v° is passed by q°·T = (q − k·v°)·T vehicles net. We count the actual crossings of her trajectory and compare with the formula, using Edie's q, k measured in a thin band along her path.<br><br>
+        <b>Interface velocity</b> (Eq. 4.34): between two stationary states, conservation alone forces the interface to move at U = Δq/Δk — the <i>chord slope</i> between the two states on the q–k diagram. We compare that with the shockwave the simulation actually produced.
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="tsd" width="1240" height="760"></canvas>
+      <div class="controls">
+        <button class="mode on" data-m="box">▣ Counting box</button>
+        <button class="mode" data-m="obs">🚶 Moving observer</button>
+        <div class="control-group" id="obsCtl" style="display:none"><label>observer speed v°</label><input type="range" id="voSlider" min="-25" max="60" step="1" value="20"><span class="val" id="voVal">20 mph</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px" id="boxPanel">
+        <div class="eqbox">
+          <b>Any box, any time: in = out</b> &nbsp;<span class="note">(Daganzo Eq. 4.28 via Fig. 4.8)</span><br>
+          <span class="note">m counts trajectories crossing a fixed <i>location</i> (horizontal sides — a flow count). n counts vehicles present at a fixed <i>time</i> (vertical sides — a density count).</span>
+        </div>
+        <div class="cards">
+          <div class="card"><h3>in: m₁ (bottom) + n₁ (left)</h3><div class="value" id="cIn">—</div></div>
+          <div class="card"><h3>out: m₂ (top) + n₂ (right)</h3><div class="value" id="cOut">—</div></div>
+        </div>
+        <div class="identity" id="boxIdent">—</div>
+        <div class="eqbox" style="border-left-color:#8c3a4c">
+          <span class="note">Shrink the box to dt × dx: with m ≈ q·dt and n ≈ k·dx, the identity becomes
+          <b>∂q/∂x + ∂k/∂t = 0</b> — the conservation equation. Its very existence is equivalent to being able to draw an N(t, x) surface: one label per trajectory, no source, no sink. If a vehicle were born inside the box (an on-ramp), no consistent corner labels would exist — that is why ramps force the extended form ∂q/∂x + ∂k/∂t = g(t, x).</span>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:10px; display:none" id="obsPanel">
+        <div class="eqbox">
+          <b>Relative flow past a moving observer</b> &nbsp;<span class="note">(Eq. 4.32)</span>
+          <div style="text-align:center;font-weight:700;color:#1f2937;margin:4px 0">q° = q − k·v°</div>
+          <span class="note">Positive: vehicles overtake her. Negative: she overtakes them. Zero exactly when she rides at the space-mean speed.</span>
+        </div>
+        <div class="cards">
+          <div class="card"><h3>counted crossings of her path</h3><div class="value" id="cCross">—</div></div>
+          <div class="card"><h3>predicted (q − k·v°)·T</h3><div class="value" id="cPred">—</div></div>
+        </div>
+        <div class="identity" id="obsIdent">—</div>
+        <div class="eqbox" style="border-left-color:#b45309">
+          <span class="note">q and k here are Edie's generalized values measured in a thin band along her trajectory — the sheared region from the previous page. On the q–k diagram below, q° is the <b>vertical gap between the state point and the ray of slope v°</b> (Fig. 4.10). Drive her into the queue and watch the sign flip.</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox" style="margin-bottom:6px">
+          <b>Interface velocity U = Δq/Δk</b> &nbsp;<span class="note">(Eq. 4.34 — conservation only, no behavior needed)</span>
+        </div>
+        <canvas id="qk" width="760" height="430"></canvas>
+        <div class="cards" style="margin-top:8px">
+          <div class="card"><h3>chord slope Δq/Δk</h3><div class="value" id="cU">—<small> mph</small></div></div>
+          <div class="card"><h3>measured shock slope in the sim</h3><div class="value" id="cUm">—<small> mph</small></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+
+// ── world (identical to GeneralizedDefinitions.html) ────────────────
+const T_MAX = 120, X_MAX = 2000;
+const VF = 80.7, VB = 5;
+const BOT = { x0: 1150, x1: 1250, t0: 20, t1: 70 };
+const MPH = fps => fps * 3600 / 5280;
+const DT = 0.25, GAP = 28;
+const trajs = [];
+(function build(){
+  const starts = [];
+  let t = 1.5, seed = 42;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  while (t < T_MAX) { starts.push(t); t += 1.8 + rnd() * 0.9; }
+  const cur = starts.map(s => ({ s, x: -1, pts: [] }));
+  for (let tt = 0; tt <= T_MAX + 1e-9; tt += DT) {
+    for (let i = 0; i < cur.length; i++) {
+      const c = cur[i];
+      if (c.x < 0) { if (tt >= c.s) c.x = 0; else continue; }
+      const inBot = c.x >= BOT.x0 && c.x <= BOT.x1 && tt >= BOT.t0 && tt <= BOT.t1;
+      const vdes = inBot ? VB : VF;
+      let nx = c.x + vdes * DT;
+      if (i > 0 && cur[i-1].x >= 0) nx = Math.min(nx, Math.max(cur[i-1].x - GAP, c.x));
+      c.x = nx;
+      c.pts.push([tt, c.x]);
+    }
+  }
+  cur.forEach(c => { if (c.pts.length > 1) trajs.push(c.pts.filter(p => p[1] <= X_MAX + 60)); });
+})();
+
+// ── Edie measurement in a sheared band (reused for observer & states) ──
+function edie(t0, t1, x0, x1, w){
+  let tA = 0, dA = 0;
+  trajs.forEach(tr => {
+    for (let i = 1; i < tr.length; i++) {
+      const p = tr[i-1], q2 = tr[i];
+      let u0 = 0, u1 = 1;
+      const dt = q2[0]-p[0], dx = q2[1]-p[1];
+      const cons = [
+        [dt, p[0]-t0], [-dt, t1-p[0]],
+        [dx - w*dt, (p[1]-w*(p[0]-t0))-x0],
+        [-(dx - w*dt), x1-(p[1]-w*(p[0]-t0))]
+      ];
+      let ok = true;
+      for (const [a,b] of cons) {
+        if (Math.abs(a) < 1e-12) { if (b < 0) { ok = false; break; } continue; }
+        const u = -b/a;
+        if (a > 0) u0 = Math.max(u0,u); else u1 = Math.min(u1,u);
+        if (u0 > u1) { ok = false; break; }
+      }
+      if (!ok) continue;
+      tA += dt*(u1-u0); dA += dx*(u1-u0);
+    }
+  });
+  const area = (t1-t0)*(x1-x0);
+  return { k: tA/area, q: dA/area, v: tA>0 ? dA/tA : 0 };   // veh/ft, veh/s, ft/s
+}
+
+// two reference stationary states from fixed windows in the sim
+// (windows chosen fully inside each stationary regime — no edge effects)
+const S_FREE = edie(20, 45, 100, 800, 0);                      // free-flow arrivals
+const S_QUE  = edie(48, 66, 960, 1110, 0);                     // inside the queue
+// predicted interface speed (Eq. 4.34)
+const U_PRED = (S_FREE.q - S_QUE.q) / (S_FREE.k - S_QUE.k);    // ft/s
+// measured shock slope: track where speed first drops below 30 ft/s per vehicle
+const shockPts = [];
+trajs.forEach(tr => {
+  for (let i = 1; i < tr.length; i++) {
+    const v = (tr[i][1]-tr[i-1][1])/(tr[i][0]-tr[i-1][0]);
+    if (v < 30 && tr[i][1] < BOT.x0) { shockPts.push([tr[i][0], tr[i][1]]); break; }
+  }
+});
+let U_MEAS = 0;
+if (shockPts.length > 4) {
+  let n=0,sx=0,sy=0,sxx=0,sxy=0;
+  shockPts.forEach(([t,x]) => { n++; sx+=t; sy+=x; sxx+=t*t; sxy+=t*x; });
+  U_MEAS = (n*sxy-sx*sy)/(n*sxx-sx*sx);
+}
+
+// ── main canvas ─────────────────────────────────────────────────────
+const C = el('tsd'), cx = C.getContext('2d');
+const W = C.width, H = C.height, P = { l: 62, r: 16, t: 30, b: 46 };
+const pw = W-P.l-P.r, ph = H-P.t-P.b;
+const SX = t => P.l + t/T_MAX*pw;
+const SY = x => P.t + ph - x/X_MAX*ph;
+const invT = px => (px-P.l)/pw*T_MAX;
+const invX = py => (P.t+ph-py)/ph*X_MAX;
+
+let mode = 'box';
+let B = { t0: 30, t1: 70, x0: 500, x1: 1100 };     // counting box
+let OBS = { x0: 300, v: 20*5280/3600 };            // observer: starts at (0, x0), speed ft/s
+
+function countBox(){
+  // classify each trajectory's entry/exit sides
+  let m1=0, m2=0, n1=0, n2=0;
+  const EPS_T = 0.3, EPS_X = 6;
+  trajs.forEach(tr => {
+    // find first point inside and last point inside
+    let ein=null, eout=null;
+    for (let i = 0; i < tr.length; i++) {
+      const [t,x] = tr[i];
+      const inside = t>=B.t0 && t<=B.t1 && x>=B.x0 && x<=B.x1;
+      if (inside && ein===null) ein = tr[Math.max(0,i-1)];
+      if (inside) eout = tr[Math.min(tr.length-1,i+1)];
+    }
+    if (ein===null) return;
+    // entry side: came from below (x<x0) → m1 ; from left (t<t0) → n1
+    if (ein[0] < B.t0) n1++;
+    else if (ein[1] < B.x0 + EPS_X) m1++;
+    else n1++; // started life inside (entered via ramp? none here) — count as present
+    // exit side
+    if (eout[0] > B.t1) n2++;
+    else if (eout[1] > B.x1 - EPS_X) m2++;
+    else n2++;
+  });
+  return { m1, m2, n1, n2 };
+}
+
+function observerData(){
+  // observer path: x = OBS.x0 + v·t, clipped to the diagram
+  const v = OBS.v;
+  let net = 0;
+  trajs.forEach(tr => {
+    for (let i = 1; i < tr.length; i++) {
+      const f0 = tr[i-1][1] - (OBS.x0 + v*tr[i-1][0]);
+      const f1 = tr[i][1] - (OBS.x0 + v*tr[i][0]);
+      if (tr[i][0] < 0 || tr[i-1][0] > T_MAX) continue;
+      // only count while the observer is on the road segment
+      const xc = OBS.x0 + v*tr[i][0];
+      if (xc < 0 || xc > X_MAX) continue;
+      if (f0 < 0 && f1 >= 0) net++;        // vehicle passes observer
+      else if (f0 >= 0 && f1 < 0) net--;   // observer passes vehicle
+    }
+  });
+  // observer time span on the road
+  let tStart = 0, tEnd = T_MAX;
+  if (v > 0) tEnd = Math.min(T_MAX, (X_MAX - OBS.x0)/v);
+  else if (v < 0) tEnd = Math.min(T_MAX, (0 - OBS.x0)/v);
+  const T = Math.max(0, tEnd - tStart);
+  // Edie band along the path (±60 ft)
+  const e = edie(tStart, tEnd, OBS.x0-60, OBS.x0+60, v);
+  const pred = (e.q - e.k*v) * T;
+  return { net, pred, T, e };
+}
+
+function draw(){
+  cx.clearRect(0,0,W,H);
+  cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='#eef0f4'; cx.lineWidth=1;
+  cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS;
+  for (let t=0; t<=T_MAX; t+=20){
+    cx.beginPath(); cx.moveTo(SX(t),P.t); cx.lineTo(SX(t),P.t+ph); cx.stroke();
+    cx.textAlign='center'; cx.fillText(t+' s', SX(t), H-24);
+  }
+  for (let x=0; x<=X_MAX; x+=400){
+    cx.beginPath(); cx.moveTo(P.l,SY(x)); cx.lineTo(P.l+pw,SY(x)); cx.stroke();
+    cx.textAlign='right'; cx.fillText(x, P.l-6, SY(x)+4);
+  }
+  cx.strokeStyle='#d6dae2'; cx.lineWidth=1.4; cx.strokeRect(P.l,P.t,pw,ph);
+  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS;
+  cx.textAlign='center'; cx.fillText('time t (s)', P.l+pw/2, H-6);
+  cx.save(); cx.translate(15,P.t+ph/2); cx.rotate(-Math.PI/2); cx.fillText('position x (ft)',0,0); cx.restore();
+
+  cx.fillStyle='rgba(180,83,9,0.10)';
+  cx.fillRect(SX(BOT.t0), SY(BOT.x1), SX(BOT.t1)-SX(BOT.t0), SY(BOT.x0)-SY(BOT.x1));
+  cx.fillStyle='#b45309'; cx.font='600 10px '+SANS; cx.textAlign='left';
+  cx.fillText('temporary bottleneck', SX(BOT.t0)+4, SY(BOT.x1)-4);
+
+  cx.strokeStyle='#aeb7c4'; cx.lineWidth=1.3; cx.lineJoin='round';
+  trajs.forEach(tr => {
+    cx.beginPath();
+    tr.forEach((p,i)=>{ const x=SX(p[0]), y=SY(p[1]); if(i===0) cx.moveTo(x,y); else cx.lineTo(x,y); });
+    cx.stroke();
+  });
+
+  // shock line (measured, dashed dark red)
+  if (shockPts.length > 4) {
+    cx.strokeStyle='#a4161a'; cx.lineWidth=2; cx.setLineDash([8,6]);
+    cx.beginPath();
+    cx.moveTo(SX(shockPts[0][0]), SY(shockPts[0][1]));
+    cx.lineTo(SX(shockPts[shockPts.length-1][0]), SY(shockPts[shockPts.length-1][1]));
+    cx.stroke(); cx.setLineDash([]);
+    cx.fillStyle='#a4161a'; cx.font='600 11px '+SANS;
+    cx.fillText('shock (interface)', SX(shockPts[0][0])+6, SY(shockPts[0][1])-6);
+  }
+
+  if (mode === 'box') {
+    cx.fillStyle='rgba(20,145,155,0.10)';
+    cx.fillRect(SX(B.t0), SY(B.x1), SX(B.t1)-SX(B.t0), SY(B.x0)-SY(B.x1));
+    cx.strokeStyle='#14919b'; cx.lineWidth=2;
+    cx.strokeRect(SX(B.t0), SY(B.x1), SX(B.t1)-SX(B.t0), SY(B.x0)-SY(B.x1));
+    const cc = countBox();
+    // side labels
+    cx.font='700 13px '+SANS; cx.fillStyle='#0f7b82'; cx.textAlign='center';
+    cx.fillText('m₂ = '+cc.m2+' (out, top)', (SX(B.t0)+SX(B.t1))/2, SY(B.x1)-8);
+    cx.fillText('m₁ = '+cc.m1+' (in, bottom)', (SX(B.t0)+SX(B.t1))/2, SY(B.x0)+16);
+    cx.textAlign='right'; cx.fillText('n₁ = '+cc.n1, SX(B.t0)-8, (SY(B.x0)+SY(B.x1))/2);
+    cx.textAlign='left'; cx.fillText('n₂ = '+cc.n2, SX(B.t1)+8, (SY(B.x0)+SY(B.x1))/2);
+    // handles
+    cx.fillStyle='#0f7b82';
+    [[B.t0,B.x0],[B.t0,B.x1],[B.t1,B.x1],[B.t1,B.x0]].forEach(p=>cx.fillRect(SX(p[0])-5,SY(p[1])-5,10,10));
+    el('cIn').textContent = cc.m1+' + '+cc.n1+' = '+(cc.m1+cc.n1);
+    el('cOut').textContent = cc.m2+' + '+cc.n2+' = '+(cc.m2+cc.n2);
+    const ok = (cc.m1+cc.n1) === (cc.m2+cc.n2);
+    el('boxIdent').textContent = '(m₂ − m₁) + (n₂ − n₁) = '+((cc.m2-cc.m1)+(cc.n2-cc.n1))+(ok?'  ✓ conserved':'');
+    el('boxIdent').style.background = ok ? '#e8f6f5' : '#fdecea';
+    el('boxIdent').style.color = ok ? '#0e6e63' : '#a4161a';
+  } else {
+    const od = observerData();
+    // observer path
+    const tEnd = od.T;
+    cx.strokeStyle='#4f3f5c'; cx.lineWidth=3;
+    cx.beginPath();
+    cx.moveTo(SX(0), SY(OBS.x0));
+    cx.lineTo(SX(tEnd), SY(Math.max(0, Math.min(X_MAX, OBS.x0 + OBS.v*tEnd))));
+    cx.stroke();
+    cx.fillStyle='#4f3f5c'; cx.font='700 12px '+SANS; cx.textAlign='left';
+    cx.fillText('observer  v° = '+MPH(OBS.v).toFixed(0)+' mph  (drag to move)', SX(2), SY(OBS.x0)-10);
+    el('cCross').textContent = od.net + ' net';
+    el('cPred').textContent = od.pred.toFixed(1) + ' veh';
+    const err = Math.abs(od.net - od.pred);
+    el('obsIdent').textContent = 'q° = q − k·v° = '+((od.e.q - od.e.k*OBS.v)*3600).toFixed(0)+' veh/hr relative flow'+(err<3?'  ✓ matches the count':'');
+  }
+  drawQK();
+}
+
+// ── q-k mini chart: two states, chord, observer ray ─────────────────
+const QK = el('qk'), qx = QK.getContext('2d');
+function drawQK(){
+  const w=QK.width, h=QK.height, L=56, R=14, T=24, Bm=40;
+  const pw2=w-L-R, ph2=h-T-Bm;
+  const kMax = 220/5280, qMax = 2400/3600;   // veh/ft, veh/s
+  const X = k => L + k/kMax*pw2, Y = q => T + ph2 - q/qMax*ph2;
+  qx.clearRect(0,0,w,h);
+  qx.strokeStyle='#eef0f4'; qx.lineWidth=1;
+  qx.fillStyle='#9aa1ad'; qx.font='11px '+SANS;
+  for (let kk=0; kk<=220; kk+=40){
+    qx.beginPath(); qx.moveTo(X(kk/5280),T); qx.lineTo(X(kk/5280),T+ph2); qx.stroke();
+    qx.textAlign='center'; qx.fillText(kk, X(kk/5280), h-22);
+  }
+  for (let qq=0; qq<=2400; qq+=600){
+    qx.beginPath(); qx.moveTo(L,Y(qq/3600)); qx.lineTo(L+pw2,Y(qq/3600)); qx.stroke();
+    qx.textAlign='right'; qx.fillText(qq, L-5, Y(qq/3600)+4);
+  }
+  qx.strokeStyle='#d6dae2'; qx.strokeRect(L,T,pw2,ph2);
+  qx.fillStyle='#4b5563'; qx.font='600 11px '+SANS; qx.textAlign='center';
+  qx.fillText('density k (veh/mi)', L+pw2/2, h-5);
+  qx.save(); qx.translate(13,T+ph2/2); qx.rotate(-Math.PI/2); qx.fillText('flow q (veh/hr)',0,0); qx.restore();
+
+  // chord between the two measured states
+  qx.strokeStyle='#a4161a'; qx.lineWidth=2; qx.setLineDash([7,5]);
+  qx.beginPath(); qx.moveTo(X(S_FREE.k),Y(S_FREE.q)); qx.lineTo(X(S_QUE.k),Y(S_QUE.q)); qx.stroke();
+  qx.setLineDash([]);
+  // observer ray (only in observer mode)
+  if (mode==='obs'){
+    qx.strokeStyle='#4f3f5c'; qx.lineWidth=2;
+    qx.beginPath(); qx.moveTo(X(0),Y(0));
+    const ke = kMax, qe = OBS.v*ke;
+    qx.lineTo(X(ke), Y(Math.min(qe,qMax)));
+    qx.stroke();
+    qx.fillStyle='#4f3f5c'; qx.font='600 10px '+SANS; qx.textAlign='left';
+    qx.fillText('ray slope = v° — vertical gap to a state = its q°', L+8, T+14);
+  }
+  // state dots
+  [[S_FREE,'#2c5378','free-flow state'],[S_QUE,'#a4161a','queued state']].forEach(([s,col,name])=>{
+    qx.fillStyle=col;
+    qx.beginPath(); qx.arc(X(s.k),Y(s.q),7,0,Math.PI*2); qx.fill();
+    qx.strokeStyle='#fff'; qx.lineWidth=1.5; qx.stroke();
+    qx.font='600 11px '+SANS; qx.textAlign='left';
+    qx.fillText(name+'  ('+Math.round(s.q*3600)+' veh/hr, '+Math.round(s.k*5280)+' veh/mi, '+MPH(s.v).toFixed(0)+' mph)', X(s.k)+11, Y(s.q)+4);
+  });
+  qx.fillStyle='#a4161a'; qx.font='700 11px '+SANS; qx.textAlign='left';
+  qx.fillText('chord slope = U = Δq/Δk', X((S_FREE.k+S_QUE.k)/2)+8, Y((S_FREE.q+S_QUE.q)/2)-8);
+
+  el('cU').innerHTML = MPH(U_PRED).toFixed(1)+'<small> mph</small>';
+  el('cUm').innerHTML = MPH(U_MEAS).toFixed(1)+'<small> mph</small>';
+}
+
+// ── interaction ─────────────────────────────────────────────────────
+let drag=null;
+C.addEventListener('pointerdown', e=>{
+  const r=C.getBoundingClientRect();
+  const px=(e.clientX-r.left)*(W/r.width), py=(e.clientY-r.top)*(H/r.height);
+  if (mode==='box'){
+    const cs=[[B.t0,B.x0],[B.t0,B.x1],[B.t1,B.x1],[B.t1,B.x0]];
+    for (let i=0;i<4;i++){
+      if (Math.abs(px-SX(cs[i][0]))<12 && Math.abs(py-SY(cs[i][1]))<12){ drag={mode:'corner',i}; C.setPointerCapture(e.pointerId); return; }
+    }
+    const t=invT(px), x=invX(py);
+    if (t>=B.t0&&t<=B.t1&&x>=B.x0&&x<=B.x1){ drag={mode:'move',px,py,B0:{...B}}; C.setPointerCapture(e.pointerId); }
+  } else {
+    drag={mode:'obs'}; C.setPointerCapture(e.pointerId);
+  }
+});
+C.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  const r=C.getBoundingClientRect();
+  const px=(e.clientX-r.left)*(W/r.width), py=(e.clientY-r.top)*(H/r.height);
+  const t=invT(px), x=invX(py);
+  if (drag.mode==='move'){
+    const dt=t-invT(drag.px), dx=x-invX(drag.py);
+    const tw=drag.B0.t1-drag.B0.t0, xw=drag.B0.x1-drag.B0.x0;
+    B.t0=Math.max(0,Math.min(drag.B0.t0+dt,T_MAX-tw)); B.t1=B.t0+tw;
+    B.x0=Math.max(0,Math.min(drag.B0.x0+dx,X_MAX-xw)); B.x1=B.x0+xw;
+  } else if (drag.mode==='corner'){
+    if(drag.i===0){ B.t0=Math.max(0,Math.min(t,B.t1-2)); B.x0=Math.max(0,Math.min(x,B.x1-40)); }
+    if(drag.i===1){ B.t0=Math.max(0,Math.min(t,B.t1-2)); B.x1=Math.min(X_MAX,Math.max(x,B.x0+40)); }
+    if(drag.i===2){ B.t1=Math.min(T_MAX,Math.max(t,B.t0+2)); B.x1=Math.min(X_MAX,Math.max(x,B.x0+40)); }
+    if(drag.i===3){ B.t1=Math.min(T_MAX,Math.max(t,B.t0+2)); B.x0=Math.max(0,Math.min(x,B.x1-40)); }
+  } else if (drag.mode==='obs'){
+    OBS.x0 = Math.max(0, Math.min(X_MAX, x - OBS.v*t));
+  }
+  draw();
+});
+const endDrag=()=>{ drag=null; };
+C.addEventListener('pointerup', endDrag);
+C.addEventListener('pointercancel', endDrag);
+
+document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
+  mode=b.dataset.m;
+  document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('on',x===b));
+  el('obsCtl').style.display = mode==='obs' ? 'flex' : 'none';
+  el('boxPanel').style.display = mode==='box' ? 'block' : 'none';
+  el('obsPanel').style.display = mode==='obs' ? 'block' : 'none';
+  draw();
+}));
+el('voSlider').addEventListener('input',()=>{
+  OBS.v = parseFloat(el('voSlider').value)*5280/3600;
+  el('voVal').textContent = el('voSlider').value+' mph';
+  draw();
+});
+
+draw();
+
+// chapter navigation drawer
+(function(){
+  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
+  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
+  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
+  b.addEventListener('mouseenter',open);
+  d.addEventListener('mouseleave',close);
+  s.addEventListener('click',close);
+  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
+  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.4 — Dynamic Macroscopic Models (LWR)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 62px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 130px; accent-color: #14919b; }
+  .mode { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #d6dae2; background: #fff; color: #374151; font-size: 0.8em; font-weight: 600; cursor: pointer; }
+  .mode:hover { border-color: #14919b; color: #0f7b82; }
+  .mode.on { background: #14919b; border-color: transparent; color: #fff; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.66em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.05em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 370px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>Dynamic Macroscopic Models — LWR</h1>
+    <span class="subtitle">Ch. 4 §4.4 — Lighthill-Whitham-Richards: conservation + a fundamental diagram = a full theory of traffic dynamics
+      <span class="help">?<span class="tip">
+        The LWR model needs only two ingredients:<br>
+        1. the <b>conservation law</b> ∂q/∂x + ∂k/∂t = 0 (§4.3), and<br>
+        2. the assumption that traffic is always on the fundamental diagram: <b>q = Q(k)</b> (§4.2 — Greenshields here).<br><br>
+        Substituting 2 into 1 gives ∂k/∂t + Q′(k)·∂k/∂x = 0: density is carried along <b>waves (characteristics)</b> — straight lines of slope w = Q′(k) = v_f(1 − 2k/k_j), the <i>tangent</i> to the FD. Waves are slower than cars (w ≤ v): drivers respond to what happens ahead.<br><br>
+        When faster waves run into slower ones they collide and form a <b>shock</b> whose speed is the <i>chord</i> slope U = Δq/Δk (Eq. 4.34). When waves spread apart, an <b>expansion fan</b> fills the gap.<br><br>
+        The t-x field is colored by density (light = empty, dark red = jam), thin lines are waves, the bold dark red line is the shock, gray curves are vehicle trajectories (always crossing waves forward).
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="txc" width="1240" height="760"></canvas>
+      <div class="controls">
+        <button class="mode on" data-m="shock">▼ Deceleration → shock</button>
+        <button class="mode" data-m="fan">▲ Acceleration → fan</button>
+        <button class="mode" data-m="signal">🚦 Traffic signal</button>
+        <div class="control-group" id="gU"><label>upstream k<sub>u</sub></label><input type="range" id="ku" min="5" max="185" step="5" value="40"><span class="val" id="kuV"></span></div>
+        <div class="control-group" id="gD"><label>downstream k<sub>d</sub></label><input type="range" id="kd" min="5" max="185" step="5" value="170"><span class="val" id="kdV"></span></div>
+        <div class="control-group" id="gA" style="display:none"><label>arrivals k<sub>a</sub></label><input type="range" id="ka" min="10" max="90" step="5" value="40"><span class="val" id="kaV"></span></div>
+        <div class="control-group" id="gR" style="display:none"><label>red time R</label><input type="range" id="rr" min="10" max="50" step="5" value="30"><span class="val" id="rrV"></span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="eqbox" id="story">—</div>
+        <canvas id="fd" width="760" height="430"></canvas>
+        <div class="cards">
+          <div class="card"><h3 id="c1t">wave speed w(k_u)</h3><div class="value" id="c1">—</div></div>
+          <div class="card"><h3 id="c2t">wave speed w(k_d)</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3 id="c3t">shock U = Δq/Δk</h3><div class="value" id="c3">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox" style="border-left-color:#b45309">
+          <b>Why waves ≠ vehicles</b><br>
+          <span class="note">A wave carries a <i>traffic condition</i> (a density value), not a car. Its slope is the FD's <b>tangent</b> Q′(k); a car's slope is the <b>ray</b> v = q/k — always steeper. So trajectories cross waves from behind: news travels backward through traffic. In the signal scenario the queue's tail grows at the chord speed U₁ &lt; 0 while the release wave from the green eats it back — where the two shocks meet, the queue dies.</span>
+        </div>
+        <div class="eqbox" style="border-left-color:#8c3a4c">
+          <b>Try this</b><br>
+          <span class="note">1) Shock: raise k_d toward jam — the chord tilts down and the shock races backward. 2) Fan: the fan's rays are the FD tangents between the two states; vehicles thread smoothly through it. 3) Signal: lengthen the red — the maximum queue and the time to clear both grow; the discharge wave always releases flow at capacity (k = k_j/2) right at the stop line, which is why saturation flow is a property of the road.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+
+// ── LWR with Greenshields ───────────────────────────────────────────
+const VF = 80.7;                 // ft/s (55 mph)
+const KJ = 1/28;                 // veh/ft (188.6 veh/mi)
+const Qk = k => VF*k*(1-k/KJ);   // veh/s
+const Wk = k => VF*(1-2*k/KJ);   // wave speed ft/s
+const Vk = k => VF*(1-k/KJ);     // vehicle speed ft/s
+const QM = VF*KJ/4;
+const MPH = f => f*3600/5280;
+const VMI = k => k*5280;
+
+const T_MAX = 120, X_MIN = -3000, X_MAX2 = 3000;
+
+let mode = 'shock';
+let KU = 40/5280, KD = 170/5280, KA = 40/5280, RED = 30;
+
+// signal: precompute shock paths
+let sig = null;
+function solveSignal(){
+  const qa = Qk(KA);
+  const U1 = (0 - qa)/(KJ - KA);                    // stopping shock speed (<0)
+  const tI = VF*RED/(U1+VF);                        // S1 meets back of fan
+  const xI = U1*tI;
+  // S2: shock between fan state and ka, ODE from (tI, xI)
+  const path = [[tI, xI]];
+  let t = tI, x = xI, done = false, tClear = null;
+  const dt = 0.05;
+  while (t < T_MAX && !done){
+    const kf = Math.max(0, Math.min(KJ, KJ/2*(1 - x/(VF*(t-RED)))));
+    if (kf <= KA + 1e-6){ done = true; break; }
+    const U = (Qk(kf)-Qk(KA))/(kf-KA);
+    x += U*dt; t += dt;
+    path.push([t,x]);
+    if (tClear === null && x >= 0) tClear = t;
+  }
+  // after S2 weakens it continues as the ka wave
+  const tEndW = t;
+  sig = { qa, U1, tI, xI, path, tClear, tEndW, xEndW: x };
+}
+
+// density field k(t,x) per scenario
+function kField(t, x){
+  if (t <= 0) t = 1e-6;
+  if (mode === 'shock' || mode === 'fan'){
+    const ku = KU, kd = KD;
+    if (kd > ku){                                    // compression → shock
+      const U = (Qk(kd)-Qk(ku))/(kd-ku);
+      return x < U*t ? ku : kd;
+    } else if (kd < ku){                             // expansion → fan
+      const wu = Wk(ku), wd = Wk(kd);
+      if (x <= wu*t) return ku;
+      if (x >= wd*t) return kd;
+      return KJ/2*(1 - (x/t)/VF);
+    }
+    return ku;
+  }
+  // signal
+  const { U1, tI, path } = sig;
+  if (t < RED){
+    if (x >= 0) return 0;
+    return x < U1*t ? KA : KJ;
+  }
+  const xb = -VF*(t-RED), xf = VF*(t-RED);
+  if (x >= xf) return 0;
+  if (t < tI){
+    if (x < U1*t) return KA;
+    if (x < xb) return KJ;
+    return KJ/2*(1 - x/(VF*(t-RED)));
+  }
+  // after tI: boundary is S2 path (then the ka wave)
+  let xs;
+  if (t <= sig.tEndW && path.length){
+    // find on path
+    let lo = 0, hi = path.length-1;
+    while (lo < hi){ const m2=(lo+hi)>>1; if (path[m2][0] < t) lo=m2+1; else hi=m2; }
+    xs = path[Math.max(0,lo)][1];
+  } else {
+    xs = sig.xEndW + Wk(KA)*(t - sig.tEndW);
+  }
+  if (x < xs) return KA;
+  const kf = KJ/2*(1 - x/(VF*(t-RED)));
+  return Math.max(0, Math.min(KJ, kf));
+}
+
+// ── t-x canvas ──────────────────────────────────────────────────────
+const C = el('txc'), cx = C.getContext('2d');
+const W = C.width, H = C.height, P = { l: 66, r: 16, t: 30, b: 46 };
+const pw = W-P.l-P.r, ph = H-P.t-P.b;
+const SX = t => P.l + t/T_MAX*pw;
+const SY = x => P.t + ph - (x - X_MIN)/(X_MAX2 - X_MIN)*ph;
+
+function kColor(k){
+  const u = Math.max(0, Math.min(1, k/KJ));
+  // light → teal → dark red
+  let r,g,b;
+  if (u < 0.5){ const s=u/0.5; r=238-(238-20)*s; g=247-(247-145)*s; b=247-(247-155)*s; }
+  else { const s=(u-0.5)/0.5; r=20+(143-20)*s; g=145-(145-29)*s; b=155-(155-33)*s; }
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+
+function drawField(){
+  const cell = 5;
+  for (let py = P.t; py < P.t+ph; py += cell){
+    for (let px = P.l; px < P.l+pw; px += cell){
+      const t = (px+cell/2-P.l)/pw*T_MAX;
+      const x = X_MIN + (P.t+ph-(py+cell/2))/ph*(X_MAX2-X_MIN);
+      cx.fillStyle = kColor(kField(t,x));
+      cx.fillRect(px, py, cell, cell);
+    }
+  }
+}
+
+function line(t1,x1,t2,x2,col,wd,dash){
+  cx.strokeStyle=col; cx.lineWidth=wd;
+  if(dash) cx.setLineDash(dash);
+  cx.beginPath(); cx.moveTo(SX(t1),SY(x1)); cx.lineTo(SX(t2),SY(x2)); cx.stroke();
+  cx.setLineDash([]);
+}
+
+function drawWaves(){
+  const WV = 'rgba(255,255,255,0.55)';
+  if (mode==='shock' || mode==='fan'){
+    const ku=KU, kd=KD, wu=Wk(ku), wd=Wk(kd);
+    if (kd>ku){
+      const U=(Qk(kd)-Qk(ku))/(kd-ku);
+      // characteristics on each side, ending at the shock
+      for (let x0=X_MIN; x0<=X_MAX2; x0+=280){
+        // upstream family slope wu (region x < U t)
+        let tEnd=T_MAX;
+        if (wu>U) tEnd=Math.min(T_MAX, x0/(U-wu));
+        if (x0<0 && tEnd>0) line(0,x0,tEnd,x0+wu*tEnd,WV,1);
+        // downstream family slope wd
+        let tE2=T_MAX;
+        if (wd<U) tE2=Math.min(T_MAX, x0/(U-wd));
+        if (x0>0 && tE2>0) line(0,x0,tE2,x0+wd*tE2,WV,1);
+      }
+      line(0,0,T_MAX,U*T_MAX,'#7a1216',3.5);
+      cx.fillStyle='#7a1216'; cx.font='700 13px '+SANS; cx.textAlign='left';
+      cx.fillText('shock  U = '+MPH(U).toFixed(1)+' mph', SX(T_MAX*0.45)+6, SY(U*T_MAX*0.45)-8);
+    } else if (kd<ku){
+      for (let x0=X_MIN; x0<0; x0+=280) line(0,x0,T_MAX,x0+wu*T_MAX,WV,1);
+      for (let x0=280; x0<=X_MAX2; x0+=280) line(0,x0,T_MAX,x0+wd*T_MAX,WV,1);
+      for (let i=0;i<=10;i++){
+        const wfan = wu + (wd-wu)*i/10;
+        line(0,0,T_MAX,wfan*T_MAX,'rgba(14,124,134,0.75)',1.3);
+      }
+      cx.fillStyle='#0e7c86'; cx.font='700 13px '+SANS; cx.textAlign='left';
+      cx.fillText('expansion fan: rays from w(ku) to w(kd)', SX(30), SY((wu+wd)/2*30)-10);
+    }
+  } else {
+    const { U1, tI, path } = sig;
+    // ka characteristics upstream
+    const wa=Wk(KA);
+    for (let x0=X_MIN; x0<0; x0+=300){
+      let tEnd=T_MAX;
+      if (wa>U1) tEnd=Math.min(T_MAX, x0/(U1-wa));
+      if(tEnd>0) line(0,x0,tEnd,x0+wa*tEnd,'rgba(255,255,255,0.55)',1);
+    }
+    // jam characteristics: slope w(kj) = −VF, from the stop line back to S1
+    for (let tt=4; tt<RED; tt+=5){
+      const tau = VF*tt/(VF+U1);           // where x=−VF(τ−tt) meets x=U1·τ
+      if (tau > tt) line(tt, 0, tau, U1*tau, 'rgba(255,255,255,0.55)', 1);
+    }
+    // stopping shock S1
+    line(0,0,tI,U1*tI,'#7a1216',3.5);
+    cx.fillStyle='#7a1216'; cx.font='700 12px '+SANS; cx.textAlign='right';
+    cx.fillText('S₁ stopping shock  U₁ = '+MPH(U1).toFixed(1)+' mph', SX(tI)-8, SY(U1*tI)+18);
+    // fan rays from (RED, 0)
+    for (let i=0;i<=10;i++){
+      const wfan=-VF+(2*VF)*i/10;
+      line(RED,0,T_MAX,wfan*(T_MAX-RED),'rgba(14,124,134,0.75)',1.2);
+    }
+    // S2 release shock
+    if (path.length>1){
+      cx.strokeStyle='#7a1216'; cx.lineWidth=3.5;
+      cx.beginPath();
+      path.forEach((p,i)=>{ if(i===0) cx.moveTo(SX(p[0]),SY(p[1])); else cx.lineTo(SX(p[0]),SY(p[1])); });
+      cx.stroke();
+      const mid = path[Math.floor(path.length/2)];
+      cx.fillStyle='#7a1216'; cx.textAlign='left';
+      cx.fillText('S₂ release shock', SX(mid[0])+8, SY(mid[1])+16);
+    }
+    // signal bar
+    line(0,0,Math.min(RED,T_MAX),0,'#a4161a',5);
+    line(RED,0,T_MAX,0,'#1d7a6f',5);
+    cx.fillStyle='#a4161a'; cx.font='700 12px '+SANS; cx.textAlign='left';
+    cx.fillText('RED', SX(2), SY(0)-8);
+    cx.fillStyle='#1d7a6f';
+    cx.fillText('GREEN', SX(RED+2), SY(0)-8);
+  }
+}
+
+function drawTrajectories(){
+  const dt=0.25;
+  const starts=[];
+  const k0 = mode==='signal' ? KA : KU;
+  const kd0 = mode==='signal' ? 0 : KD;
+  for (let x0=-1/k0/2; x0>X_MIN; x0-=1/k0) starts.push([0,x0]);
+  if (kd0>1e-6) for (let x0=1/kd0/2; x0<X_MAX2; x0+=1/kd0) starts.push([0,x0]);
+  // inflow at X_MIN
+  const qin = Qk(k0);
+  for (let t0=1/qin; t0<T_MAX; t0+=1/qin) starts.push([t0, X_MIN]);
+  cx.strokeStyle='rgba(31,41,55,0.5)'; cx.lineWidth=1.2; cx.lineJoin='round';
+  starts.forEach(([t0,x0])=>{
+    cx.beginPath();
+    let t=t0, x=x0, moved=false;
+    cx.moveTo(SX(t),SY(x));
+    while (t<T_MAX && x<X_MAX2){
+      const v=Vk(kField(t,x));
+      x+=v*dt; t+=dt;
+      if(!moved && v>0.5) moved=true;
+      cx.lineTo(SX(Math.min(t,T_MAX)),SY(Math.min(x,X_MAX2)));
+    }
+    cx.stroke();
+  });
+}
+
+function draw(){
+  cx.clearRect(0,0,W,H);
+  cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  if (mode==='signal') solveSignal();
+  cx.save();
+  cx.beginPath(); cx.rect(P.l,P.t,pw,ph); cx.clip();
+  drawField();
+  drawTrajectories();
+  drawWaves();
+  cx.restore();
+  // axes
+  cx.strokeStyle='#d6dae2'; cx.lineWidth=1.4; cx.strokeRect(P.l,P.t,pw,ph);
+  cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS;
+  for (let t=0;t<=T_MAX;t+=20){ cx.textAlign='center'; cx.fillText(t+' s',SX(t),H-24); }
+  for (let x=X_MIN;x<=X_MAX2;x+=1000){ cx.textAlign='right'; cx.fillText(x,P.l-6,SY(x)+4); }
+  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS;
+  cx.textAlign='center'; cx.fillText('time t (s)',P.l+pw/2,H-6);
+  cx.save(); cx.translate(15,P.t+ph/2); cx.rotate(-Math.PI/2); cx.fillText('position x (ft)  ·  0 = discontinuity / stop line',0,0); cx.restore();
+  cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS; cx.textAlign='left';
+  cx.fillText('field colored by density k · thin white/teal lines = waves (characteristics) · bold = shock · gray = vehicle trajectories', P.l, 18);
+  drawFD();
+  updateUI();
+}
+
+// ── FD chart ────────────────────────────────────────────────────────
+const F = el('fd'), fx = F.getContext('2d');
+function drawFD(){
+  const w=F.width, h=F.height, L=56, R2=14, T2=24, Bm=40;
+  const pw2=w-L-R2, ph2=h-T2-Bm;
+  const X = k => L + (k/KJ)*pw2;
+  const Y = q => T2 + ph2 - (q/(QM*1.08))*ph2;
+  fx.clearRect(0,0,w,h);
+  fx.strokeStyle='#eef0f4'; fx.lineWidth=1;
+  fx.fillStyle='#9aa1ad'; fx.font='11px '+SANS;
+  for (let kk=0; kk<=180; kk+=30){
+    fx.beginPath(); fx.moveTo(X(kk/5280),T2); fx.lineTo(X(kk/5280),T2+ph2); fx.stroke();
+    fx.textAlign='center'; fx.fillText(kk, X(kk/5280), h-22);
+  }
+  for (let qq=0; qq<=2500; qq+=500){
+    fx.beginPath(); fx.moveTo(L,Y(qq/3600)); fx.lineTo(L+pw2,Y(qq/3600)); fx.stroke();
+    fx.textAlign='right'; fx.fillText(qq, L-5, Y(qq/3600)+4);
+  }
+  fx.strokeStyle='#d6dae2'; fx.strokeRect(L,T2,pw2,ph2);
+  fx.fillStyle='#4b5563'; fx.font='600 11px '+SANS; fx.textAlign='center';
+  fx.fillText('density k (veh/mi)', L+pw2/2, h-5);
+  fx.save(); fx.translate(13,T2+ph2/2); fx.rotate(-Math.PI/2); fx.fillText('flow q (veh/hr)',0,0); fx.restore();
+  // parabola
+  fx.strokeStyle='#40663c'; fx.lineWidth=2.4;
+  fx.beginPath();
+  for (let i=0;i<=120;i++){ const k=KJ*i/120; const px=X(k), py=Y(Qk(k)); if(i===0) fx.moveTo(px,py); else fx.lineTo(px,py); }
+  fx.stroke();
+  const dot=(k,col,name)=>{
+    fx.fillStyle=col;
+    fx.beginPath(); fx.arc(X(k),Y(Qk(k)),7,0,Math.PI*2); fx.fill();
+    fx.strokeStyle='#fff'; fx.lineWidth=1.5; fx.stroke();
+    fx.font='700 11px '+SANS; fx.textAlign='left'; fx.fillStyle=col;
+    fx.fillText(name, X(k)+10, Y(Qk(k))-6);
+  };
+  const tang=(k,col)=>{
+    const wv=Wk(k), q0=Qk(k);
+    fx.strokeStyle=col; fx.lineWidth=1.6; fx.setLineDash([6,4]);
+    fx.beginPath();
+    const dk=KJ*0.22;
+    fx.moveTo(X(Math.max(0,k-dk)), Y(q0-wv*Math.min(dk,k)));
+    fx.lineTo(X(Math.min(KJ,k+dk)), Y(q0+wv*Math.min(dk,KJ-k)));
+    fx.stroke(); fx.setLineDash([]);
+  };
+  if (mode==='shock' || mode==='fan'){
+    if (KD>KU){
+      fx.strokeStyle='#7a1216'; fx.lineWidth=2.2;
+      fx.beginPath(); fx.moveTo(X(KU),Y(Qk(KU))); fx.lineTo(X(KD),Y(Qk(KD))); fx.stroke();
+      fx.fillStyle='#7a1216'; fx.font='700 11px '+SANS; fx.textAlign='left';
+      fx.fillText('chord = shock speed U', X((KU+KD)/2)+8, Y((Qk(KU)+Qk(KD))/2)-6);
+    } else {
+      tang(KU,'#0e7c86'); tang(KD,'#0e7c86');
+    }
+    dot(KU,'#2c5378','k_u'); dot(KD,'#a4161a','k_d');
+  } else {
+    fx.strokeStyle='#7a1216'; fx.lineWidth=2.2;
+    fx.beginPath(); fx.moveTo(X(KA),Y(Qk(KA))); fx.lineTo(X(KJ),Y(0)); fx.stroke();
+    dot(KA,'#2c5378','k_a arrivals');
+    dot(KJ,'#a4161a','jam');
+    dot(KJ/2,'#40663c','capacity (stop-line discharge)');
+  }
+}
+
+// ── UI ──────────────────────────────────────────────────────────────
+const STORY = {
+  shock: '<b>Deceleration → shock.</b> Light fast traffic (k<sub>u</sub>) meets heavy slow traffic (k<sub>d</sub>). Upstream waves (slope w(k<sub>u</sub>)) are faster than downstream waves (w(k<sub>d</sub>)); they collide, and conservation forces the discontinuity to travel at the <b>chord</b> slope U = Δq/Δk (Eq. 4.34). Watch the gray trajectories: cars sail in at speed, hit the shock, and drop to the queued speed instantly on this scale.',
+  fan: '<b>Acceleration → expansion fan.</b> Heavy traffic sits behind light traffic. Now upstream waves are <i>slower</i> than downstream waves and a gap opens; LWR fills it with a centered fan of waves — every FD tangent between the two states, one ray per density. Vehicles accelerate smoothly through the fan. (This is the entropy solution: a "jump up" shock would also conserve cars, but it is unstable.)',
+  signal: '<b>Traffic signal.</b> Red at t = 0: a stopping shock S₁ (chord from k<sub>a</sub> to jam) grows the queue backward. Green at t = R: a centered fan from the stop line releases the jam — the stop line immediately serves <b>capacity</b> (k = k<sub>j</sub>/2, the FD apex). The fan\'s back edge eats the queue via the release shock S₂; where S₂ crosses the stop line the queue is gone there, and where it meets the arrival state the disturbance fades to a plain wave.'
+};
+function updateUI(){
+  el('kuV').textContent = Math.round(VMI(KU))+' veh/mi';
+  el('kdV').textContent = Math.round(VMI(KD))+' veh/mi';
+  el('kaV').textContent = Math.round(VMI(KA))+' veh/mi';
+  el('rrV').textContent = RED+' s';
+  el('story').innerHTML = STORY[mode];
+  if (mode==='shock' || mode==='fan'){
+    el('c1t').textContent='wave speed w(k_u)';
+    el('c2t').textContent='wave speed w(k_d)';
+    el('c1').textContent = MPH(Wk(KU)).toFixed(1)+' mph';
+    el('c2').textContent = MPH(Wk(KD)).toFixed(1)+' mph';
+    if (KD>KU){
+      el('c3t').textContent='shock U = Δq/Δk';
+      el('c3').textContent = MPH((Qk(KD)-Qk(KU))/(KD-KU)).toFixed(1)+' mph';
+    } else {
+      el('c3t').textContent='fan spans wave speeds';
+      el('c3').textContent = MPH(Wk(KU)).toFixed(0)+' → '+MPH(Wk(KD)).toFixed(0)+' mph';
+    }
+  } else {
+    el('c1t').textContent='stopping shock U₁';
+    el('c2t').textContent='max queue reach';
+    el('c3t').textContent='queue gone at stop line';
+    el('c1').textContent = MPH(sig.U1).toFixed(1)+' mph';
+    el('c2').textContent = Math.round(-sig.xI)+' ft at t = '+sig.tI.toFixed(0)+' s';
+    el('c3').textContent = sig.tClear ? 't ≈ '+sig.tClear.toFixed(0)+' s' : 'not within view';
+  }
+}
+
+document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
+  mode=b.dataset.m;
+  document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('on',x===b));
+  const rie = mode!=='signal';
+  el('gU').style.display = rie?'flex':'none';
+  el('gD').style.display = rie?'flex':'none';
+  el('gA').style.display = rie?'none':'flex';
+  el('gR').style.display = rie?'none':'flex';
+  if (mode==='shock' && KD<=KU){ KU=40/5280; KD=170/5280; el('ku').value=40; el('kd').value=170; }
+  if (mode==='fan' && KD>=KU){ KU=150/5280; KD=30/5280; el('ku').value=150; el('kd').value=30; }
+  draw();
+}));
+el('ku').addEventListener('input',()=>{ KU=parseFloat(el('ku').value)/5280; draw(); });
+el('kd').addEventListener('input',()=>{ KD=parseFloat(el('kd').value)/5280; draw(); });
+el('ka').addEventListener('input',()=>{ KA=parseFloat(el('ka').value)/5280; draw(); });
+el('rr').addEventListener('input',()=>{ RED=parseFloat(el('rr').value); draw(); });
+
+draw();
+
+// chapter navigation drawer
+(function(){
+  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
+  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
+  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
+  b.addEventListener('mouseenter',open);
+  d.addEventListener('mouseleave',close);
+  s.addEventListener('click',close);
+  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
+  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>
