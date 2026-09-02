@@ -367,7 +367,7 @@ function frameGap(dt){
     // insert minor car at merge point, keeping mains sorted by x desc
     let ins = mains.length;
     for (let i = 0; i < mains.length; i++){ if (mains[i].x < MX){ ins = i; break; } }
-    mains.splice(ins, 0, { x: MX, minor: true });
+    mains.splice(ins, 0, { x: MX, minor: true, mt: simT });
     lastMerge = simT; mergeCount++;
   }
   const obsCap = simT > 30 ? mergeCount / simT * 3600 : 0;
@@ -386,7 +386,18 @@ function frameGap(dt){
     cx.beginPath(); cx.roundRect(MX - 7, y + 22 + i * 17, 14, 13, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.stroke();
   }
-  mains.forEach(c2 => drawVehH(c2.x, y, c2.minor ? '#b45309' : '#2c5378'));
+  // fresh minor-street merges glide up from the stub onto the main road
+  const MDUR = 1.6;
+  mains.forEach(c2 => {
+    let px2 = c2.x, py2 = y;
+    if (c2.mt !== undefined && simT - c2.mt < MDUR){
+      let f = (simT - c2.mt) / MDUR;
+      f = f * f * (3 - 2 * f);
+      px2 = MX + (c2.x - MX) * f;
+      py2 = (y + 34) + (y - (y + 34)) * f;
+    }
+    drawVehH(px2, py2, c2.minor ? '#b45309' : '#2c5378');
+  });
   cx.fillStyle = '#6b7280'; cx.font = '600 11px ' + SANS;
   cx.fillText('observed minor throughput: ' + Math.round(obsCap) + ' veh/hr (running)', 20, y + 34);
   cx.fillText('gap to next main car: ' + (tGap > 900 ? '∞' : Math.max(0, tGap).toFixed(1) + ' s') + '  (needs ≥ ' + Hc + ' s)', 20, y + 50);

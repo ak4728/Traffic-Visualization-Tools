@@ -203,7 +203,7 @@ function step(dt){
       const gapDn = down ? down.x - XM : 1e9;
       if (gapUp > 14 && gapDn > 8){
         const vIn = Math.min(V0 * 0.6, down ? down.v + 3 : V0 * 0.6);
-        cars.push({ x: XM, v: Math.max(8, vIn) });
+        cars.push({ x: XM, v: Math.max(8, vIn), mt: simT });   // mt: merge animation start
         cars.sort((a2, b2) => b2.x - a2.x);
         rampQ--;
         nextGreen = 60 / (+el('mr').value);
@@ -304,11 +304,24 @@ function draw(){
     cx.fillStyle = '#a4161a'; cx.font = '700 12px ' + SANS; cx.textAlign = 'left';
     cx.fillText('+' + (rampQ - 12) + ' more waiting', foot[0] - 10, foot[1] + 28);
   }
-  // mainline cars
+  // mainline cars — fresh merges glide from the stop bar onto the lane
+  const MDUR = 1.8;                                    // sim-seconds of merge glide
   cars.forEach(c2 => {
+    const tx = XP(c2.x), ty = y;
+    let px2 = tx, py2 = ty, rot = 0;
+    if (c2.mt !== undefined && simT - c2.mt < MDUR){
+      let f = (simT - c2.mt) / MDUR;
+      f = f * f * (3 - 2 * f);                         // smoothstep
+      const gx0 = sbx - ux * 22, gy0 = sby - uy * 22;  // start at front-of-queue spot
+      px2 = gx0 + (tx - gx0) * f;
+      py2 = gy0 + (ty - gy0) * f;
+      rot = ang * (1 - f);
+    }
+    cx.save(); cx.translate(px2, py2); cx.rotate(rot);
     cx.fillStyle = speedColor(c2.v);
-    cx.beginPath(); cx.roundRect(XP(c2.x) - 10, y - 7, 20, 14, 3); cx.fill();
+    cx.beginPath(); cx.roundRect(-10, -7, 20, 14, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+    cx.restore();
   });
   // speed profile strip
   const P = { l: 30, r: 30, t: 300, h: 190 };
