@@ -185,9 +185,14 @@ function frameCount(dt){
   cx.fillStyle = '#f0f2f6'; cx.fillRect(0, y - 14, W, 28);
   cx.strokeStyle = '#d6dae2'; cx.strokeRect(0, y - 14, W, 28);
   cx.fillStyle = '#a4161a'; cx.fillRect(DX, y - 20, 4, 40);
+  // draw with a minimum visual spacing so overlapping (point) vehicles read
+  // as a platoon — counting still uses the true Poisson positions
+  let prevDraw = 1e9;
   cars.forEach(c2 => {
+    const dx2 = Math.min(c2.x, prevDraw - 27);
+    prevDraw = dx2;
     cx.fillStyle = c2.c ? '#8a94a3' : '#2c5378';
-    cx.beginPath(); cx.roundRect(c2.x - 12, y - 7, 24, 14, 3); cx.fill();
+    cx.beginPath(); cx.roundRect(dx2 - 12, y - 7, 24, 14, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
   });
   cx.fillStyle = '#6b7280'; cx.font = '600 12px ' + SANS;

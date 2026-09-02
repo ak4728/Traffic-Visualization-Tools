@@ -354,11 +354,15 @@ function frameGap(dt){
   const qM = +el('qm').value, Hc = +el('hc').value, M = +el('mm').value;
   simT += dt * 4;                        // time ×4
   nextMain -= dt * 4;
-  if (nextMain <= 0){ if (!mains.length || mains[mains.length - 1].x > 30){ mains.push({ x: -20, minor: false }); } nextMain = expo(3600 / qM); }
+  if (nextMain <= 0){ if (!mains.length || mains[mains.length - 1].x > 30){ mains.push({ x: -20, minor: false, vv: VG }); } nextMain = expo(3600 / qM); }
+  // Newell-style following with per-car speed: turning cars enter slowly
+  // and accelerate up to the stream speed
   mains.forEach((c2, i) => {
-    let target = c2.x + VG * dt * 4;
+    if (c2.vv === undefined) c2.vv = VG;
+    if (c2.vv < VG) c2.vv = Math.min(VG, c2.vv + 26 * dt * 4);
+    let target = c2.x + c2.vv * dt * 4;
     if (i > 0) target = Math.min(target, mains[i - 1].x - 28);
-    c2.x = target;
+    c2.x = Math.max(c2.x, target);
   });
   while (mains.length && mains[0].x > W + 30) mains.shift();
   // merge decision: nearest upstream main car
@@ -370,7 +374,7 @@ function frameGap(dt){
     // insert minor car at merge point, keeping mains sorted by x desc
     let ins = mains.length;
     for (let i = 0; i < mains.length; i++){ if (mains[i].x < MX){ ins = i; break; } }
-    mains.splice(ins, 0, { x: MX, minor: true, mt: simT });
+    mains.splice(ins, 0, { x: MX, minor: true, mt: simT, vv: VG * 0.5 });
     lastMerge = simT; mergeCount++;
   }
   const obsCap = simT > 30 ? mergeCount / simT * 3600 : 0;
@@ -389,17 +393,37 @@ function frameGap(dt){
     cx.beginPath(); cx.roundRect(MX - 7, y + 22 + i * 17, 14, 13, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.stroke();
   }
-  // fresh minor-street merges glide up from the stub onto the main road
-  const MDUR = 1.6;
+  // fresh minor-street merges TURN through a right-turn arc (no sliding):
+  // quarter circle from the stub (heading up) onto the lane (heading right)
+  const MDUR = 1.4, RARC = 34;
   mains.forEach(c2 => {
-    let px2 = c2.x, py2 = y;
+    let px2 = c2.x, py2 = y, rot = 0;
     if (c2.mt !== undefined && simT - c2.mt < MDUR){
-      let f = (simT - c2.mt) / MDUR;
-      f = f * f * (3 - 2 * f);
-      px2 = MX + (c2.x - MX) * f;
-      py2 = (y + 34) + (y - (y + 34)) * f;
+      const f = (simT - c2.mt) / MDUR;
+      if (f < 0.55){
+        const g = f / 0.55;
+        const th = Math.PI + g * Math.PI / 2;
+        px2 = (MX + RARC) + RARC * Math.cos(th);
+        py2 = (y + RARC) + RARC * Math.sin(th);
+        rot = -(Math.PI / 2) * (1 - g);
+      } else {
+        const g = (f - 0.55) / 0.45, gs = g * g * (3 - 2 * g);
+        const ax = MX + RARC;
+        px2 = ax + (c2.x - ax) * gs;
+        py2 = y; rot = 0;
+      }
     }
-    drawVehH(px2, py2, c2.minor ? '#b45309' : '#2c5378');
+    if (rot !== 0){
+      cx.save(); cx.translate(px2, py2); cx.rotate(rot);
+      cx.fillStyle = '#b45309';
+      cx.beginPath(); cx.roundRect(-12, -7, 24, 14, 3); cx.fill();
+      cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+      cx.fillStyle = 'rgba(255,255,255,0.75)';
+      cx.fillRect(3, -5, 3, 10); cx.fillRect(-7, -5, 2.4, 10);
+      cx.restore();
+    } else {
+      drawVehH(px2, py2, c2.minor ? '#b45309' : '#2c5378');
+    }
   });
   cx.fillStyle = '#6b7280'; cx.font = '600 11px ' + SANS;
   cx.fillText('observed minor throughput: ' + Math.round(obsCap) + ' veh/hr (running)', 20, y + 34);

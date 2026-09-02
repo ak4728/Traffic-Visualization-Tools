@@ -1095,14 +1095,27 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         odCars.push({od, phase:0, u:Math.random()*0.05, mid: Math.random()<a.s?'N':'S'});
       }
     });
-    // move — mid-route duration scales with the congested route time
+    // move — mid-route duration scales with the congested route time.
+    // Newell-style spacing per link: within each lane group a car can never
+    // pass or overlap its leader (minimum front-to-front spacing in u units)
+    const GAPU = 0.055;
+    const grp = {};
     odCars.forEach(c=>{
-      let dur;
-      if(c.phase===0) dur=1.4;
-      else if(c.phase===1) dur=2.2*(c.mid==='N' ? a.tN/RT.N.tf : a.tS/RT.S.tf);
-      else dur=1.4;
-      c.u+=sdt/dur;
-      if(c.u>=1){ c.u=0; c.phase++; }
+      const gk = c.phase===0 ? 'e'+c.od[0] : c.phase===1 ? 'm'+c.mid : 'x'+c.od[1];
+      (grp[gk] = grp[gk] || []).push(c);
+    });
+    Object.values(grp).forEach(g=>{
+      g.sort((p,q2)=>q2.u-p.u);
+      g.forEach((c,i2)=>{
+        let dur;
+        if(c.phase===0) dur=1.4;
+        else if(c.phase===1) dur=2.2*(c.mid==='N' ? a.tN/RT.N.tf : a.tS/RT.S.tf);
+        else dur=1.4;
+        let target=c.u+sdt/dur;
+        if(i2>0) target=Math.min(target, g[i2-1].u-GAPU);
+        c.u=Math.max(c.u, target);
+        if(c.u>=1){ c.u=0; c.phase++; }
+      });
     });
     odCars=odCars.filter(c=>c.phase<3);
     drawNet();

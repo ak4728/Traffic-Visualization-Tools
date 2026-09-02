@@ -802,30 +802,35 @@ document.querySelectorAll('.tab').forEach(tab => {
   const MIN_GAP = 0.008;              // minimum bumper-to-bumper gap
   const S_MIN  = VEH_LEN + MIN_GAP;   // minimum front-to-front spacing
 
-  function makeVehicles(){
-    // continuous stream: random arrivals from before t=0 until the end of the
-    // window, each randomly fast or slow with a little speed jitter.
-    // Each vehicle remembers the previous vehicle in ITS lane — its leader.
-    const vehicles = [];
-    let tA = -8, lastFast = null, lastSlow = null;
-    while(tA < DUR - 0.3){
+  // endless stream (like the closed loop): arrivals are generated on the fly
+  // and vehicles that exited before the rolling window are pruned
+  let vehicles = [];
+  let genT = -8, lastFastV = null, lastSlowV = null;
+  function extendVehicles(upTo){
+    while(genT < upTo){
       const fast = Math.random() < 0.5;
       const base = fast ? 0.085 : 0.038;
       const veh = {
         speed: base*(1 + (Math.random()*0.2 - 0.1)),
-        offset: tA,
+        offset: genT,
         color: fast ? FAST_COLOR : SLOW_COLOR,
         lane: fast ? 0.3 : 0.7,
-        leader: fast ? lastFast : lastSlow
+        leader: fast ? lastFastV : lastSlowV
       };
-      if(fast) lastFast = veh; else lastSlow = veh;
+      if(fast) lastFastV = veh; else lastSlowV = veh;
       vehicles.push(veh);
-      tA += 0.4 + Math.random()*1.0;
+      genT += 0.4 + Math.random()*1.0;
     }
-    return vehicles;
   }
-
-  let vehicles = makeVehicles();
+  function pruneVehicles(before){
+    for(let i=vehicles.length-1;i>=0;i--){
+      const v=vehicles[i];
+      if(v.offset < before && posOf(v, before) > 1.05){
+        vehicles.forEach(o=>{ if(o.leader===v) o.leader=null; });
+        vehicles.splice(i,1);
+      }
+    }
+  }
 
   // constrained position: free-flow, but never closer than S_MIN to the
   // same-lane leader (no overlapping / passing within a lane)
@@ -900,6 +905,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   }
 
   function drawTSD(tSec){
+    const w0 = Math.max(0, tSec - DUR);              // rolling window start
+    const TX = tt => PAD.l + ((tt - w0)/DUR)*plotW;
     tctx.clearRect(0,0,TW,TH);
     tctx.fillStyle='#ffffff'; tctx.fillRect(0,0,TW,TH);
 
@@ -929,7 +936,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     for(let i=0;i<=6;i++){
       const tx = PAD.l+(i/6)*plotW;
       tctx.textAlign='center';
-      tctx.fillText((i/6*DUR).toFixed(0), tx, PAD.t+plotH+14);
+      tctx.fillText((w0 + i/6*DUR).toFixed(0), tx, PAD.t+plotH+14);
     }
     tctx.textAlign='right';
     tctx.fillText('0',PAD.l-4,PAD.t+plotH+4);
@@ -943,26 +950,26 @@ document.querySelectorAll('.tab').forEach(tab => {
       tctx.globalAlpha = 0.45;   // translucent so crossings & headways stay readable
       tctx.beginPath();
       let started = false, exited = false;
-      for(let ts = Math.max(0, veh.offset); ts <= tSec + 1e-6 && !exited; ts += 0.12){
+      for(let ts = Math.max(w0, veh.offset); ts <= tSec + 1e-6 && !exited; ts += 0.12){
         const x = getVehX(veh, Math.min(ts, tSec));
         if(x === null){
           if(started) exited = true;
           continue;
         }
-        const px = PAD.l + (Math.min(ts, tSec)/DUR)*plotW;
+        const px = TX(Math.min(ts, tSec));
         const py = PAD.t + plotH - x*plotH;
         if(!started){ tctx.moveTo(px,py); started = true; } else tctx.lineTo(px,py);
       }
       const xNow = getVehX(veh, tSec);
       if(started && !exited && xNow !== null){
-        tctx.lineTo(PAD.l+(tSec/DUR)*plotW, PAD.t+plotH-xNow*plotH);
+        tctx.lineTo(TX(tSec), PAD.t+plotH-xNow*plotH);
       }
       if(started) tctx.stroke();
       tctx.globalAlpha = 1;
 
       // dot at current position
       if(xNow !== null){
-        const dpx = PAD.l+(tSec/DUR)*plotW;
+        const dpx = TX(tSec);
         const dpy = PAD.t+plotH-xNow*plotH;
         tctx.fillStyle = veh.color;
         tctx.beginPath(); tctx.arc(dpx,dpy,4,0,Math.PI*2); tctx.fill();
@@ -984,16 +991,15 @@ document.querySelectorAll('.tab').forEach(tab => {
       vehicles.forEach(veh => {
         // find time vehicle passes obsX01 (numeric — trajectories have kinks)
         const tPass = passTime(veh, obsX01);
-        if(tPass === null || tPass < 0 || tPass > DUR) return;
-        if(tPass > tSec) return;
-        const px = PAD.l + (tPass/DUR)*plotW;
+        if(tPass === null || tPass < w0 || tPass > tSec) return;
+        const px = TX(tPass);
         tctx.strokeStyle = veh.color; tctx.lineWidth=2;
         tctx.beginPath(); tctx.arc(px,obsY,5,0,Math.PI*2); tctx.stroke();
 
         // headway arrows between same-class vehicles
         if(veh.color === FAST_COLOR){
           if(lastFastT !== null){
-            const px2 = PAD.l+(lastFastT/DUR)*plotW;
+            const px2 = TX(lastFastT);
             tctx.strokeStyle='#a4161a'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
             tctx.beginPath(); tctx.moveTo(px2,obsY+12); tctx.lineTo(px,obsY+12); tctx.stroke();
             tctx.setLineDash([]);
@@ -1003,7 +1009,7 @@ document.querySelectorAll('.tab').forEach(tab => {
           lastFastT = tPass;
         } else {
           if(lastSlowT !== null){
-            const px2 = PAD.l+(lastSlowT/DUR)*plotW;
+            const px2 = TX(lastSlowT);
             tctx.strokeStyle='#2c5378'; tctx.lineWidth=1; tctx.setLineDash([3,3]);
             tctx.beginPath(); tctx.moveTo(px2,obsY-12); tctx.lineTo(px,obsY-12); tctx.stroke();
             tctx.setLineDash([]);
@@ -1017,8 +1023,8 @@ document.querySelectorAll('.tab').forEach(tab => {
 
     // photo line (vertical, draggable; follows playback until dragged)
     if(el('showPhoto').checked){
-      const pT = photoT===null ? tSec : Math.min(photoT, tSec);
-      const px = PAD.l + (pT/DUR)*plotW;
+      const pT = photoT===null ? tSec : Math.min(Math.max(photoT, w0), tSec);
+      const px = TX(pT);
       tctx.strokeStyle='#b8860b'; tctx.lineWidth=2; tctx.setLineDash([8,5]);
       tctx.beginPath(); tctx.moveTo(px,PAD.t); tctx.lineTo(px,PAD.t+plotH); tctx.stroke();
       tctx.setLineDash([]);
@@ -1059,7 +1065,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     }
 
     // current time line
-    const nowPx = PAD.l+(tSec/DUR)*plotW;
+    const nowPx = TX(tSec);
     tctx.strokeStyle='rgba(0,0,0,0.2)'; tctx.lineWidth=1;
     tctx.beginPath(); tctx.moveTo(nowPx,PAD.t); tctx.lineTo(nowPx,PAD.t+plotH); tctx.stroke();
     tctx.fillStyle='#333'; tctx.font='bold 13px sans-serif'; tctx.textAlign='left';
@@ -1068,14 +1074,14 @@ document.querySelectorAll('.tab').forEach(tab => {
     // average headway (observer) and average spacing (photo) along the bottom
     const obsX01s = 1 - obsFrac;
     const passTimes = vehicles.map(v => passTime(v, obsX01s))
-                              .filter(tp => tp !== null && tp >= 0 && tp <= tSec)
+                              .filter(tp => tp !== null && tp >= w0 && tp <= tSec)
                               .sort((a,b) => a-b);
     let hbar = 0;
     if(passTimes.length > 1){
       for(let i=1;i<passTimes.length;i++) hbar += passTimes[i]-passTimes[i-1];
       hbar /= passTimes.length-1;
     }
-    const pT2 = photoT===null ? tSec : Math.min(photoT, tSec);
+    const pT2 = photoT===null ? tSec : Math.min(Math.max(photoT, w0), tSec);
     const posNow = vehicles.map(v => getVehX(v, pT2)).filter(x => x !== null).sort((a,b) => a-b);
     let sbar = 0;
     if(posNow.length > 1){
@@ -1144,23 +1150,24 @@ document.querySelectorAll('.tab').forEach(tab => {
       dctx.beginPath(); dctx.moveTo(L,y); dctx.lineTo(L+pw,y); dctx.stroke();
       dctx.textAlign='right'; dctx.fillText(g, L-3, y+2);
     }
+    const dw0 = Math.max(0, t - DUR);
     dctx.textAlign='center';
-    for(let g=0; g<=DUR; g+=3) dctx.fillText(g+'s', L+(g/DUR)*pw, H-8);
+    for(let g=0; g<=DUR; g+=3) dctx.fillText(Math.round(dw0+g)+'s', L+(g/DUR)*pw, H-8);
     dctx.strokeStyle='#d6dae2';
     dctx.beginPath(); dctx.moveTo(L,T+ph+0.5); dctx.lineTo(L+pw,T+ph+0.5); dctx.stroke();
-    // curve up to current time (density is deterministic, so sample directly)
+    // curve over the rolling window (density is deterministic, so sample directly)
     dctx.strokeStyle='#2c5378'; dctx.lineWidth=2; dctx.lineJoin='round';
     dctx.beginPath();
     let started=false, kNow=0;
-    for(let ts=0; ts<=t+1e-6; ts+=0.1){
+    for(let ts=dw0; ts<=t+1e-6; ts+=0.1){
       const k = vehicles.filter(v=>getVehX(v,ts)!==null).length;
       kNow=k;
-      const px=L+(Math.min(ts,DUR)/DUR)*pw, py=T+ph-(k/KMAX)*ph;
+      const px=L+((ts-dw0)/DUR)*pw, py=T+ph-(k/KMAX)*ph;
       if(!started){ dctx.moveTo(px,py); started=true; } else dctx.lineTo(px,py);
     }
     if(started){
       dctx.stroke();
-      const px=L+(Math.min(t,DUR)/DUR)*pw, py=T+ph-(kNow/KMAX)*ph;
+      const px=L+((Math.min(t,dw0+DUR)-dw0)/DUR)*pw, py=T+ph-(kNow/KMAX)*ph;
       dctx.fillStyle='#2c5378';
       dctx.beginPath(); dctx.arc(px,py,2.5,0,Math.PI*2); dctx.fill();
       dctx.font='700 9px sans-serif'; dctx.textAlign='left';
@@ -1169,13 +1176,14 @@ document.querySelectorAll('.tab').forEach(tab => {
   }
 
   function updateSpeedStats(){
+    const sw0 = Math.max(0, t - DUR);
     const obsX01 = 1 - obsFrac;
     const passed = [];
     vehicles.forEach(veh => {
       const tPass = passTime(veh, obsX01);
-      if(tPass !== null && tPass >= 0 && tPass <= t) passed.push(speedAt(veh, tPass));
+      if(tPass !== null && tPass >= sw0 && tPass <= t) passed.push(speedAt(veh, tPass));
     });
-    const pT = photoT===null ? t : Math.min(photoT, t);
+    const pT = photoT===null ? t : Math.min(Math.max(photoT, sw0), t);
     const onRoad = vehicles.filter(v => getVehX(v, pT) !== null).map(v => speedAt(v, pT));
     const mean = arr => arr.length ? arr.reduce((s,x)=>s+x,0)/arr.length : 0;
     const Vt = mean(passed)*100, Vs = mean(onRoad)*100;
@@ -1195,7 +1203,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   function reset(){
     playing=false; cancelAnimationFrame(animId); t=0; lastTime=null;
     photoT=null;
-    vehicles=makeVehicles();
+    vehicles=[]; genT=-8; lastFastV=null; lastSlowV=null;
+    extendVehicles(DUR);
     el('manyPlay').textContent='▶ Play';
     render();
   }
@@ -1204,16 +1213,15 @@ document.querySelectorAll('.tab').forEach(tab => {
     if(!lastTime) lastTime=ts;
     const dt=(ts-lastTime)/1000; lastTime=ts;
     const spd=parseFloat(el('manySpeed').value);
-    t+=dt*spd;
-    if(t>DUR) t=DUR;
+    t+=dt*spd;                                  // runs forever — rolling window
+    extendVehicles(t+1.5);
+    pruneVehicles(Math.max(0, t-DUR)-0.5);
     render();
-    if(t<DUR){ animId=requestAnimationFrame(animate); }
-    else { playing=false; el('manyPlay').textContent='▶ Play'; }
+    animId=requestAnimationFrame(animate);
   }
 
   el('manyPlay').addEventListener('click',()=>{
     if(playing){ playing=false; cancelAnimationFrame(animId); el('manyPlay').textContent='▶ Play'; lastTime=null; return; }
-    if(t>=DUR) reset();
     playing=true; el('manyPlay').textContent='⏸ Pause'; lastTime=null;
     animId=requestAnimationFrame(animate);
   });
@@ -1231,8 +1239,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     return { mx:(e.clientX-r.left)*tsdC.width/r.width, my:(e.clientY-r.top)*tsdC.height/r.height };
   }
   function photoPx(){
-    const pT = photoT===null ? t : Math.min(photoT, t);
-    return PAD.l + (pT/DUR)*plotW;
+    const w0 = Math.max(0, t - DUR);
+    const pT = photoT===null ? t : Math.min(Math.max(photoT, w0), t);
+    return PAD.l + ((pT - w0)/DUR)*plotW;
   }
   tsdC.addEventListener('pointerdown', e => {
     const {mx,my} = canvasPos(e);
@@ -1247,7 +1256,8 @@ document.querySelectorAll('.tab').forEach(tab => {
       obsFrac = Math.min(0.95, Math.max(0.05, (my-PAD.t)/plotH));
       render();
     } else if(dragLine==='photo'){
-      photoT = Math.min(DUR, Math.max(0, (mx-PAD.l)/plotW*DUR));
+      const w0 = Math.max(0, t - DUR);
+      photoT = Math.min(t, Math.max(w0, w0 + (mx-PAD.l)/plotW*DUR));
       render();
     } else {
       const obsY = PAD.t + plotH*obsFrac;
