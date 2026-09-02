@@ -80,7 +80,6 @@
   <h4>Ch. 1 — Time-Space Diagrams</h4>
   <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
   <a href="DilemmaZone.html">Dilemma Zone</a>
-  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 2 — Cumulative Plots</h4>
   <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
   <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
@@ -1344,7 +1343,37 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const O=[70,150], DV=[230,150], M=[1030,150], DEST=[1140,150];
   const WPS2=[[620,56],[620,150],[620,240]];
   const NB_R=3;                // NegBin dispersion; vehicle pace via its own slider
-  let cars2=[], tally=[0,0,0], stateKey='', lastSim=null;
+  let cars2=[], tally=[0,0,0], stateKey='', carsKey='', lastSim=null, simT3=0;
+
+  // ── IDM micro-physics on the three routes (px units) ──────────────
+  // route lengths and free speeds scaled so free-flow traversal ∝ tf
+  const segLen=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
+  const RL = WPS2.map(wp=>[segLen(DV,wp), segLen(wp,M)]);
+  const RLEN = RL.map(s=>s[0]+s[1]);
+  const KAPPA=0.55;                                  // sim-seconds per model-minute
+  const V0R = RLEN.map((L2,r)=>L2/(ROUTES[r].tf*KAPPA));
+  const LE = segLen(O,DV), LX = segLen(M,DEST);
+  const CL=22, S0P=5;                                // car length + jam gap (px)
+  const TR=[0.62,0.45,0.27], TE=0.15;                // per-route time gaps → drawn
+                                                     // capacity ∝ BPR capacity c_r
+  const FDRAW=4.5;                                   // drawn vehicles per real veh/hr scale
+  const AIDM=55, BIDM=75;                            // px/s²
+  let tMeas=[[],[],[]];                              // measured route times (model min)
+  function idmA3(v,v0,Tg,s,dv){
+    s=Math.max(s,0.5);
+    const sStar=S0P+Math.max(0, v*Tg + v*dv/(2*Math.sqrt(AIDM*BIDM)));
+    return AIDM*(1-Math.pow(v/v0,4)-Math.pow(sStar/s,2));
+  }
+  function seedCars(stt,D){
+    cars2=[]; tMeas=[[],[],[]]; simT3=0;
+    for(let r=0;r<3;r++){
+      const n=Math.min(60, Math.round(stt.v[r]/3600*FDRAW*(stt.t[r]*KAPPA)));
+      const vAvg=RLEN[r]/(stt.t[r]*KAPPA);
+      for(let i2=0;i2<n;i2++){
+        cars2.push({phase:1, route:r, d:RLEN[r]*(i2+0.5)/n, v:vAvg, tEnter:simT3 - (RLEN[r]*(i2+0.5)/n)/vAvg});
+      }
+    }
+  }
 
   function gauss(){
     let u=0,v2=0;
@@ -1374,13 +1403,13 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   function rNegBin(mu){ return rPoisson(rGamma(NB_R)*(mu/NB_R)); }
 
   const seg=(a,b,u)=>[a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u];
-  function routePos(r,u){
-    return u<0.5 ? seg(DV,WPS2[r],u/0.5) : seg(WPS2[r],M,(u-0.5)/0.5);
-  }
   function carXY(c){
-    if(c.phase===0) return seg(O,DV,c.u);
-    if(c.phase===1) return routePos(c.route,c.u);
-    return seg(M,DEST,c.u);
+    if(c.phase===0) return seg(O,DV,c.d/LE);
+    if(c.phase===1){
+      const [l1,l2]=RL[c.route];
+      return c.d<l1 ? seg(DV,WPS2[c.route],c.d/l1) : seg(WPS2[c.route],M,(c.d-l1)/l2);
+    }
+    return seg(M,DEST,c.d/LX);
   }
 
   function simLoop(ts){
@@ -1393,22 +1422,68 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     const stt=arr[Math.min(k,arr.length)-1];
     const key=el('ueSel').value+'|'+k+'|'+D;
     if(key!==stateKey){ stateKey=key; tally=[0,0,0]; }
-    // spawn from the negative binomial arrival process
-    const n=rNegBin(D/3600*sdt);
+    // reseed the road ONLY on a new scenario (method/demand) — not per
+    // iteration, so speeds adapt physically instead of jumping
+    const ck=el('ueSel').value+'|'+D;
+    if(ck!==carsKey){ carsKey=ck; seedCars(stt,D); }
+    simT3+=sdt;
+    // spawn from the negative binomial arrival process (scaled to drawn veh)
+    const n=rNegBin(D/3600*sdt*FDRAW);
     const shares=stt.v.map(x=>x/D);
+    const entry=cars2.filter(c=>c.phase===0).sort((a,b)=>b.d-a.d);
+    const rear=entry.length?entry[entry.length-1].d:1e9;
     for(let i2=0;i2<n && cars2.length<300;i2++){
+      if(rear<CL+S0P) break;                          // entry blocked — arrival waits outside
       const rr=Math.random();
       const route = rr<shares[0] ? 0 : rr<shares[0]+shares[1] ? 1 : 2;
       tally[route]++;
-      cars2.push({phase:0, u:Math.random()*0.05, route});
+      cars2.push({phase:0, route, d:0, v:V0R[route]*0.8});
+      break;                                          // at most one insert per tick
     }
-    // move — route legs slow down in proportion to the current travel time
+    // ── IDM per lane group ──
+    const groups={e:[],x:[],r0:[],r1:[],r2:[]};
     cars2.forEach(c=>{
-      const dur = c.phase===0 ? 1.2 : c.phase===1 ? 5*stt.t[c.route]/ROUTES[c.route].tf : 0.9;
-      c.u+=sdt/dur;
-      if(c.u>=1){ c.u=0; c.phase++; }
+      if(c.phase===0) groups.e.push(c);
+      else if(c.phase===2) groups.x.push(c);
+      else groups['r'+c.route].push(c);
     });
-    cars2=cars2.filter(c=>c.phase<3);
+    ['r0','r1','r2'].forEach((g,r)=>groups[g].sort((a,b)=>b.d-a.d));
+    groups.e.sort((a,b)=>b.d-a.d);
+    // entry link: front car sees the rear car of its chosen route
+    groups.e.forEach((c,i2)=>{
+      let s=1e9, dv=0;
+      if(i2>0){ s=groups.e[i2-1].d-c.d-CL; dv=c.v-groups.e[i2-1].v; }
+      else{
+        const rg=groups['r'+c.route];
+        if(rg.length){ const rr2=rg[rg.length-1]; s=(LE-c.d)+rr2.d-CL; dv=c.v-rr2.v; }
+      }
+      c.a=idmA3(c.v, 150, TE, s, dv);
+    });
+    // routes: per-route IDM with route-specific v0 and time gap
+    [0,1,2].forEach(r=>{
+      const g=groups['r'+r];
+      g.forEach((c,i2)=>{
+        let s=1e9, dv=0;
+        if(i2>0){ s=g[i2-1].d-c.d-CL; dv=c.v-g[i2-1].v; }
+        c.a=idmA3(c.v, V0R[r], TR[r], s, dv);
+      });
+    });
+    groups.x.forEach(c=>{ c.a=(140-c.v)*2; });
+    cars2.forEach(c=>{
+      c.v=Math.max(0, c.v+c.a*sdt);
+      c.d+=c.v*sdt;
+    });
+    // transitions
+    cars2.forEach(c=>{
+      if(c.phase===0 && c.d>=LE){ c.phase=1; c.d=0; c.tEnter=simT3; }
+      else if(c.phase===1 && c.d>=RLEN[c.route]){
+        const tm=(simT3-c.tEnter)/KAPPA;             // model minutes
+        tMeas[c.route].push(tm);
+        if(tMeas[c.route].length>10) tMeas[c.route].shift();
+        c.phase=2; c.d=0;
+      }
+    });
+    cars2=cars2.filter(c=>!(c.phase===2 && c.d>=LX));
     drawSim(stt,D,arr.length);
     requestAnimationFrame(simLoop);
   }
@@ -1430,8 +1505,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       const share=stt.v[r]/D;
       const wp=WPS2[r];
       const oy = r===0?-18 : r===2?30 : -16;
+      const ms = tMeas[r].length ? tMeas[r].reduce((a,b)=>a+b,0)/tMeas[r].length : null;
       scx.fillStyle=RCOLS[r]; scx.font='600 13px '+SANS; scx.textAlign='center';
-      scx.fillText(`Route ${r+1} · ${(share*100).toFixed(0)}% · ${Math.round(stt.v[r])} veh/hr · ${stt.t[r].toFixed(1)} min`, wp[0], wp[1]+oy);
+      scx.fillText(`Route ${r+1} · ${(share*100).toFixed(0)}% · ${Math.round(stt.v[r])} veh/hr · BPR ${stt.t[r].toFixed(1)} min`+(ms!==null?` · sim ⌀ ${ms.toFixed(1)}`:''), wp[0], wp[1]+oy);
     }
     // nodes
     [[O,'O'],[M,''],[DEST,'D']].forEach(([p,lb])=>{
@@ -1446,7 +1522,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     scx.fillText('route choice — P = this iteration\'s shares', DV[0], DV[1]+32);
     // labels
     scx.fillStyle='#6b7280'; scx.font='600 11px '+SANS; scx.textAlign='left';
-    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — bursty (var > mean)`, 16, 24);
+    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — IDM car-following: congestion & delay are physical, and speeds adapt gradually after an iteration step`, 16, 24);
     const tt=tally[0]+tally[1]+tally[2];
     if(tt>0){
       const parts=tally.map((x,i2)=>`R${i2+1} ${(100*x/tt).toFixed(0)}%`);

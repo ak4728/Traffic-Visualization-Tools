@@ -59,7 +59,6 @@
   <h4>Ch. 1 — Time-Space Diagrams</h4>
   <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
   <a href="DilemmaZone.html">Dilemma Zone</a>
-  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 2 — Cumulative Plots</h4>
   <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
   <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
@@ -103,6 +102,9 @@
     <div class="panel">
       <canvas id="main" width="1240" height="700"></canvas>
       <div class="controls">
+        <button class="mode2" data-m="gap" style="padding:5px 12px;border-radius:9px;border:1.5px solid #d6dae2;background:#fff;color:#374151;font-size:0.8em;font-weight:600;cursor:pointer">Gap heuristic</button>
+        <button class="mode2" data-m="ego" style="padding:5px 12px;border-radius:9px;border:1.5px solid #d6dae2;background:#fff;color:#374151;font-size:0.8em;font-weight:600;cursor:pointer">Egoistic (14.4–5)</button>
+        <button class="mode2 on2" data-m="mobil" style="padding:5px 12px;border-radius:9px;border:1.5px solid transparent;background:#14919b;color:#fff;font-size:0.8em;font-weight:600;cursor:pointer">MOBIL (14.7)</button>
         <div class="control-group"><label>politeness p</label><input type="range" id="pp" min="0" max="1" step="0.05" value="0.25"><span class="val" id="ppV"></span></div>
         <div class="control-group"><label>threshold Δa</label><input type="range" id="da" min="0" max="0.5" step="0.05" value="0.1"><span class="val" id="daV"></span></div>
         <div class="control-group"><label>b_safe</label><input type="range" id="bs" min="1" max="4" step="0.25" value="2"><span class="val" id="bsV"></span></div>
@@ -124,12 +126,7 @@
         </div>
       </div>
       <div class="panel">
-        <div class="eqbox">
-          <b>Two tests, in order</b>
-          <span class="eq">1) safety: â<sub>follower</sub> ≥ −b_safe</span>
-          <span class="eq">2) incentive: â<sub>c</sub> − a<sub>c</sub> + p·(â<sub>f̂</sub> − a<sub>f̂</sub> + â<sub>f</sub> − a<sub>f</sub>) &gt; Δa ± a_bias</span>
-          <span class="note">All accelerations are IDM evaluations of hypothetical situations: "how hard would I (and my old &amp; new followers) accelerate if I were in the other lane right now?" The lane-changing brain reuses the car-following brain — that is MOBIL's core idea.</span>
-        </div>
+        <div class="eqbox" id="modelBox">—</div>
         <div class="eqbox" style="border-left-color:#b45309">
           <b>Experiments</b><br>
           <span class="note">1) p = 0, Δa = 0: hyperactive egoists — watch the changes-per-minute counter and the left lane clog. 2) p = 1: near-silence; only clearly beneficial overtakes happen. 3) bias = 0: lanes become symmetric and trucks wander left (US style). 4) Raise b_safe to 4: aggressive gap acceptance — safety refusals drop, but new followers brake visibly hard.</span>
@@ -149,6 +146,12 @@ const KMH = ms => ms * 3.6;
 const LRD = 1000;                   // ring length (m)
 const IDMP = { a: 1.2, b: 1.8, T: 1.2, s0: 2, d: 4 };
 let cars = [], simT = 0, lcCount = 0, lcWindow = [], refSafe = 0, refInc = 0;
+let lcModel = 'mobil';
+const MODEL_INFO = {
+  gap: '<b>Gap-acceptance heuristic</b> (§14.2 — the pre-MOBIL, rule-based practice found in classic simulators): change lanes when the target lane offers a <i>meaningfully longer lead gap</i> and both critical gaps clear — lead gap &gt; s₀ + v·1.0 s and lag gap &gt; s₀ + v<sub>follower</sub>·0.9 s. No accelerations, no politeness: rules about distances only. Watch how it changes eagerly toward "greener" lanes and how follower comfort never enters the decision — the p, Δa and bias sliders do nothing here.',
+  ego: '<b>Egoistic incentive</b> (Eqs. 14.4–14.5): the first acceleration-based model in the chapter. Safety criterion as in MOBIL (â<sub>follower</sub> ≥ −b_safe), but the incentive counts only the driver\'s own gain: <b>â<sub>c</sub> − a<sub>c</sub> &gt; Δa ± a_bias</b>. Other drivers are protected from danger, not from inconvenience. Equivalent to MOBIL with p = 0 — the politeness slider is ignored.',
+  mobil: '<b>MOBIL</b> (Eq. 14.7): two tests, in order — 1) safety: â<sub>follower</sub> ≥ −b_safe; 2) incentive: <b>â<sub>c</sub> − a<sub>c</sub> + p·(â<sub>f̂</sub> − a<sub>f̂</sub> + â<sub>f</sub> − a<sub>f</sub>) &gt; Δa ± a_bias</b>. All accelerations are IDM evaluations of hypothetical situations — the lane-changing brain reuses the car-following brain, and the politeness factor p weighs the followers\' losses against the driver\'s gain.'
+};
 let seed = 21;
 function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
 
@@ -213,12 +216,28 @@ function tryChange(c){
     aFo_old = idmAcc(cur.foll.v, cur.foll.v0, cur.dFoll - c.len, cur.foll.v - c.v);
     aFo_new = accOf(cur.foll, cur.lead, cur.dFoll + cur.dLead);
   }
-  const bSafe = +el('bs').value, p = +el('pp').value;
+  const bSafe = +el('bs').value;
+  const p = lcModel === 'mobil' ? +el('pp').value : 0;
   const dTh = +el('da').value, bias = +el('ab').value;
+
+  if (lcModel === 'gap'){
+    // §14.2 rule-based: critical distance gaps only, no accelerations
+    const leadGapCur = cur.lead ? cur.dLead - cur.lead.len : 1e9;
+    const leadGapTgt = tgt.lead ? tgt.dLead - tgt.lead.len : 1e9;
+    const lagGapTgt  = tgt.foll ? tgt.dFoll - c.len : 1e9;
+    const needLead = 2 + c.v * 1.0;
+    const needLag  = 2 + (tgt.foll ? tgt.foll.v : 0) * 0.9;
+    if (leadGapTgt < needLead || lagGapTgt < needLag){ refSafe++; return null; }
+    if (leadGapTgt < leadGapCur * 1.3 + 8){ refInc++; return null; }
+    return { own: NaN, others: NaN, lhs: NaN, thr: NaN,
+             txt: 'lead gap ' + leadGapTgt.toFixed(0) + ' m > 1.3× current ' + leadGapCur.toFixed(0) + ' m, lag gap ' + lagGapTgt.toFixed(0) + ' m clear ✓' };
+  }
+
+  // acceleration-based models (14.4–14.5 egoistic, 14.7 MOBIL)
   // 1) safety
   if (tgt.foll && aFn_new < -bSafe){ refSafe++; return null; }
-  if (tgt.dLead - tgt.lead?.len < 2 || tgt.dFoll - c.len < 2){ refSafe++; return null; }
-  // 2) incentive (Eq. 14.7); keep-right: bias eases changes to the right (lane 1)
+  if (tgt.dLead - (tgt.lead ? tgt.lead.len : 0) < 2 || tgt.dFoll - c.len < 2){ refSafe++; return null; }
+  // 2) incentive; keep-right: bias eases changes to the right (lane 1)
   const biasTerm = target === 1 ? -bias : bias;
   const lhs = (aCn - aC) + p * ((aFn_new - aFn_old) + (aFo_new - aFo_old));
   if (lhs > dTh + biasTerm){
@@ -247,10 +266,14 @@ function step(dt){
     if (res){
       c.lcFrom = c.lane; c.lane = 1 - c.lane; c.lcT = simT;
       lcCount++; lcWindow.push(simT);
-      el('lastlc').textContent =
-        (c.truck ? '🚚' : '🚗') + ' #' + c.id + ' → ' + (c.lane === 0 ? 'left' : 'right') +
-        ':  own gain ' + res.own.toFixed(2) + ' + p·others ' + (res.others >= 0 ? '+' : '') + (+el('pp').value * res.others).toFixed(2) +
-        ' = ' + res.lhs.toFixed(2) + ' > ' + res.thr.toFixed(2) + ' ✓';
+      const who = (c.truck ? '🚚' : '🚗') + ' #' + c.id + ' → ' + (c.lane === 0 ? 'left' : 'right') + ':  ';
+      if (res.txt) el('lastlc').textContent = who + res.txt;
+      else {
+        const pEff = lcModel === 'mobil' ? +el('pp').value : 0;
+        el('lastlc').textContent = who +
+          'own gain ' + res.own.toFixed(2) + ' + p·others ' + (res.others >= 0 ? '+' : '') + (pEff * res.others).toFixed(2) +
+          ' = ' + res.lhs.toFixed(2) + ' > ' + res.thr.toFixed(2) + ' ✓';
+      }
       c.cool = 4;                                 // no flip-flopping
     }
   }
@@ -362,6 +385,25 @@ const fmt = () => {
 };
 ['pp','da','bs','ab'].forEach(id => el(id).addEventListener('input', fmt));
 el('nv').addEventListener('input', () => { fmt(); makeCars(); laneHist = []; });
+document.querySelectorAll('.mode2').forEach(b => b.addEventListener('click', () => {
+  lcModel = b.dataset.m;
+  document.querySelectorAll('.mode2').forEach(x => {
+    const on = x === b;
+    x.style.background = on ? '#14919b' : '#fff';
+    x.style.color = on ? '#fff' : '#374151';
+    x.style.borderColor = on ? 'transparent' : '#d6dae2';
+  });
+  el('pp').disabled = lcModel !== 'mobil';
+  el('pp').parentElement.style.opacity = lcModel === 'mobil' ? 1 : 0.45;
+  const accOnly = lcModel === 'gap';
+  ['da','ab','bs'].forEach(id => { el(id).disabled = false; });
+  if (accOnly){ ['da','ab'].forEach(id => { el(id).disabled = true; el(id).parentElement.style.opacity = 0.45; }); }
+  else { ['da','ab'].forEach(id => { el(id).disabled = false; el(id).parentElement.style.opacity = 1; }); }
+  el('modelBox').innerHTML = MODEL_INFO[lcModel];
+  refSafe = 0; refInc = 0; lcWindow = [];
+  el('lastlc').textContent = 'waiting for the first lane change under ' + b.textContent + '…';
+}));
+el('modelBox').innerHTML = MODEL_INFO[lcModel];
 fmt(); makeCars();
 requestAnimationFrame(loop);
 

@@ -95,7 +95,6 @@
   <h4>Ch. 1 — Time-Space Diagrams</h4>
   <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
   <a href="DilemmaZone.html">Dilemma Zone</a>
-  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
   <h4>Ch. 2 — Cumulative Plots</h4>
   <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
   <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
@@ -245,34 +244,34 @@
     </div>
   </div>
 
-  <!-- PANEL 4: CLOSED LOOP -->
+  <!-- PANEL 4: CLOSED LOOP — THE PHANTOM JAM (IDM ring game) -->
   <div class="panel" id="loop">
     <div class="panel-grid">
     <div class="viz-container">
       <canvas id="loopTSD"  class="tsd-canvas"  width="1200" height="560"></canvas>
+      <div class="readout" id="jgScore">—</div>
     </div>
     <div class="viz-container">
-      <div class="pane-head"><span class="help">i<span class="tip">When a vehicle reaches the end of the route (x = L) it wraps back to x = 0, so each trajectory becomes a <b>sawtooth</b> — one tooth per lap. Relations: average speed <code>v = L/C</code> (C = cycle time), flow <code>q = n/C</code>, density <code>k = n/L</code>, so <code>q = k·v</code> — the fundamental relation holds on loops too.</span></span></div>
+      <div class="pane-head"><span class="help">i<span class="tip">A closed loop: when a vehicle passes x = L it wraps to x = 0, so each trajectory is a <b>sawtooth</b> — and q = k·v holds on the ring. Cars follow the <b>IDM</b> (Treiber). Above a critical density the equilibrium is unstable: press ⚡ and one braking car grows into a <b>phantom jam</b> — the red band drifting backward in the time-space diagram while every car moves forward. Dissolve it with a temporary <b>speed limit</b> (variable-speed-limit control), then release. ⏺ clears the recording window.</span></span></div>
       <canvas id="loopRoad" class="road-canvas" width="1200" height="420"></canvas>
-      <div class="readout" id="loopReadout">Sawtooth trajectories — each tooth = one lap of the loop</div>
+      <div class="readout" id="jgBanner">free flow — press ⚡ to break it</div>
       <div class="controls">
-        <button class="action" id="loopPlay">▶ Play</button>
-        <button class="action sec" id="loopReset">↺ Reset</button>
+        <button class="action sec" id="jgPerturb">⚡ Brake one car</button>
+        <button class="action" id="jgRec">⏺ Restart recording</button>
         <div class="control-group">
-          <label>Number of buses</label>
-          <input type="range" id="loopN" min="1" max="20" step="1" value="8">
-          <span class="val" id="loopNVal">8</span>
+          <label>Cars on ring</label>
+          <input type="range" id="jgN" min="15" max="40" step="1" value="30">
+          <span class="val" id="jgNVal">30</span>
         </div>
         <div class="control-group">
-          <label>Playback Speed</label>
-          <input type="range" id="loopSpeed" min="0.3" max="3" step="0.1" value="1">
-          <span class="val" id="loopSpeedVal">1.0×</span>
+          <label>Speed limit</label>
+          <input type="range" id="jgVL" min="8" max="34" step="1" value="34">
+          <span class="val" id="jgVLVal">none</span>
         </div>
       </div>
     </div>
     </div>
   </div>
-
   <!-- PANEL 5: GM CAR FOLLOWING -->
   <div class="panel" id="gm">
     <div class="viz-container">
@@ -1702,317 +1701,135 @@ document.querySelectorAll('.tab').forEach(tab => {
 })();
 
 // ─────────────────────────────────────────────
-//  PANEL 4 — CLOSED LOOP
+//  PANEL 4 — CLOSED LOOP: THE PHANTOM JAM (IDM)
 // ─────────────────────────────────────────────
 (function(){
-  const roadC = el('loopRoad');
-  const tsdC  = el('loopTSD');
-  const rctx  = roadC.getContext('2d');
-  const tctx  = tsdC.getContext('2d');
-  const RW = roadC.width, RH = roadC.height;
-  const TW = tsdC.width,  TH = tsdC.height;
-  const PAD = { l:55, r:20, t:20, b:40 };
-  const plotW = TW - PAD.l - PAD.r;
-  const plotH = TH - PAD.t - PAD.b;
-
-  const DUR = 60;          // seconds shown on TSD (a full minute)
-  const LOOP_SPEED = 0.12; // mean desired speed (loop lengths per second)
-  const BUS_LEN = 0.015;   // bus length as a fraction of the loop
-  const BUS_GAP = 0.005;   // minimum bumper-to-bumper gap on the ring
-  const GM_A = 0.25;       // GM-3 sensitivity on the ring
-  const COLORS = ['#a4161a','#2c5378','#14655c','#b8860b','#b45309','#5b4a7a'];
-
-  let animId=null, playing=false, t=0, lastTime=null;
-  let buses=[], histories=[];
-
-  // Loop road is drawn as an oval track
-  const CX=RW/2, CY=RH/2, RX=RW*0.42, RY=RH*0.38;
-
-  function loopAngle(x01){
-    // x01 in [0,1] maps to angle around the oval, starting at right, going clockwise
-    return -Math.PI/2 + x01 * Math.PI*2;
+  const RC=el('loopRoad'), rc4=RC.getContext('2d');
+  const TC=el('loopTSD'), tc4=TC.getContext('2d');
+  const LR2=600, CAR2=5, V02=15, TT2=1.1, S02=2, A02=0.6, B02=1.5;
+  const MPH2=ms=>ms*2.23694;
+  const TWIN2=60;
+  let cars4=[], sim4=0, pUntil=-1, pIdx=0, hist4=[], last4=null, fr4=0, best4=0, sHist4=[];
+  function init4(){
+    const N=+el('jgN').value;
+    cars4=[];
+    for(let i=0;i<N;i++) cars4.push({x:i*LR2/N, v:Math.min(V02,(LR2/N-CAR2-S02)/TT2)*0.9});
+    sim4=0; pUntil=-1; hist4=[]; sHist4=[];
   }
-
-  function loopPos(x01){
-    const a = loopAngle(x01);
-    return { x: CX + RX*Math.cos(a), y: CY + RY*Math.sin(a) };
-  }
-
-  function makeBuses(){
-    const n = parseInt(el('loopN').value);
-    buses = [];
-    histories = [];
-    for(let i=0;i<n;i++){
-      // evenly spaced, but each driver wants a slightly different speed (±18%)
-      buses.push({ phase: i/n, v0: LOOP_SPEED*(1 + (Math.random()*0.36 - 0.18)) });
-      histories.push([]);
+  function fix4(){ cars4.sort((a,b)=>a.x-b.x); }
+  function idm4(h){
+    const vLim=(+el('jgVL').value)/2.23694;
+    const N=cars4.length, acc=new Array(N);
+    for(let i=0;i<N;i++){
+      const lead=cars4[(i+1)%N];
+      let s=lead.x-cars4[i].x-CAR2;
+      if(s<=-CAR2) s+=LR2; else if(s<0) s=0.01;
+      if(s>LR2) s-=LR2;
+      if(s<=0) s=0.01;
+      const v=cars4[i].v, dv=v-lead.v;
+      const v0e=Math.min(V02,vLim);
+      const sS=S02+Math.max(0, v*TT2+v*dv/(2*Math.sqrt(A02*B02)));
+      acc[i]=A02*(1-Math.pow(v/Math.max(v0e,1),4)-Math.pow(sS/s,2));
+    }
+    for(let i=0;i<N;i++){
+      if(sim4<pUntil && i===pIdx) acc[i]=Math.min(acc[i],-5);
+      cars4[i].v=Math.max(0,cars4[i].v+acc[i]*h);
+      cars4[i].x+=cars4[i].v*h;
+      if(cars4[i].x>=LR2) cars4[i].x-=LR2;
     }
   }
-
-  function drawLoopRoad(tSec){
-    rctx.clearRect(0,0,RW,RH);
-    // track shadow
-    rctx.strokeStyle='#98a1ac'; rctx.lineWidth=36;
-    rctx.beginPath(); rctx.ellipse(CX,CY,RX,RY,0,0,Math.PI*2); rctx.stroke();
-    // track surface
-    rctx.strokeStyle='#aeb7c1'; rctx.lineWidth=31;
-    rctx.beginPath(); rctx.ellipse(CX,CY,RX,RY,0,0,Math.PI*2); rctx.stroke();
-    // track markings
-    rctx.strokeStyle='#f0c040'; rctx.lineWidth=2; rctx.setLineDash([18,14]);
-    rctx.beginPath(); rctx.ellipse(CX,CY,RX,RY,0,0,Math.PI*2); rctx.stroke();
-    rctx.setLineDash([]);
-    // start/end marker
-    const sp = loopPos(0);
-    rctx.strokeStyle='#39424e'; rctx.lineWidth=4;
-    rctx.beginPath(); rctx.moveTo(sp.x,sp.y-22); rctx.lineTo(sp.x,sp.y+22); rctx.stroke();
-    rctx.fillStyle='#39424e'; rctx.font='bold 14px sans-serif'; rctx.textAlign='center';
-    rctx.fillText('x=0 / x=L', sp.x, sp.y-28);
-
-    // direction arrow
-    const ap = loopPos(0.25);
-    rctx.strokeStyle='rgba(57,66,78,0.5)'; rctx.lineWidth=2;
-    rctx.fillStyle='rgba(57,66,78,0.5)';
-    rctx.font='16px sans-serif'; rctx.textAlign='center';
-    rctx.fillText('→', ap.x+10, ap.y-10);
-
-    // buses
-    buses.forEach((bus,i)=>{
-      const hist = histories[i];
-      const idx = Math.min(hist.length-1, Math.max(0, Math.round(tSec/0.05)));
-      const pos = loopPos(hist[idx][1]);
-      // bus body
-      rctx.fillStyle=COLORS[i%COLORS.length];
-      rctx.beginPath(); rctx.arc(pos.x,pos.y,16,0,Math.PI*2); rctx.fill();
-      // number
-      rctx.fillStyle='#fff'; rctx.font='bold 14px sans-serif'; rctx.textAlign='center';
-      rctx.fillText(i+1, pos.x, pos.y+5);
+  function col4(v){
+    const u=Math.max(0,Math.min(1,v/V02));
+    if(u<0.5){ const s=u/0.5; return `rgb(${164+32*s|0},${22+98*s|0},${26+4*s|0})`; }
+    const s=(u-0.5)/0.5;
+    return `rgb(${196-182*s|0},${120+25*s|0},${30+125*s|0})`;
+  }
+  function drawRing4(){
+    const W2=RC.width, H2=RC.height, CX4=W2/2, CY4=H2/2+6, R4=162;
+    rc4.clearRect(0,0,W2,H2); rc4.fillStyle='#fff'; rc4.fillRect(0,0,W2,H2);
+    rc4.strokeStyle='#e5e8ee'; rc4.lineWidth=34;
+    rc4.beginPath(); rc4.arc(CX4,CY4,R4,0,Math.PI*2); rc4.stroke();
+    rc4.strokeStyle='#d6dae2'; rc4.lineWidth=1.3;
+    rc4.beginPath(); rc4.arc(CX4,CY4,R4-17,0,Math.PI*2); rc4.stroke();
+    rc4.beginPath(); rc4.arc(CX4,CY4,R4+17,0,Math.PI*2); rc4.stroke();
+    cars4.forEach(c2=>{
+      const a=c2.x/LR2*Math.PI*2-Math.PI/2;
+      const px=CX4+R4*Math.cos(a), py=CY4+R4*Math.sin(a);
+      rc4.save(); rc4.translate(px,py); rc4.rotate(a+Math.PI/2);
+      rc4.fillStyle=col4(c2.v);
+      rc4.beginPath(); rc4.roundRect(-8,-6,16,12,3); rc4.fill();
+      rc4.strokeStyle='#fff'; rc4.lineWidth=1; rc4.stroke();
+      rc4.restore();
     });
-
-    // center info
-    rctx.fillStyle='#4b5563'; rctx.font='15px sans-serif'; rctx.textAlign='center';
-    rctx.fillText(`n=${buses.length} buses · GM following`, CX, CY-12);
-    rctx.fillText(`v₀ = ${LOOP_SPEED.toFixed(2)} ±18% L/s + driver noise`, CX, CY+10);
-    rctx.fillText('faster buses catch slower → bunching', CX, CY+32);
+    const vl=+el('jgVL').value;
+    rc4.beginPath(); rc4.arc(CX4,CY4,40,0,Math.PI*2);
+    rc4.fillStyle='#fff'; rc4.fill();
+    rc4.strokeStyle=vl<34?'#c1121f':'#d6dae2'; rc4.lineWidth=6; rc4.stroke();
+    rc4.fillStyle=vl<34?'#1f2937':'#9aa1ad'; rc4.font='700 22px '+SANS; rc4.textAlign='center';
+    rc4.fillText(vl<34?vl:'—', CX4, CY4+8);
+    rc4.font='600 9px '+SANS;
+    rc4.fillText(vl<34?'mph limit':'no limit', CX4, CY4+24);
+    rc4.fillStyle='#1f2937'; rc4.font='600 12px '+SANS;
+    rc4.fillText('600 m IDM ring — color = speed (red slow, teal fast)', CX4, 20);
   }
-
-  function drawTSD(tSec){
-    tctx.clearRect(0,0,TW,TH);
-    tctx.fillStyle='#ffffff'; tctx.fillRect(0,0,TW,TH);
-
-    // grid
-    tctx.strokeStyle='#eef1f6'; tctx.lineWidth=0.8;
-    for(let i=0;i<=10;i++){
-      const gx=PAD.l+(i/10)*plotW;
-      tctx.beginPath(); tctx.moveTo(gx,PAD.t); tctx.lineTo(gx,PAD.t+plotH); tctx.stroke();
-      const gy=PAD.t+(i/10)*plotH;
-      tctx.beginPath(); tctx.moveTo(PAD.l,gy); tctx.lineTo(PAD.l+plotW,gy); tctx.stroke();
-    }
-
-    // wrap boundary lines at x=0 and x=L
-    tctx.strokeStyle='rgba(100,100,100,0.5)'; tctx.lineWidth=1.5; tctx.setLineDash([6,4]);
-    tctx.beginPath(); tctx.moveTo(PAD.l,PAD.t); tctx.lineTo(PAD.l+plotW,PAD.t); tctx.stroke();
-    tctx.beginPath(); tctx.moveTo(PAD.l,PAD.t+plotH); tctx.lineTo(PAD.l+plotW,PAD.t+plotH); tctx.stroke();
-    tctx.setLineDash([]);
-
-    // axes
-    tctx.strokeStyle='#333'; tctx.lineWidth=2;
-    tctx.beginPath();
-    tctx.moveTo(PAD.l,PAD.t); tctx.lineTo(PAD.l,PAD.t+plotH);
-    tctx.lineTo(PAD.l+plotW,PAD.t+plotH); tctx.stroke();
-
-    // axis labels
-    tctx.fillStyle='#333'; tctx.font='bold 13px sans-serif'; tctx.textAlign='center';
-    tctx.fillText('Time  t  (s)', PAD.l+plotW/2, TH-4);
-    tctx.save(); tctx.translate(14,PAD.t+plotH/2); tctx.rotate(-Math.PI/2);
-    tctx.fillText('Position  x  (mod L)', 0, 0); tctx.restore();
-
-    // tick labels
-    tctx.font='11px sans-serif'; tctx.fillStyle='#555';
-    for(let i=0;i<=6;i++){
-      const tx=PAD.l+(i/6)*plotW;
-      tctx.textAlign='center';
-      tctx.fillText((i/6*DUR).toFixed(0)+'s', tx, PAD.t+plotH+14);
-    }
-    tctx.textAlign='right';
-    tctx.fillText('0',PAD.l-4,PAD.t+plotH+4);
-    tctx.fillText('L',PAD.l-4,PAD.t+4);
-
-    // draw sawtooth trajectories
-    buses.forEach((bus,i)=>{
-      const col = COLORS[i%COLORS.length];
-      tctx.strokeStyle=col; tctx.lineWidth=2.5;
-
-      // step through history
-      const hist = histories[i];
-      if(hist.length < 2) return;
-
-      const visHist = hist.filter(h=>h[0]<=tSec);
-      if(visHist.length<2) return;
-
-      tctx.beginPath();
-      let penUp = true;
-      for(let j=0;j<visHist.length;j++){
-        const [ht,hx] = visHist[j];
-        const px = PAD.l+(ht/DUR)*plotW;
-        const py = PAD.t+plotH - hx*plotH;
-        if(penUp){ tctx.moveTo(px,py); penUp=false; }
-        else {
-          // check for wrap (x jumped from ~1 to ~0)
-          if(j>0 && visHist[j][1] < visHist[j-1][1]-0.5){
-            tctx.lineTo(px,PAD.t); // to top
-            tctx.stroke();
-            tctx.beginPath();
-            tctx.moveTo(px,PAD.t+plotH); // from bottom
-            penUp=false;
-          } else {
-            tctx.lineTo(px,py);
-          }
-        }
-      }
-      tctx.stroke();
-
-      // current dot
-      if(visHist.length>0){
-        const last=visHist[visHist.length-1];
-        const dpx=PAD.l+(last[0]/DUR)*plotW;
-        const dpy=PAD.t+plotH-last[1]*plotH;
-        tctx.fillStyle=col;
-        tctx.beginPath(); tctx.arc(dpx,dpy,5,0,Math.PI*2); tctx.fill();
-        tctx.fillStyle='#fff';
-        tctx.beginPath(); tctx.arc(dpx,dpy,2.5,0,Math.PI*2); tctx.fill();
-        // bus number label
-        tctx.fillStyle=col; tctx.font='bold 10px sans-serif'; tctx.textAlign='left';
-        tctx.fillText('Bus '+(i+1), dpx+7, dpy+4);
+  function drawTSD4(){
+    const W2=TC.width, H2=TC.height;
+    tc4.clearRect(0,0,W2,H2); tc4.fillStyle='#fff'; tc4.fillRect(0,0,W2,H2);
+    const P4={l:52,r:14,t:26,b:34};
+    const pw=W2-P4.l-P4.r, ph=H2-P4.t-P4.b;
+    const t0=Math.max(hist4.length?hist4[0][0]:0, sim4-TWIN2);
+    hist4.forEach(smp=>{
+      if(smp[0]<t0) return;
+      const px=P4.l+(smp[0]-t0)/TWIN2*pw;
+      for(let i=0;i<smp[1].length;i++){
+        tc4.fillStyle=col4(smp[2][i]);
+        tc4.fillRect(px-0.8, P4.t+ph-smp[1][i]/LR2*ph-0.8, 1.6, 1.6);
       }
     });
-
-    // current time needle
-    const nowPx=PAD.l+(tSec/DUR)*plotW;
-    tctx.strokeStyle='rgba(50,50,50,0.3)'; tctx.lineWidth=1.5; tctx.setLineDash([4,3]);
-    tctx.beginPath(); tctx.moveTo(nowPx,PAD.t); tctx.lineTo(nowPx,PAD.t+plotH); tctx.stroke();
-    tctx.setLineDash([]);
-
-    // title and stats
-    tctx.fillStyle='#333'; tctx.font='bold 13px sans-serif'; tctx.textAlign='left';
-    tctx.fillText('Time-Space Diagram — Closed Loop (Sawtooth)', PAD.l+4, PAD.t+16);
-
-    // stats box
-    const n=buses.length;
-    const vbar = buses.reduce((s,b)=>s+b.v0,0)/n;
-    tctx.fillStyle='#ffffff'; tctx.strokeStyle='#e2e6ee'; tctx.lineWidth=1.5;
-    tctx.beginPath(); tctx.roundRect(PAD.l+plotW-215, PAD.t+22, 210, 72, 6); tctx.fill(); tctx.stroke();
-    tctx.fillStyle='#1f2937'; tctx.font='11px Courier New'; tctx.textAlign='left';
-    const sx=PAD.l+plotW-207, sy=PAD.t+38;
-    tctx.fillText(`n  = ${n} buses (GM following)`, sx, sy);
-    tctx.fillText(`v̄₀ = ${vbar.toFixed(3)} L/s (±18%)`, sx, sy+16);
-    tctx.fillText(`q  = n·v̄ = ${(n*vbar).toFixed(2)}   k = ${n}`, sx, sy+32);
-    tctx.fillText(`→  q = k·v̄  ✓`, sx, sy+48);
-    tctx.fillText(`bunches = converging stripes`, sx, sy+64);
-
-    drawHover(tctx, tsdC, PAD, plotW, plotH, DUR, f => (f*100).toFixed(0)+'% of L');
-  }
-
-  function buildHistories(){
-    // GM car following around the ring: bus i follows bus (i+1)%n.
-    // Faster desired speeds catch slower buses ahead → platoons/bunching.
-    const dt = 0.05, n = buses.length;
-    let xs = buses.map(b => b.phase);
-    let vs = buses.map(b => b.v0);
-    histories = buses.map((b,i) => [[0, xs[i]]]);
-    const steps = Math.round(DUR/dt);
-    for(let k=1; k<=steps; k++){
-      const ts = k*dt;
-      const nx = new Array(n), nv = new Array(n);
-      for(let i=0;i<n;i++){
-        if(n === 1){
-          nv[i] = buses[i].v0;
-          nx[i] = (xs[i] + nv[i]*dt) % 1;
-          continue;
-        }
-        const j = (i+1) % n;   // the bus ahead on the ring
-        const gap = Math.max(((xs[j] - xs[i]) % 1 + 1) % 1 - BUS_LEN, 0.002);
-        const dv = vs[j] - vs[i];
-        // relax toward OWN desired speed + per-step driver noise, so speeds
-        // keep fluctuating instead of the ring settling to one uniform speed
-        let a = 1.2*(buses[i].v0 - vs[i]) + (Math.random()-0.5)*0.35;
-        // GM-3 only at short range — a wide range couples the whole ring to the
-        // slowest bus within seconds and every speed looks constant
-        if(gap < 0.055) a = Math.min(a, GM_A*dv/gap);
-        a = Math.max(-0.6, Math.min(0.3, a));
-        nv[i] = Math.max(0.02, vs[i] + a*dt);
-        nx[i] = (xs[i] + nv[i]*dt) % 1;
-      }
-      // no overtaking on a single-lane loop
-      if(n > 1){
-        for(let i=0;i<n;i++){
-          const j = (i+1) % n;
-          const gap = ((nx[j] - nx[i]) % 1 + 1) % 1;
-          if(gap < BUS_LEN + BUS_GAP){
-            nx[i] = ((nx[j] - BUS_LEN - BUS_GAP) % 1 + 1) % 1;
-            nv[i] = Math.min(nv[i], nv[j]);
-          }
-        }
-      }
-      xs = nx; vs = nv;
-      for(let i=0;i<n;i++) histories[i].push([ts, xs[i]]);
+    tc4.strokeStyle='#d6dae2'; tc4.lineWidth=1.2; tc4.strokeRect(P4.l,P4.t,pw,ph);
+    tc4.fillStyle='#9aa1ad'; tc4.font='11px '+SANS;
+    [0,200,400,600].forEach(x=>{ tc4.textAlign='right'; tc4.fillText(x, P4.l-5, P4.t+ph-x/LR2*ph+4); });
+    for(let tt=Math.ceil(t0/10)*10; tt<=t0+TWIN2; tt+=10){
+      tc4.textAlign='center'; tc4.fillText(Math.round(tt)+'s', P4.l+(tt-t0)/TWIN2*pw, P4.t+ph+16);
     }
+    tc4.fillStyle='#1f2937'; tc4.font='600 12px '+SANS; tc4.textAlign='left';
+    tc4.fillText('time-space diagram — sawtooth trajectories wrap top↔bottom; the phantom jam is the red band drifting backward', P4.l, 16);
   }
-
-  function reset(){
-    playing=false; cancelAnimationFrame(animId); t=0; lastTime=null;
-    el('loopPlay').textContent='▶ Play';
-    makeBuses();
-    buildHistories();
-    drawLoopRoad(0);
-    drawTSD(0);
-    const n=buses.length;
-    el('loopReadout').textContent=
-      `${n} buses · GM car following · desired speeds vary ±18% — press ▶ Play and watch faster buses catch slower ones`;
+  function loop4(ts){
+    if(last4===null) last4=ts;
+    let dt=(ts-last4)/1000; last4=ts;
+    dt=Math.min(dt,0.05);
+    fr4++;
+    fix4();
+    const sub=4, hh=dt*2.2/sub;
+    for(let k2=0;k2<sub;k2++){ idm4(hh); fix4(); sim4+=hh; }
+    if(fr4%3===0){
+      hist4.push([sim4, cars4.map(c2=>c2.x), cars4.map(c2=>c2.v)]);
+      while(hist4.length && hist4[0][0]<sim4-TWIN2) hist4.shift();
+    }
+    const vs=cars4.map(c2=>c2.v);
+    const mean=vs.reduce((a,b)=>a+b,0)/vs.length;
+    sHist4.push(mean); while(sHist4.length>300) sHist4.shift();
+    drawRing4();
+    if(fr4%5===0) drawTSD4();
+    if(fr4%8===0){
+      const jam=vs.filter(v=>MPH2(v)<9).length;
+      const score=MPH2(sHist4.reduce((a,b)=>a+b,0)/sHist4.length);
+      best4=Math.max(best4,score);
+      const flow=mean*cars4.length/LR2*3600;
+      el('jgScore').textContent=`mean ${MPH2(mean).toFixed(1)} mph · jammed ${jam}/${cars4.length} · ring flow ${Math.round(flow)} veh/hr · score (30 s avg) ${score.toFixed(1)} mph · best ${best4.toFixed(1)}`;
+      el('jgBanner').textContent = jam>2 ? '🚨 stop-and-go wave rolling — dissolve it with the speed limit'
+        : (sim4>30 ? '✅ flowing — try ⚡, then rescue the ring with a temporary limit' : 'stabilizing…');
+    }
+    requestAnimationFrame(loop4);
   }
-
-  function animate(ts){
-    if(!lastTime) lastTime=ts;
-    const dt=(ts-lastTime)/1000; lastTime=ts;
-    const spd=parseFloat(el('loopSpeed').value);
-    t+=dt*spd;
-    if(t>DUR) t=DUR;
-    drawLoopRoad(t);
-    drawTSD(t);
-    const n=buses.length;
-    let vmin=Infinity, vmax=0;
-    const idx=Math.min(histories[0].length-1, Math.round(t/0.05));
-    if(idx>0){
-      buses.forEach((b,i)=>{
-        const h=histories[i];
-        const v=(((h[idx][1]-h[idx-1][1])%1+1)%1)/0.05;
-        vmin=Math.min(vmin,v); vmax=Math.max(vmax,v);
-      });
-    } else { vmin=0; vmax=0; }
-    el('loopReadout').textContent=
-      `t=${t.toFixed(1)}s  |  ${n} buses, GM following  |  current speeds ${vmin.toFixed(3)}–${vmax.toFixed(3)} L/s  |  bunches form where stripes converge`;
-    if(t<DUR){ animId=requestAnimationFrame(animate); }
-    else { playing=false; el('loopPlay').textContent='▶ Play'; }
-  }
-
-  el('loopPlay').addEventListener('click',()=>{
-    if(playing){ playing=false; cancelAnimationFrame(animId); el('loopPlay').textContent='▶ Play'; lastTime=null; return; }
-    if(t>=DUR) reset();
-    playing=true; el('loopPlay').textContent='⏸ Pause'; lastTime=null;
-    animId=requestAnimationFrame(animate);
-  });
-  el('loopReset').addEventListener('click', reset);
-  el('loopN').addEventListener('input',()=>{
-    el('loopNVal').textContent=el('loopN').value;
-    reset();
-  });
-  el('loopSpeed').addEventListener('input',()=>{
-    el('loopSpeedVal').textContent=parseFloat(el('loopSpeed').value).toFixed(1)+'×';
-  });
-  attachHover(tsdC, () => drawTSD(t));
-
-  reset();
+  el('jgPerturb').addEventListener('click', ()=>{ fix4(); pIdx=Math.floor(Math.random()*cars4.length); pUntil=sim4+3.0; });
+  el('jgRec').addEventListener('click', ()=>{ hist4=[]; });
+  el('jgN').addEventListener('input', ()=>{ el('jgNVal').textContent=el('jgN').value; init4(); });
+  el('jgVL').addEventListener('input', ()=>{ el('jgVLVal').textContent=(+el('jgVL').value<34?el('jgVL').value+' mph':'none'); });
+  init4();
+  requestAnimationFrame(loop4);
 })();
-
 // ─────────────────────────────────────────────
 //  PANEL 5 — GM (GAZIS–HERMAN–ROTHERY) CAR FOLLOWING
 // ─────────────────────────────────────────────
