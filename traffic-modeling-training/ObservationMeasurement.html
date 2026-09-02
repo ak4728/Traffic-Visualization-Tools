@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.6 — Observation &amp; Measurement</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 130px; accent-color: #14919b; }
+  .mode { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #d6dae2; background: #fff; color: #374151; font-size: 0.8em; font-weight: 600; cursor: pointer; }
+  .mode:hover { border-color: #14919b; color: #0f7b82; }
+  .mode.on { background: #14919b; border-color: transparent; color: #fff; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.66em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.05em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 370px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <h4>Ch. 5 — Control</h4>
+  <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <h4>Ch. 6 — Observation &amp; Measurement</h4>
+  <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
+  <h4>Ch. 7 — Scheduled Transportation</h4>
+  <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>Observation &amp; Measurement</h1>
+    <span class="subtitle">Ch. 6 — how long must you count, and why correlated samples lie
+      <span class="help">?<span class="tip">
+        <b>Counting error</b> (§6.1.4, §6.2.1): vehicle arrivals behave like a Poisson process, so a count N in a window T has variance equal to its mean. The flow estimate q̂ = N/T then has relative error 1/√(counted vehicles) — to halve the error you must count four times as long. The histogram shows 400 simulated observation windows; the smooth curve is the normal approximation.<br><br>
+        Headways of a Poisson process are exponential ("forgetful", §6.1.5): the histogram in the corner shows the simulated headways against the exponential density.<br><br>
+        <b>Correlated samples</b> (§6.2.1.1, §6.2.2): a queue evolves slowly — successive cycles remember each other. Averaging one contiguous stretch of W cycles is NOT worth W independent observations: its error stops shrinking once W is short compared with the queue's relaxation time. The chart compares the error of contiguous-window averages against genuinely independent samples of the same size.
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="main" width="1240" height="760"></canvas>
+      <div class="controls">
+        <button class="mode on" data-m="count">📊 Counting error</button>
+        <button class="mode" data-m="corr">🔁 Correlated samples (queues)</button>
+        <span id="gCount" style="display:contents">
+          <div class="control-group"><label>true flow q</label><input type="range" id="qq" min="200" max="2000" step="50" value="800"><span class="val" id="qqV"></span></div>
+          <div class="control-group"><label>window T</label><input type="range" id="tt" min="15" max="900" step="15" value="120"><span class="val" id="ttV"></span></div>
+        </span>
+        <span id="gCorr" style="display:none">
+          <div class="control-group"><label>saturation x</label><input type="range" id="xx" min="0.5" max="0.97" step="0.01" value="0.9"><span class="val" id="xxV"></span></div>
+        </span>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="eqbox" id="story">—</div>
+        <div class="cards">
+          <div class="card"><h3 id="c1t">—</h3><div class="value" id="c1">—</div></div>
+          <div class="card"><h3 id="c2t">—</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3 id="c3t">—</h3><div class="value" id="c3">—</div></div>
+          <div class="card"><h3 id="c4t">—</h3><div class="value" id="c4">—</div></div>
+          <div class="card"><h3 id="c5t">—</h3><div class="value" id="c5">—</div></div>
+          <div class="card"><h3 id="c6t">—</h3><div class="value" id="c6">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox" style="border-left-color:#b45309" id="lesson">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+let mode='count';
+let seed=99;
+function rnd(){ seed=(seed*16807)%2147483647; return seed/2147483647; }
+function rPois(mu){
+  if(mu>30){ // normal approx
+    let u=0,v=0; while(u===0)u=rnd(); v=rnd();
+    return Math.max(0, Math.round(mu+Math.sqrt(mu)*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)));
+  }
+  const L=Math.exp(-mu); let k=0,p=1;
+  do{ k++; p*=rnd(); }while(p>L);
+  return k-1;
+}
+
+const C = el('main'), cx = C.getContext('2d');
+const W = C.width, H = C.height;
+
+function axes(P,xMin,xMax,yMax,xl,yl,xs,ys){
+  const pw=W-P.l-P.r, ph=P.h;
+  const X=v=>P.l+(v-xMin)/(xMax-xMin)*pw, Y=v=>P.t+ph-v/yMax*ph;
+  cx.strokeStyle='#eef0f4'; cx.lineWidth=1;
+  cx.fillStyle='#9aa1ad'; cx.font='11px '+SANS;
+  for(let v=Math.ceil(xMin/xs)*xs; v<=xMax+1e-9; v+=xs){ cx.beginPath(); cx.moveTo(X(v),P.t); cx.lineTo(X(v),P.t+ph); cx.stroke(); cx.textAlign='center'; cx.fillText(Math.round(v), X(v), P.t+ph+16); }
+  for(let v=0; v<=yMax+1e-9; v+=ys){ cx.beginPath(); cx.moveTo(P.l,Y(v)); cx.lineTo(W-P.r,Y(v)); cx.stroke(); cx.textAlign='right'; cx.fillText(+v.toFixed(2), P.l-6, Y(v)+4); }
+  cx.strokeStyle='#d6dae2'; cx.lineWidth=1.3; cx.strokeRect(P.l,P.t,pw,ph);
+  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
+  cx.fillText(xl, P.l+pw/2, P.t+ph+34);
+  cx.save(); cx.translate(16,P.t+ph/2); cx.rotate(-Math.PI/2); cx.fillText(yl,0,0); cx.restore();
+  return {X,Y,pw,ph};
+}
+
+// ── counting error mode ─────────────────────────────────────────────
+function drawCount(){
+  const q=+el('qq').value, T=+el('tt').value;
+  const lam=q/3600, mu=lam*T;
+  seed=99;
+  const M=400, ests=[];
+  for(let i=0;i<M;i++) ests.push(rPois(mu)/T*3600);
+  const mean=ests.reduce((a,b)=>a+b,0)/M;
+  const sd=Math.sqrt(ests.reduce((a,b)=>a+(b-mean)*(b-mean),0)/M);
+  const sdTh=3600*Math.sqrt(mu)/T;
+  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  // histogram of q-hat
+  const span=Math.max(4*sdTh, 100);
+  const x0=q-span, x1=q+span;
+  const nb=36, bw=(x1-x0)/nb, bins=new Array(nb).fill(0);
+  ests.forEach(e=>{ const b=Math.floor((e-x0)/bw); if(b>=0&&b<nb) bins[b]++; });
+  const yMax=Math.max(...bins)/M/bw*1.25;
+  const P={l:66,r:20,t:46,h:430};
+  const s=axes(P,x0,x1,yMax,'flow estimate q̂ = N/T · 3600 (veh/hr)','probability density',Math.round(span/2/50)*50||50,yMax/4);
+  bins.forEach((b,i)=>{
+    const d=b/M/bw;
+    cx.fillStyle='rgba(44,83,120,0.55)';
+    cx.fillRect(s.X(x0+i*bw), s.Y(d), s.X(x0+(i+1)*bw)-s.X(x0+i*bw)-1, s.Y(0)-s.Y(d));
+  });
+  // normal overlay
+  cx.strokeStyle='#a4161a'; cx.lineWidth=2.4;
+  cx.beginPath();
+  for(let i=0;i<=200;i++){
+    const x=x0+(x1-x0)*i/200;
+    const d=Math.exp(-(x-q)*(x-q)/(2*sdTh*sdTh))/(sdTh*Math.sqrt(2*Math.PI));
+    if(i===0) cx.moveTo(s.X(x),s.Y(Math.min(d,yMax))); else cx.lineTo(s.X(x),s.Y(Math.min(d,yMax)));
+  }
+  cx.stroke();
+  cx.strokeStyle='#40663c'; cx.setLineDash([6,5]); cx.lineWidth=1.6;
+  cx.beginPath(); cx.moveTo(s.X(q),P.t); cx.lineTo(s.X(q),P.t+P.h); cx.stroke(); cx.setLineDash([]);
+  cx.fillStyle='#40663c'; cx.font='600 11px '+SANS; cx.textAlign='left';
+  cx.fillText('true q = '+q, s.X(q)+5, P.t+16);
+  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
+  cx.fillText('400 simulated counting windows of T = '+T+' s  ·  red curve: normal with σ = 3600·√(qT)/T', P.l, 26);
+
+  // headway histogram (bottom)
+  const P2={l:66,r:640,t:560,h:150};
+  seed=7;
+  const hws=[]; for(let i=0;i<600;i++) hws.push(-Math.log(1-rnd())/lam);
+  const hMax=4/lam, nb2=26, bw2=hMax/nb2, b2=new Array(nb2).fill(0);
+  hws.forEach(h=>{ const b=Math.floor(h/bw2); if(b<nb2) b2[b]++; });
+  const y2=Math.max(...b2)/600/bw2*1.2;
+  const pw2=W-P2.l-P2.r;
+  const X2=v=>P2.l+v/hMax*pw2, Y2=v=>P2.t+P2.h-v/y2*P2.h;
+  cx.strokeStyle='#d6dae2'; cx.strokeRect(P2.l,P2.t,pw2,P2.h);
+  b2.forEach((b,i)=>{
+    const d=b/600/bw2;
+    cx.fillStyle='rgba(180,83,9,0.5)';
+    cx.fillRect(X2(i*bw2), Y2(d), X2(bw2)-X2(0)-1, Y2(0)-Y2(d));
+  });
+  cx.strokeStyle='#7a4b8f'; cx.lineWidth=2;
+  cx.beginPath();
+  for(let i=0;i<=100;i++){ const h=hMax*i/100, d=lam*Math.exp(-lam*h); const y=Y2(Math.min(d,y2)); if(i===0) cx.moveTo(X2(h),y); else cx.lineTo(X2(h),y); }
+  cx.stroke();
+  cx.fillStyle='#4b5563'; cx.font='600 11px '+SANS; cx.textAlign='left';
+  cx.fillText('headways: exponential ("forgetful", §6.1.5) — x: headway (s), y: density', P2.l, P2.t-6);
+
+  const eps=1.96/Math.sqrt(mu);
+  el('story').innerHTML='<b>How good is a count?</b> A Poisson count has variance = mean (§6.1.4), so q̂ = N/T carries a relative error of <b>1/√N</b> — visible above: the histogram of 400 independent windows matches the normal curve with σ = 3600√(qT)/T. Counting <i>longer</i> is the only cure, and it pays off slowly: error halves only when the count quadruples.';
+  el('lesson').innerHTML='<b>Rule of thumb</b> — for ±ε relative error at 95% confidence you must count about <b>N ≈ (1.96/ε)²</b> vehicles: ±10% → ~384 veh, ±5% → ~1,537 veh. At '+q+' veh/hr that means '+(384/q*60).toFixed(0)+' and '+(1537/q*60).toFixed(0)+' minutes of counting respectively. This is why 15-minute counts of low-volume movements are so noisy — and why the I-25 calibration in Chapter 4 used a whole month.';
+  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
+  setc(1,'expected count / window',mu.toFixed(0)+'<small> veh</small>');
+  setc(2,'sim mean of q̂',Math.round(mean)+'<small> veh/hr</small>');
+  setc(3,'sim σ of q̂',Math.round(sd)+'<small> veh/hr</small>');
+  setc(4,'theory σ = 3600√(qT)/T',Math.round(sdTh)+'<small> veh/hr</small>');
+  setc(5,'95% relative error',' ±'+(eps*100).toFixed(1)+'%');
+  setc(6,'to reach ±10% / ±5%','384 / 1,537<small> veh</small>');
+}
+
+// ── correlated samples mode ─────────────────────────────────────────
+function queueSeries(x, nCyc){
+  // signal overflow queue per cycle: n' = max(0, n + a − m), a ~ Poisson
+  const m=20, muA=x*m;
+  let n=0; const out=[];
+  for(let i=0;i<nCyc;i++){ n=Math.max(0, n+rPois(muA)-m); out.push(n); }
+  return out;
+}
+function drawCorr(){
+  const x=+el('xx').value;
+  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  // long reference run to get "true" mean + a sample path to display
+  seed=123;
+  const warm=queueSeries(x,400);
+  const path=queueSeries(x,240);
+  seed=123;
+  const longRun=queueSeries(x,20000);
+  const truth=longRun.slice(2000).reduce((a,b)=>a+b,0)/(18000);
+  // sample path plot (top)
+  const P={l:66,r:20,t:46,h:250};
+  const yM=Math.max(...path, truth*2, 5)*1.15;
+  const s=axes(P,0,240,yM,'cycle number','overflow queue (veh)',40,Math.ceil(yM/4));
+  cx.strokeStyle='#2c5378'; cx.lineWidth=1.8; cx.lineJoin='round';
+  cx.beginPath();
+  path.forEach((n,i)=>{ if(i===0) cx.moveTo(s.X(i),s.Y(Math.min(n,yM))); else cx.lineTo(s.X(i),s.Y(Math.min(n,yM))); });
+  cx.stroke();
+  cx.strokeStyle='#40663c'; cx.setLineDash([6,5]);
+  cx.beginPath(); cx.moveTo(P.l,s.Y(truth)); cx.lineTo(W-P.r,s.Y(truth)); cx.stroke(); cx.setLineDash([]);
+  cx.fillStyle='#40663c'; cx.font='600 11px '+SANS; cx.textAlign='left';
+  cx.fillText('true mean queue = '+truth.toFixed(1)+' veh', P.l+8, s.Y(truth)-6);
+  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
+  cx.fillText('one day at the signal: the overflow queue remembers itself for many cycles (x = '+x.toFixed(2)+')', P.l, 26);
+
+  // estimator error vs window length (bottom): contiguous vs independent
+  const Ws=[2,4,8,16,32,64,128];
+  const M=250;
+  const errC=[], errI=[];
+  Ws.forEach(Wn=>{
+    let se=0;
+    for(let r=0;r<M;r++){
+      const run=queueSeries(x, Wn+50).slice(50);
+      const est=run.reduce((a,b)=>a+b,0)/Wn;
+      se+=(est-truth)*(est-truth);
+    }
+    errC.push(Math.sqrt(se/M));
+    let se2=0;
+    for(let r=0;r<M;r++){
+      let sum=0;
+      for(let j=0;j<Wn;j++){ const run=queueSeries(x,55); sum+=run[54]; }
+      se2+=(sum/Wn-truth)*(sum/Wn-truth);
+    }
+    errI.push(Math.sqrt(se2/M));
+  });
+  const P3={l:66,r:20,t:400,h:290};
+  const eM=Math.max(...errC,...errI)*1.15;
+  const s3=axes(P3,0,Ws[Ws.length-1],eM,'samples used, W (cycles or days)','RMS error of the mean-queue estimate (veh)',16,Math.max(eM/4,0.5));
+  const plot=(arr,col,name,dy)=>{
+    cx.strokeStyle=col; cx.lineWidth=2.4; cx.lineJoin='round';
+    cx.beginPath();
+    arr.forEach((e,i)=>{ const px=s3.X(Ws[i]), py=s3.Y(Math.min(e,eM)); if(i===0) cx.moveTo(px,py); else cx.lineTo(px,py); });
+    cx.stroke();
+    arr.forEach((e,i)=>{ cx.fillStyle=col; cx.beginPath(); cx.arc(s3.X(Ws[i]),s3.Y(Math.min(e,eM)),4,0,Math.PI*2); cx.fill(); });
+    cx.fillStyle=col; cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillText(name, P3.l+180, P3.t+18+dy);
+  };
+  plot(errC,'#a4161a','contiguous window of W cycles (one day)',0);
+  plot(errI,'#0e7c86','W independent days (one cycle each)',18);
+  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS;
+  cx.fillText('same number of samples — very different accuracy', P3.l, P3.t-10);
+
+  el('story').innerHTML='<b>Correlated samples</b> (§6.2.1.1). The overflow queue n′ = max(0, n + arrivals − capacity) carries memory: after a bad cycle, the next cycles are bad too. Successive samples are strongly correlated, so a contiguous average of W cycles behaves like far fewer than W independent observations — the red curve\'s error shrinks slowly and plateaus at small W. The teal curve — the same W samples taken on independent days — falls like 1/√W, the textbook rate.';
+  const ratio = errC[3]/errI[3];
+  el('lesson').innerHTML='<b>The relaxation-time connection</b> (§5.2.1, §6.2.2). The queue\'s memory lasts on the order of its relaxation time, which explodes as x → 1. At x = '+x.toFixed(2)+', W = 16 contiguous cycles carry the information of roughly <b>16/'+(ratio*ratio).toFixed(0)+' ≈ '+(16/(ratio*ratio)).toFixed(1)+' independent samples</b>. Push x toward 0.97 and watch the gap widen: near saturation, one long day tells you almost nothing about the long-run average — you need many days. This is the practical reason queue studies are replicated across days, not just extended within one.';
+  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
+  setc(1,'saturation x',x.toFixed(2));
+  setc(2,'true mean queue',truth.toFixed(1)+'<small> veh</small>');
+  setc(3,'RMS error @ W=16, contiguous',errC[3].toFixed(2)+'<small> veh</small>');
+  setc(4,'RMS error @ W=16, independent',errI[3].toFixed(2)+'<small> veh</small>');
+  setc(5,'effective sample ratio','×'+(1/(ratio*ratio)).toFixed(2));
+  setc(6,'capacity per cycle','20<small> veh (fixed)</small>');
+}
+
+function draw(){ if(mode==='count') drawCount(); else drawCorr(); updateVals(); }
+function updateVals(){
+  el('qqV').textContent=el('qq').value+' veh/hr';
+  el('ttV').textContent=el('tt').value+' s';
+  el('xxV').textContent=(+el('xx').value).toFixed(2);
+}
+document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
+  mode=b.dataset.m;
+  document.querySelectorAll('.mode').forEach(y=>y.classList.toggle('on',y===b));
+  el('gCount').style.display = mode==='count'?'contents':'none';
+  el('gCorr').style.display = mode==='corr'?'contents':'none';
+  draw();
+}));
+['qq','tt','xx'].forEach(id=>el(id).addEventListener('input',draw));
+draw();
+
+// chapter navigation drawer
+(function(){
+  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
+  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
+  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
+  b.addEventListener('mouseenter',open);
+  d.addEventListener('mouseleave',close);
+  s.addEventListener('click',close);
+  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
+  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>

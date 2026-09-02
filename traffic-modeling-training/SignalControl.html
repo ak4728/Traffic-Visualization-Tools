@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.5 — Control: Signals &amp; Gap Acceptance</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 120px; accent-color: #14919b; }
+  .mode { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #d6dae2; background: #fff; color: #374151; font-size: 0.8em; font-weight: 600; cursor: pointer; }
+  .mode:hover { border-color: #14919b; color: #0f7b82; }
+  .mode.on { background: #14919b; border-color: transparent; color: #fff; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.66em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.05em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .card.warn .value { color: #a4161a; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 370px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <h4>Ch. 5 — Control</h4>
+  <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <h4>Ch. 6 — Observation &amp; Measurement</h4>
+  <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
+  <h4>Ch. 7 — Scheduled Transportation</h4>
+  <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>Control — The Isolated Intersection</h1>
+    <span class="subtitle">Ch. 5 — pretimed signal timing (Webster) and unsignalized gap acceptance
+      <span class="help">?<span class="tip">
+        <b>Pretimed signal</b> (§5.2.2): two conflicting one-way movements, saturation flow s, lost time L per cycle. With flow ratios y<sub>i</sub> = q<sub>i</sub>/s, the split rule is G<sub>i</sub> = (C−L)·y<sub>i</sub>/(y₁+y₂) (Eq. 5.15a) and Webster's cycle is C* = (1.5L + 5)/(1 − y₁ − y₂) (Eq. 5.15b) — about double the bare minimum C<sub>min</sub> = L/(1−y₁−y₂) (Eq. 5.16). Too short a cycle → constant overflows (stochastic delay explodes as x → 1); too long → everyone waits out long reds (deterministic delay grows ∝ C). The delay curve shows the tradeoff.<br><br>
+        <b>Gap acceptance</b> (§5.1): a minor street enters only into main-street gaps: a gap h fits n = max{0, ⌊(h − H<sub>c</sub> + M)/M⌋} vehicles (critical gap H<sub>c</sub>, move-up time M — Table 5.1). Bunching the main street helps the minor street; a signal is the extreme version, giving combined capacity s(1 − L/C) (Eq. 5.2).
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="main" width="1240" height="760"></canvas>
+      <div class="controls">
+        <button class="mode on" data-m="sig">🚦 Pretimed signal (Webster)</button>
+        <button class="mode" data-m="gap">🛑 Unsignalized (gap acceptance)</button>
+        <span id="gSig" style="display:contents">
+          <div class="control-group"><label>q₁</label><input type="range" id="q1" min="100" max="800" step="25" value="500"><span class="val" id="q1V"></span></div>
+          <div class="control-group"><label>q₂</label><input type="range" id="q2" min="100" max="800" step="25" value="300"><span class="val" id="q2V"></span></div>
+          <div class="control-group"><label>cycle C</label><input type="range" id="cc" min="30" max="180" step="5" value="60"><span class="val" id="ccV"></span></div>
+          <div class="control-group"><label>lost time L</label><input type="range" id="ll" min="4" max="16" step="1" value="8"><span class="val" id="llV"></span></div>
+        </span>
+        <span id="gGap" style="display:none">
+          <div class="control-group"><label>main flow q<sub>M</sub></label><input type="range" id="qm" min="200" max="1400" step="50" value="600"><span class="val" id="qmV"></span></div>
+          <div class="control-group"><label>critical gap H<sub>c</sub></label><input type="range" id="hc" min="4" max="9" step="0.5" value="7"><span class="val" id="hcV"></span></div>
+          <div class="control-group"><label>move-up M</label><input type="range" id="mm" min="2" max="5" step="0.5" value="2"><span class="val" id="mmV"></span></div>
+        </span>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="eqbox" id="story">—</div>
+        <div class="cards" id="cardRow">
+          <div class="card"><h3 id="c1t">—</h3><div class="value" id="c1">—</div></div>
+          <div class="card"><h3 id="c2t">—</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3 id="c3t">—</h3><div class="value" id="c3">—</div></div>
+          <div class="card"><h3 id="c4t">—</h3><div class="value" id="c4">—</div></div>
+          <div class="card"><h3 id="c5t">—</h3><div class="value" id="c5">—</div></div>
+          <div class="card"><h3 id="c6t">—</h3><div class="value" id="c6">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <canvas id="side" width="760" height="470"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+let mode = 'sig';
+const S = 1800;                       // sat flow veh/hr, both approaches
+
+const C = el('main'), cx = C.getContext('2d');
+const W = C.width, H = C.height;
+const SC = el('side'), sx2 = SC.getContext('2d');
+
+// ── helpers ─────────────────────────────────────────────────────────
+function axes(ctx,W2,H2,P,xMax,yMax,xl,yl,xs,ys,xFmt){
+  const pw=W2-P.l-P.r, ph=H2-P.t-P.b;
+  const X=v=>P.l+v/xMax*pw, Y=v=>P.t+ph-v/yMax*ph;
+  ctx.strokeStyle='#eef0f4'; ctx.lineWidth=1;
+  ctx.fillStyle='#9aa1ad'; ctx.font='11px '+SANS;
+  for(let v=0;v<=xMax+1e-9;v+=xs){ ctx.beginPath(); ctx.moveTo(X(v),P.t); ctx.lineTo(X(v),P.t+ph); ctx.stroke(); ctx.textAlign='center'; ctx.fillText(xFmt?xFmt(v):v, X(v), P.t+ph+16); }
+  for(let v=0;v<=yMax+1e-9;v+=ys){ ctx.beginPath(); ctx.moveTo(P.l,Y(v)); ctx.lineTo(P.l+pw,Y(v)); ctx.stroke(); ctx.textAlign='right'; ctx.fillText(Math.round(v), P.l-6, Y(v)+4); }
+  ctx.strokeStyle='#d6dae2'; ctx.lineWidth=1.3; ctx.strokeRect(P.l,P.t,pw,ph);
+  ctx.fillStyle='#4b5563'; ctx.font='600 12px '+SANS; ctx.textAlign='center';
+  ctx.fillText(xl, P.l+pw/2, H2-5);
+  ctx.save(); ctx.translate(14,P.t+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText(yl,0,0); ctx.restore();
+  return {X,Y,pw,ph};
+}
+
+// ── signal mode ─────────────────────────────────────────────────────
+function sigParams(){
+  const q1=+el('q1').value, q2=+el('q2').value, Cc=+el('cc').value, L=+el('ll').value;
+  const y1=q1/S, y2=q2/S, Y=y1+y2;
+  const G1=(Cc-L)*y1/Y, G2=(Cc-L)*y2/Y;
+  const x1=q1*Cc/(S*G1), x2=q2*Cc/(S*G2);
+  return {q1,q2,Cc,L,y1,y2,Y,G1,G2,x1,x2,Cmin:L/(1-Y),Cw:(1.5*L+5)/(1-Y)};
+}
+function delayAt(Cc,p){
+  // deterministic uniform + stochastic overflow term, flow-weighted
+  const {q1,q2,L,y1,y2,Y}=p;
+  const G1=(Cc-L)*y1/Y, G2=(Cc-L)*y2/Y;
+  let tot=0, qs=0;
+  [[q1,G1],[q2,G2]].forEach(([q,G])=>{
+    const r=Cc-G, x=q*Cc/(S*G);
+    if(x>=1){ tot+=Infinity; return; }
+    const dU=r*r/(2*Cc*(1-q/S));                       // uniform (D/D/1)
+    const qs2=q/3600;
+    const dR=x*x/(2*qs2*(1-x));                        // overflow (random)
+    tot+=q*(dU+dR); qs+=q;
+  });
+  return tot/qs;
+}
+function drawSig(){
+  const p=sigParams();
+  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  const nCyc=3, T=p.Cc*nCyc;
+  // two stacked queueing diagrams
+  [[p.q1,p.G1,'Approach 1',60],[p.q2,p.G2,'Approach 2',400]].forEach(([q,G,name,top],idx)=>{
+    const P={l:64,r:20,t:top,b:0};
+    const ph=280, pw=W-P.l-P.r;
+    const qv=q/3600, sv=S/3600, r=p.Cc-G;
+    const NMAX=Math.max(qv*T*1.15, 8);
+    const X=t=>P.l+t/T*pw, Y=n=>top+ph-n/NMAX*ph;
+    cx.strokeStyle='#eef0f4';
+    for(let c2=0;c2<=nCyc;c2++){ cx.beginPath(); cx.moveTo(X(c2*p.Cc),top); cx.lineTo(X(c2*p.Cc),top+ph); cx.stroke(); }
+    cx.strokeStyle='#d6dae2'; cx.strokeRect(P.l,top,pw,ph);
+    // phase bar (approach 1 green first)
+    for(let c2=0;c2<nCyc;c2++){
+      const g0 = idx===0 ? c2*p.Cc : c2*p.Cc + p.Cc - G;
+      cx.fillStyle='#1d7a6f'; cx.fillRect(X(g0),top+ph+4,X(g0+G)-X(g0),6);
+      cx.fillStyle='#a4161a';
+      if(idx===0) cx.fillRect(X(g0+G),top+ph+4,X((c2+1)*p.Cc)-X(g0+G),6);
+      else { cx.fillRect(X(c2*p.Cc),top+ph+4,X(g0)-X(c2*p.Cc),6); }
+    }
+    // arrivals
+    cx.strokeStyle='#2c5378'; cx.lineWidth=2.2;
+    cx.beginPath(); cx.moveTo(X(0),Y(0)); cx.lineTo(X(T),Y(qv*T)); cx.stroke();
+    // departures: green window per cycle (approach1 green at cycle start; approach2 at end)
+    cx.strokeStyle='#0e7c86'; cx.lineWidth=2.4;
+    cx.beginPath(); cx.moveTo(X(0),Y(0));
+    let N=0, tt=0;
+    const step=0.25;
+    cx.fillStyle='rgba(164,22,26,0.10)';
+    let areaPath=[];
+    while(tt<T){
+      const c2=Math.floor(tt/p.Cc), tc=tt-c2*p.Cc;
+      const green = idx===0 ? tc<G : tc>=(p.Cc-G);
+      const arr=qv*tt;
+      if(green && N<arr) N=Math.min(arr, N+sv*step);
+      cx.lineTo(X(tt),Y(N));
+      areaPath.push([tt,N]);
+      tt+=step;
+    }
+    cx.stroke();
+    // shade delay area between curves
+    cx.beginPath();
+    cx.moveTo(X(0),Y(0));
+    areaPath.forEach(([t2,n2])=>cx.lineTo(X(t2),Y(n2)));
+    cx.lineTo(X(T),Y(qv*T));
+    cx.lineTo(X(0),Y(0));
+    cx.fill();
+    cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS; cx.textAlign='left';
+    cx.fillText(name+'  ·  q = '+q+' veh/hr · green '+G.toFixed(1)+' s · x = '+ (q*p.Cc/(S*G)).toFixed(2), P.l, top-8);
+    cx.fillStyle='#9aa1ad'; cx.font='italic 10px '+SANS;
+    cx.fillText('blue: cumulative arrivals · teal: departures · shaded: total delay', P.l+250, top-8);
+  });
+  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
+  cx.fillText('time (3 cycles shown) — green/red bars under each diagram', W/2, H-8);
+
+  // side: delay vs C
+  sx2.clearRect(0,0,SC.width,SC.height); sx2.fillStyle='#fff'; sx2.fillRect(0,0,SC.width,SC.height);
+  const P2={l:56,r:14,t:26,b:40};
+  let dMax=0; const pts=[];
+  for(let Cc=Math.ceil(p.Cmin+2); Cc<=180; Cc+=2){
+    const d=delayAt(Cc,p);
+    if(isFinite(d)){ pts.push([Cc,d]); dMax=Math.max(dMax,Math.min(d,200)); }
+  }
+  dMax=Math.min(Math.max(dMax*1.05,20),200);
+  const s2=axes(sx2,SC.width,SC.height,P2,180,dMax,'cycle length C (s)','avg delay per vehicle (s)',30,Math.ceil(dMax/5/5)*5);
+  sx2.strokeStyle='#2c5378'; sx2.lineWidth=2.4; sx2.lineJoin='round';
+  sx2.beginPath();
+  pts.forEach(([Cc,d],i)=>{ const x=s2.X(Cc), y=s2.Y(Math.min(d,dMax)); if(i===0) sx2.moveTo(x,y); else sx2.lineTo(x,y); });
+  sx2.stroke();
+  // markers
+  const dNow=delayAt(p.Cc,p);
+  [[p.Cmin,'#a4161a','C_min'],[p.Cw,'#40663c','Webster C*']].forEach(([Cc,col,name])=>{
+    if(Cc>0&&Cc<=180){
+      sx2.strokeStyle=col; sx2.setLineDash([6,5]); sx2.lineWidth=1.5;
+      sx2.beginPath(); sx2.moveTo(s2.X(Cc),P2.t); sx2.lineTo(s2.X(Cc),P2.t+s2.ph); sx2.stroke(); sx2.setLineDash([]);
+      sx2.fillStyle=col; sx2.font='600 11px '+SANS; sx2.textAlign='left';
+      sx2.fillText(name+' = '+Cc.toFixed(0)+' s', s2.X(Cc)+4, P2.t+14+(name==='C_min'?0:16));
+    }
+  });
+  if(isFinite(dNow)){
+    sx2.fillStyle='#0f7b82';
+    sx2.beginPath(); sx2.arc(s2.X(p.Cc),s2.Y(Math.min(dNow,dMax)),6,0,Math.PI*2); sx2.fill();
+  }
+  sx2.fillStyle='#1f2937'; sx2.font='600 12px '+SANS; sx2.textAlign='left';
+  sx2.fillText('delay vs cycle (split rule 5.15a applied) — the U-shape is the whole story', P2.l, 16);
+
+  el('story').innerHTML='<b>Pretimed control</b> (§5.2.2). Splits follow Eq. 5.15a: green in proportion to the flow ratios y<sub>i</sub> = q<sub>i</sub>/s. The delay curve combines the deterministic red-wait (grows with C) and the overflow term (explodes as C → C<sub>min</sub>, where every green barely clears its queue). Webster\'s C* sits near the bottom — roughly <i>twice</i> C<sub>min</sub>.';
+  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
+  setc(1,'flow ratios y₁ + y₂',(p.y1+p.y2).toFixed(2)+(p.Y>=1?' — over capacity!':''));
+  setc(2,'C_min = L/(1−Σy)',p.Y<1?p.Cmin.toFixed(0)+'<small> s</small>':'∞');
+  setc(3,'Webster C* (5.15b)',p.Y<1?p.Cw.toFixed(0)+'<small> s</small>':'—');
+  setc(4,'greens G₁ / G₂',p.G1.toFixed(0)+' / '+p.G2.toFixed(0)+'<small> s</small>');
+  setc(5,'degrees of saturation',p.x1.toFixed(2)+' / '+p.x2.toFixed(2));
+  setc(6,'avg delay @ current C',isFinite(dNow)?dNow.toFixed(1)+'<small> s/veh</small>':'oversaturated');
+  document.querySelectorAll('#cardRow .card')[5].className = 'card'+((p.x1>=1||p.x2>=1)?' warn':'');
+}
+
+// ── gap acceptance mode ─────────────────────────────────────────────
+let seedG=7;
+function rndG(){ seedG=(seedG*16807)%2147483647; return seedG/2147483647; }
+function genHeadways(q, T){
+  const lam=q/3600, hs=[];
+  let t=0;
+  seedG=7;
+  while(t<T){ const h=-Math.log(1-rndG())/lam; hs.push(h); t+=h; }
+  return hs;
+}
+function minorCap(q,Hc,M,T){
+  const hs=genHeadways(q,T);
+  let n=0;
+  hs.forEach(h=>{ n+=Math.max(0, Math.floor((h-Hc+M)/M)); });
+  return n/T*3600;
+}
+function drawGap(){
+  const qM=+el('qm').value, Hc=+el('hc').value, M=+el('mm').value;
+  cx.clearRect(0,0,W,H); cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
+  // timeline 0..120 s
+  const T0=120, P={l:64,r:20,t:60};
+  const pw=W-P.l-P.r;
+  const X=t=>P.l+t/T0*pw;
+  cx.fillStyle='#1f2937'; cx.font='600 13px '+SANS; cx.textAlign='left';
+  cx.fillText('main street (ticks) and the minor-street vehicles its gaps admit (dots) — first 120 s', P.l, 34);
+  // road band
+  cx.fillStyle='#f0f2f6'; cx.fillRect(P.l,P.t,pw,60);
+  cx.strokeStyle='#d6dae2'; cx.strokeRect(P.l,P.t,pw,60);
+  const hs=genHeadways(qM,600);
+  let t=0; const mains=[];
+  for(const h of hs){ t+=h; if(t>T0) break; mains.push(t); }
+  cx.strokeStyle='#2c5378'; cx.lineWidth=2.5;
+  mains.forEach(tm=>{ cx.beginPath(); cx.moveTo(X(tm),P.t+4); cx.lineTo(X(tm),P.t+56); cx.stroke(); });
+  // minor entries
+  cx.fillStyle='#b45309';
+  let prev=0, nShown=0;
+  mains.concat([T0]).forEach(tm=>{
+    const h=tm-prev;
+    const n=Math.max(0, Math.floor((h-Hc+M)/M));
+    for(let i2=0;i2<n;i2++){
+      const te=prev+Hc+(i2)*M - M + M;  // first at prev+Hc, then every M
+      if(te<tm && te<T0){ cx.beginPath(); cx.arc(X(prev+Hc+i2*M - 0),P.t+30,5,0,Math.PI*2); cx.fill(); nShown++; }
+    }
+    prev=tm;
+  });
+  cx.fillStyle='#6b7280'; cx.font='11px '+SANS;
+  cx.fillText('each gap h fits  n = max{0, ⌊(h − Hc + M)/M⌋}  minor vehicles (Table 5.1)', P.l, P.t+80);
+
+  // capacity vs main flow chart on main canvas bottom
+  const P3={l:64,r:20,t:200,b:60};
+  const ph3=H-P3.t-P3.b, pw3=W-P3.l-P3.r;
+  const capNow=minorCap(qM,Hc,M,3600);
+  let cMax=1200;
+  const X3=q=>P3.l+(q-200)/(1400-200)*pw3, Y3=c2=>P3.t+ph3-c2/cMax*ph3;
+  cx.strokeStyle='#eef0f4';
+  for(let q=200;q<=1400;q+=200){ cx.beginPath(); cx.moveTo(X3(q),P3.t); cx.lineTo(X3(q),P3.t+ph3); cx.stroke(); cx.fillStyle='#9aa1ad'; cx.textAlign='center'; cx.fillText(q,X3(q),P3.t+ph3+16); }
+  for(let c2=0;c2<=cMax;c2+=200){ cx.beginPath(); cx.moveTo(P3.l,Y3(c2)); cx.lineTo(P3.l+pw3,Y3(c2)); cx.stroke(); cx.fillStyle='#9aa1ad'; cx.textAlign='right'; cx.fillText(c2,P3.l-6,Y3(c2)+4); }
+  cx.strokeStyle='#d6dae2'; cx.strokeRect(P3.l,P3.t,pw3,ph3);
+  cx.fillStyle='#4b5563'; cx.font='600 12px '+SANS; cx.textAlign='center';
+  cx.fillText('main-street flow q_M (veh/hr)', P3.l+pw3/2, H-24);
+  cx.save(); cx.translate(16,P3.t+ph3/2); cx.rotate(-Math.PI/2); cx.fillText('minor-street capacity (veh/hr)',0,0); cx.restore();
+  cx.strokeStyle='#0e7c86'; cx.lineWidth=2.6; cx.lineJoin='round';
+  cx.beginPath();
+  for(let q=200;q<=1400;q+=50){
+    const c2=minorCap(q,Hc,M,3600);
+    const x=X3(q), y=Y3(Math.min(c2,cMax));
+    if(q===200) cx.moveTo(x,y); else cx.lineTo(x,y);
+  }
+  cx.stroke();
+  cx.fillStyle='#b45309';
+  cx.beginPath(); cx.arc(X3(qM),Y3(Math.min(capNow,cMax)),7,0,Math.PI*2); cx.fill();
+  cx.strokeStyle='#fff'; cx.lineWidth=1.5; cx.stroke();
+  cx.fillStyle='#1f2937'; cx.font='600 12px '+SANS; cx.textAlign='left';
+  cx.fillText('minor-street capacity vs main flow (Poisson headways, 1 hr simulated)', P3.l, P3.t-8);
+
+  // side: comparison with a signal (Eq. 5.2)
+  sx2.clearRect(0,0,SC.width,SC.height); sx2.fillStyle='#fff'; sx2.fillRect(0,0,SC.width,SC.height);
+  const P4={l:56,r:14,t:26,b:40};
+  const s4=axes(sx2,SC.width,SC.height,P4,180,2000,'cycle length C (s)','combined capacity (veh/hr)',30,400);
+  const L=8;
+  sx2.strokeStyle='#40663c'; sx2.lineWidth=2.4;
+  sx2.beginPath();
+  for(let Cc=20;Cc<=180;Cc+=4){
+    const cap=S*(1-L/Cc);
+    const x=s4.X(Cc), y=s4.Y(Math.max(0,cap));
+    if(Cc===20) sx2.moveTo(x,y); else sx2.lineTo(x,y);
+  }
+  sx2.stroke();
+  const combined=qM+capNow;
+  sx2.strokeStyle='#b45309'; sx2.setLineDash([6,5]);
+  sx2.beginPath(); sx2.moveTo(P4.l,s4.Y(Math.min(combined,2000))); sx2.lineTo(P4.l+s4.pw,s4.Y(Math.min(combined,2000))); sx2.stroke();
+  sx2.setLineDash([]);
+  sx2.fillStyle='#40663c'; sx2.font='600 11px '+SANS; sx2.textAlign='left';
+  sx2.fillText('signalized: s(1 − L/C)  (Eq. 5.2, L = 8 s)', P4.l+8, P4.t+16);
+  sx2.fillStyle='#b45309';
+  sx2.fillText('unsignalized combined q_M + capacity = '+Math.round(combined)+' veh/hr', P4.l+8, s4.Y(Math.min(combined,2000))-6);
+  sx2.fillStyle='#1f2937'; sx2.font='600 12px '+SANS;
+  sx2.fillText('why signalize: combined throughput comparison', P4.l, 16);
+
+  el('story').innerHTML='<b>Gap acceptance</b> (§5.1). Minor-street drivers accept a gap only if it exceeds H<sub>c</sub>; queued followers move up every M seconds. A switch from minor to main traffic wastes (H<sub>c</sub> − M) seconds — exactly the role of lost time at a signal. <b>Bunching the main street helps</b>: the same 10 cars in a platoon leave one big usable gap, which is precisely what a signal manufactures. The green curve shows the signalized combined capacity s(1 − L/C) growing with C.';
+  const setc=(i,t2,v)=>{ el('c'+i+'t').textContent=t2; el('c'+i).innerHTML=v; };
+  setc(1,'minor capacity',Math.round(capNow)+'<small> veh/hr</small>');
+  setc(2,'main flow',qM+'<small> veh/hr</small>');
+  setc(3,'combined (unsignalized)',Math.round(combined)+'<small> veh/hr</small>');
+  setc(4,'switch waste Hc − M',(Hc-M).toFixed(1)+'<small> s</small>');
+  setc(5,'signal @ C=90s: s(1−L/C)',Math.round(S*(1-8/90))+'<small> veh/hr</small>');
+  setc(6,'shown in first 120 s','—');
+  document.querySelectorAll('#cardRow .card')[5].className='card';
+}
+
+function draw(){ if(mode==='sig') drawSig(); else drawGap(); updateVals(); }
+function updateVals(){
+  el('q1V').textContent=el('q1').value+' veh/hr';
+  el('q2V').textContent=el('q2').value+' veh/hr';
+  el('ccV').textContent=el('cc').value+' s';
+  el('llV').textContent=el('ll').value+' s';
+  el('qmV').textContent=el('qm').value+' veh/hr';
+  el('hcV').textContent=el('hc').value+' s';
+  el('mmV').textContent=el('mm').value+' s';
+}
+document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{
+  mode=b.dataset.m;
+  document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('on',x===b));
+  el('gSig').style.display = mode==='sig'?'contents':'none';
+  el('gGap').style.display = mode==='gap'?'contents':'none';
+  draw();
+}));
+['q1','q2','cc','ll','qm','hc','mm'].forEach(id=>el(id).addEventListener('input',draw));
+draw();
+
+// chapter navigation drawer
+(function(){
+  const b=document.getElementById('navBurger'), d=document.getElementById('navDrawer'), s=document.getElementById('navScrim');
+  const open=()=>{ d.classList.add('open'); s.classList.add('show'); };
+  const close=()=>{ d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click',()=> d.classList.contains('open')?close():open());
+  b.addEventListener('mouseenter',open);
+  d.addEventListener('mouseleave',close);
+  s.addEventListener('click',close);
+  const here=decodeURIComponent(location.pathname.split('/').pop()||'');
+  d.querySelectorAll('a').forEach(a=>{ if(a.getAttribute('href')===here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>
