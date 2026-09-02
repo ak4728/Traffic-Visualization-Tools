@@ -14,6 +14,7 @@
   .layout { display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; }
   .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
   .panel canvas { width: 100%; height: auto; display: block; }
+  #road { max-height: calc(100vh - 300px); width: auto; max-width: 100%; margin: 0 auto; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
   .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
   .control-group label { font-weight: 600; white-space: nowrap; }
@@ -95,7 +96,7 @@
 
   <div class="layout">
     <div class="panel">
-      <canvas id="road" width="1240" height="720"></canvas>
+      <canvas id="road" width="1240" height="530"></canvas>
       <div class="controls">
         <button class="action" id="go">▶ Start 3-minute episode</button>
         <div class="control-group"><label>metering rate</label><input type="range" id="mr" min="2" max="24" step="1" value="10"><span class="val" id="mrV"></span></div>
@@ -247,35 +248,61 @@ function draw(){
   cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
   cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
   cx.fillText('1.2 km freeway — merge at 800 m · color = speed · the meter releases one car per green', 30, 24);
-  const y = 120;
-  // freeway
+  const y = 110;
+  // ── on-ramp: tapered wedge that meets the freeway edge flush ──
+  const mx = XP(XM);
+  const foot = [mx - 330, y + 150];
+  const tipL = [mx - 96, y + 16], tipR = [mx + 12, y + 16];   // taper along band bottom
+  const CT = [(tipL[0] + tipR[0]) / 2, y + 16];               // centerline tip
+  const dxr = CT[0] - foot[0], dyr = CT[1] - foot[1];
+  const lenR = Math.hypot(dxr, dyr);
+  const ux = dxr / lenR, uy = dyr / lenR;
+  const pxr = uy * 15, pyr = -ux * 15;                        // half-width, toward tipL side
+  const ang = Math.atan2(dyr, dxr);
+  cx.fillStyle = '#f0f2f6';
+  cx.beginPath();
+  cx.moveTo(foot[0] + pxr, foot[1] + pyr);
+  cx.lineTo(tipL[0], tipL[1]);
+  cx.lineTo(tipR[0], tipR[1]);
+  cx.lineTo(foot[0] - pxr, foot[1] - pyr);
+  cx.closePath(); cx.fill();
+  cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1.2;
+  cx.beginPath(); cx.moveTo(foot[0] + pxr, foot[1] + pyr); cx.lineTo(tipL[0], tipL[1]); cx.stroke();
+  cx.beginPath(); cx.moveTo(foot[0] - pxr, foot[1] - pyr); cx.lineTo(tipR[0], tipR[1]); cx.stroke();
+  cx.beginPath(); cx.moveTo(foot[0] + pxr, foot[1] + pyr); cx.lineTo(foot[0] - pxr, foot[1] - pyr); cx.stroke();
+  // ── freeway drawn on top so the wedge tucks under its edge ──
   cx.fillStyle = '#f0f2f6'; cx.fillRect(30, y - 16, W - 60, 32);
-  cx.strokeStyle = '#d6dae2'; cx.strokeRect(30, y - 16, W - 60, 32);
-  // ramp
-  cx.save();
-  cx.translate(XP(XM), y + 16);
-  cx.rotate(0.5);
-  cx.fillStyle = '#f0f2f6'; cx.fillRect(-6, 0, 26, 150);
-  cx.strokeStyle = '#d6dae2'; cx.strokeRect(-6, 0, 26, 150);
+  cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1;
+  cx.strokeRect(30, y - 16, W - 60, 32);
+  // dashed gore line where the ramp joins (band bottom stays dashed there)
+  cx.strokeStyle = '#fff'; cx.lineWidth = 2;
+  cx.beginPath(); cx.moveTo(tipL[0], y + 16); cx.lineTo(tipR[0], y + 16); cx.stroke();
+  cx.strokeStyle = '#c9ced6'; cx.setLineDash([6, 5]); cx.lineWidth = 1.4;
+  cx.beginPath(); cx.moveTo(tipL[0], y + 16); cx.lineTo(tipR[0], y + 16); cx.stroke();
+  cx.setLineDash([]);
+  // ── meter stop bar + signal, partway down the ramp ──
+  const dStop = 74;
+  const sbx = CT[0] - ux * dStop, sby = CT[1] - uy * dStop;
+  cx.save(); cx.translate(sbx, sby); cx.rotate(ang);
+  cx.fillStyle = '#374151'; cx.fillRect(-2, -13, 4, 26);
   cx.restore();
-  // meter signal
   const green = running && nextGreen <= 0.05;
-  cx.beginPath(); cx.arc(XP(XM) + 34, y + 52, 8, 0, Math.PI * 2);
+  cx.beginPath(); cx.arc(sbx + 17, sby + 15, 8, 0, Math.PI * 2);
   cx.fillStyle = rampQ > 0 && green ? '#1d7a6f' : '#c1121f'; cx.fill();
   cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
-  // ramp queue as stacked cars
-  for (let i = 0; i < Math.min(rampQ, 14); i++){
-    const u = 40 + i * 16;
-    const rx = XP(XM) + Math.sin(0.5) * u, ry = y + 16 + Math.cos(0.5) * u;
-    cx.save(); cx.translate(rx, ry); cx.rotate(0.5 - Math.PI / 2);
+  // ── ramp queue: cars behind the stop bar, along the centerline ──
+  for (let i = 0; i < Math.min(rampQ, 12); i++){
+    const d = dStop + 26 + i * 19;
+    const rx = CT[0] - ux * d, ry = CT[1] - uy * d;
+    cx.save(); cx.translate(rx, ry); cx.rotate(ang);
     cx.fillStyle = '#b45309';
     cx.beginPath(); cx.roundRect(-9, -6, 18, 12, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
     cx.restore();
   }
-  if (rampQ > 14){
-    cx.fillStyle = '#a4161a'; cx.font = '700 12px ' + SANS;
-    cx.fillText('+' + (rampQ - 14) + ' more', XP(XM) + 120, y + 240);
+  if (rampQ > 12){
+    cx.fillStyle = '#a4161a'; cx.font = '700 12px ' + SANS; cx.textAlign = 'left';
+    cx.fillText('+' + (rampQ - 12) + ' more waiting', foot[0] - 10, foot[1] + 28);
   }
   // mainline cars
   cars.forEach(c2 => {
@@ -284,7 +311,7 @@ function draw(){
     cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
   });
   // speed profile strip
-  const P = { l: 30, r: 30, t: 420, h: 240 };
+  const P = { l: 30, r: 30, t: 300, h: 190 };
   const pw = W - P.l - P.r;
   cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
   cx.fillStyle = '#9aa1ad'; cx.font = '10px ' + SANS;
