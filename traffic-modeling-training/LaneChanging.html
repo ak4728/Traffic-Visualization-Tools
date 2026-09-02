@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.9 — Lane Changing: MOBIL (Treiber)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  #main { max-height: calc(100vh - 290px); width: auto; max-width: 100%; margin: 0 auto; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 110px; accent-color: #14919b; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.66em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.05em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .eqbox .eq { display: block; text-align: center; font-size: 1.0em; margin: 5px 0; color: #1f2937; font-weight: 600; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .lastlc { text-align: center; font-size: 0.88em; padding: 8px; border-radius: 9px; background: #e8f6f5; color: #0e6e63; font-weight: 700; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 390px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  .help .tip a { color: #0f7b82; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
+  <h4>Ch. 5 — Control</h4>
+  <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
+  <h4>Ch. 6 — Observation &amp; Measurement</h4>
+  <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
+  <h4>Ch. 7 — Scheduled Transportation</h4>
+  <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+  <h4>Ch. 8 — Car-Following Models</h4>
+  <a href="CarFollowing.html">OVM · FVDM · Gipps · IDM</a>
+  <h4>Ch. 9 — Lane Changing</h4>
+  <a href="LaneChanging.html">MOBIL — Politeness &amp; Safety</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>Lane Changing — the MOBIL Model</h1>
+    <span class="subtitle">Ch. 9 — Minimizing Overall Braking Induced by Lane changes (Treiber &amp; Kesting Ch. 14)
+      <span class="help">?<span class="tip">
+        A two-lane road (wrapping around) with IDM cars and three slow trucks. Every second, each driver evaluates a change with two tests:<br><br>
+        <b>Safety criterion:</b> the new follower must not be forced to brake harder than b<sub>safe</sub> (Table 14.1: 2 m/s²).<br><br>
+        <b>MOBIL incentive (Eq. 14.7):</b>
+        <div style="text-align:center;font-weight:700;margin:4px 0">â<sub>c</sub> − a<sub>c</sub> + p·(Δa<sub>followers</sub>) &gt; Δa + a<sub>bias</sub></div>
+        change only if my acceleration gain, plus the followers' gains/losses weighted by my <b>politeness p</b>, beats a threshold. p = 0: pure egoist (only safety protects others). p = 1: full altruist — changes only when they help traffic as a whole. p ≈ 0.2–0.4 matches real drivers.<br><br>
+        The <b>keep-right bias</b> a<sub>bias</sub> (0.3 m/s²) makes empty-road drivers drift right, modeling European rules; set 0 for US-style symmetric lanes.<br><br>
+        Watch the readout: it prints the arithmetic of every executed change. Source: Kesting, Treiber &amp; Helbing, "General lane-changing model MOBIL"; Treiber &amp; Kesting, <i>Traffic Flow Dynamics</i> Ch. 14, <a href="https://traffic-simulation.de" target="_blank">traffic-simulation.de</a>.
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="main" width="1240" height="700"></canvas>
+      <div class="controls">
+        <div class="control-group"><label>politeness p</label><input type="range" id="pp" min="0" max="1" step="0.05" value="0.25"><span class="val" id="ppV"></span></div>
+        <div class="control-group"><label>threshold Δa</label><input type="range" id="da" min="0" max="0.5" step="0.05" value="0.1"><span class="val" id="daV"></span></div>
+        <div class="control-group"><label>b_safe</label><input type="range" id="bs" min="1" max="4" step="0.25" value="2"><span class="val" id="bsV"></span></div>
+        <div class="control-group"><label>keep-right bias</label><input type="range" id="ab" min="0" max="0.6" step="0.05" value="0.3"><span class="val" id="abV"></span></div>
+        <div class="control-group"><label>vehicles</label><input type="range" id="nv" min="14" max="36" step="2" value="24"><span class="val" id="nvV"></span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="lastlc" id="lastlc">waiting for the first lane change…</div>
+        <div class="cards">
+          <div class="card"><h3>lane changes / min</h3><div class="value" id="c1">—</div></div>
+          <div class="card"><h3>mean speed — left lane</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3>mean speed — right lane</h3><div class="value" id="c3">—</div></div>
+          <div class="card"><h3>trucks in right lane</h3><div class="value" id="c4">—</div></div>
+          <div class="card"><h3>refused: safety</h3><div class="value" id="c5">—</div></div>
+          <div class="card"><h3>refused: incentive</h3><div class="value" id="c6">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox">
+          <b>Two tests, in order</b>
+          <span class="eq">1) safety: â<sub>follower</sub> ≥ −b_safe</span>
+          <span class="eq">2) incentive: â<sub>c</sub> − a<sub>c</sub> + p·(â<sub>f̂</sub> − a<sub>f̂</sub> + â<sub>f</sub> − a<sub>f</sub>) &gt; Δa ± a_bias</span>
+          <span class="note">All accelerations are IDM evaluations of hypothetical situations: "how hard would I (and my old &amp; new followers) accelerate if I were in the other lane right now?" The lane-changing brain reuses the car-following brain — that is MOBIL's core idea.</span>
+        </div>
+        <div class="eqbox" style="border-left-color:#b45309">
+          <b>Experiments</b><br>
+          <span class="note">1) p = 0, Δa = 0: hyperactive egoists — watch the changes-per-minute counter and the left lane clog. 2) p = 1: near-silence; only clearly beneficial overtakes happen. 3) bias = 0: lanes become symmetric and trucks wander left (US style). 4) Raise b_safe to 4: aggressive gap acceptance — safety refusals drop, but new followers brake visibly hard.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+const KMH = ms => ms * 3.6;
+
+// ── two-lane ring with IDM + MOBIL ──────────────────────────────────
+const LRD = 1000;                   // ring length (m)
+const IDMP = { a: 1.2, b: 1.8, T: 1.2, s0: 2, d: 4 };
+let cars = [], simT = 0, lcCount = 0, lcWindow = [], refSafe = 0, refInc = 0;
+let seed = 21;
+function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+
+function makeCars(){
+  const N = +el('nv').value;
+  cars = []; simT = 0; lcCount = 0; lcWindow = []; refSafe = 0; refInc = 0;
+  seed = 21;
+  for (let i = 0; i < N; i++){
+    const truck = i % 8 === 3;
+    cars.push({
+      id: i,
+      lane: i % 2,
+      x: (i * LRD / N + rnd() * 10) % LRD,
+      v: truck ? 18 : 26 + rnd() * 6,
+      v0: truck ? 21 : 31 + rnd() * 5,
+      len: truck ? 12 : 5,
+      truck,
+      yAnim: null, lcT: -9, lcFrom: 0,
+      cool: rnd() * 2
+    });
+  }
+}
+function neighbors(c, lane){
+  // nearest leader & follower in given lane (ring wrap)
+  let lead = null, foll = null, dLead = 1e9, dFoll = 1e9;
+  for (const o of cars){
+    if (o === c || o.lane !== lane) continue;
+    let df = c.x - o.x; if (df < 0) df += LRD;      // o behind c by df
+    let dl = o.x - c.x; if (dl < 0) dl += LRD;      // o ahead of c by dl
+    if (dl < dLead){ dLead = dl; lead = o; }
+    if (df < dFoll){ dFoll = df; foll = o; }
+  }
+  return { lead, foll, dLead, dFoll };
+}
+function idmAcc(v, v0, s, dv){
+  s = Math.max(s, 0.5);
+  const { a, b, T, s0, d } = IDMP;
+  const sStar = s0 + Math.max(0, v * T + v * dv / (2 * Math.sqrt(a * b)));
+  return a * (1 - Math.pow(v / v0, d) - Math.pow(sStar / s, 2));
+}
+function accOf(c, lead, gap){
+  if (!lead) return idmAcc(c.v, c.v0, 1e9, 0);
+  return idmAcc(c.v, c.v0, gap - lead.len, c.v - lead.v);
+}
+
+function tryChange(c){
+  const target = 1 - c.lane;
+  const cur = neighbors(c, c.lane);
+  const tgt = neighbors(c, target);
+  // current & prospective own acceleration
+  const aC = accOf(c, cur.lead, cur.dLead);
+  const aCn = accOf(c, tgt.lead, tgt.dLead);
+  // new follower: with c as leader vs its current situation
+  let aFn_new = 0, aFn_old = 0;
+  if (tgt.foll){
+    aFn_new = idmAcc(tgt.foll.v, tgt.foll.v0, tgt.dFoll - c.len, tgt.foll.v - c.v);
+    aFn_old = accOf(tgt.foll, tgt.lead, tgt.dFoll + tgt.dLead);
+  }
+  // old follower: freed by c leaving
+  let aFo_new = 0, aFo_old = 0;
+  if (cur.foll){
+    aFo_old = idmAcc(cur.foll.v, cur.foll.v0, cur.dFoll - c.len, cur.foll.v - c.v);
+    aFo_new = accOf(cur.foll, cur.lead, cur.dFoll + cur.dLead);
+  }
+  const bSafe = +el('bs').value, p = +el('pp').value;
+  const dTh = +el('da').value, bias = +el('ab').value;
+  // 1) safety
+  if (tgt.foll && aFn_new < -bSafe){ refSafe++; return null; }
+  if (tgt.dLead - tgt.lead?.len < 2 || tgt.dFoll - c.len < 2){ refSafe++; return null; }
+  // 2) incentive (Eq. 14.7); keep-right: bias eases changes to the right (lane 1)
+  const biasTerm = target === 1 ? -bias : bias;
+  const lhs = (aCn - aC) + p * ((aFn_new - aFn_old) + (aFo_new - aFo_old));
+  if (lhs > dTh + biasTerm){
+    return { own: aCn - aC, others: (aFn_new - aFn_old) + (aFo_new - aFo_old), lhs, thr: dTh + biasTerm };
+  }
+  refInc++; return null;
+}
+
+function step(dt){
+  simT += dt;
+  // longitudinal per lane
+  for (const c of cars){
+    const { lead, dLead } = neighbors(c, c.lane);
+    c.a = accOf(c, lead, dLead);
+  }
+  for (const c of cars){
+    c.v = Math.max(0, c.v + c.a * dt);
+    c.x = (c.x + c.v * dt) % LRD;
+  }
+  // discrete lane-change decisions (staggered ~1 s per vehicle)
+  for (const c of cars){
+    c.cool -= dt;
+    if (c.cool > 0) continue;
+    c.cool = 1.0 + rnd() * 0.3;
+    const res = tryChange(c);
+    if (res){
+      c.lcFrom = c.lane; c.lane = 1 - c.lane; c.lcT = simT;
+      lcCount++; lcWindow.push(simT);
+      el('lastlc').textContent =
+        (c.truck ? '🚚' : '🚗') + ' #' + c.id + ' → ' + (c.lane === 0 ? 'left' : 'right') +
+        ':  own gain ' + res.own.toFixed(2) + ' + p·others ' + (res.others >= 0 ? '+' : '') + (+el('pp').value * res.others).toFixed(2) +
+        ' = ' + res.lhs.toFixed(2) + ' > ' + res.thr.toFixed(2) + ' ✓';
+      c.cool = 4;                                 // no flip-flopping
+    }
+  }
+  while (lcWindow.length && lcWindow[0] < simT - 60) lcWindow.shift();
+}
+
+// ── drawing ─────────────────────────────────────────────────────────
+const C = el('main'), cx = C.getContext('2d');
+const W = C.width, H = C.height;
+let lastRAF = null, frame = 0;
+const XR = x => 40 + x / LRD * (W - 80);
+const LANEY = [200, 260];                          // left (fast) lane on top
+
+function speedColor(v, v0){
+  const u = Math.max(0, Math.min(1, v / 33));
+  if (u < 0.5){ const s = u / 0.5; return `rgb(${164 + 32 * s | 0},${22 + 98 * s | 0},${26 + 4 * s | 0})`; }
+  const s = (u - 0.5) / 0.5;
+  return `rgb(${196 - 182 * s | 0},${120 + 25 * s | 0},${30 + 125 * s | 0})`;
+}
+function draw(){
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('1 km two-lane ring (wraps around) — IDM driving, MOBIL deciding · 🚚 trucks are slow (75 km/h) · color = speed', 40, 22);
+  // lanes
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(40, LANEY[0] - 16, W - 80, 32 + (LANEY[1] - LANEY[0]));
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(40, LANEY[0] - 16, W - 80, 32 + (LANEY[1] - LANEY[0]));
+  cx.strokeStyle = '#fff'; cx.lineWidth = 2.4; cx.setLineDash([16, 12]);
+  cx.beginPath(); cx.moveTo(40, (LANEY[0] + LANEY[1]) / 2); cx.lineTo(W - 40, (LANEY[0] + LANEY[1]) / 2); cx.stroke();
+  cx.setLineDash([]);
+  cx.fillStyle = '#9aa1ad'; cx.font = '600 11px ' + SANS;
+  cx.fillText('left lane (overtaking)', 46, LANEY[0] - 22);
+  cx.fillText('right lane (keep right)', 46, LANEY[1] + 30);
+  // cars with lane-change glide
+  const LCD = 0.8;
+  for (const c of cars){
+    let y = LANEY[c.lane];
+    if (simT - c.lcT < LCD){
+      let f = (simT - c.lcT) / LCD;
+      f = f * f * (3 - 2 * f);
+      y = LANEY[c.lcFrom] + (LANEY[c.lane] - LANEY[c.lcFrom]) * f;
+    }
+    const w2 = c.len * 2.4;
+    const fresh = simT - c.lcT < 1.6;
+    cx.fillStyle = c.truck ? '#4f3f5c' : speedColor(c.v, c.v0);
+    cx.beginPath(); cx.roundRect(XR(c.x) - w2 / 2, y - 8, w2, 16, 3); cx.fill();
+    cx.strokeStyle = fresh ? '#b45309' : '#fff'; cx.lineWidth = fresh ? 2.4 : 1; cx.stroke();
+  }
+  // per-lane speed history strip
+  const P = { l: 60, r: 20, t: 380, h: 260 };
+  const pw = W - P.l - P.r;
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
+  cx.fillStyle = '#9aa1ad'; cx.font = '10px ' + SANS;
+  [0, 40, 80, 120].forEach(v => {
+    const yy = P.t + P.h - v / 130 * P.h;
+    cx.strokeStyle = '#eef0f4'; cx.beginPath(); cx.moveTo(P.l, yy); cx.lineTo(P.l + pw, yy); cx.stroke();
+    cx.textAlign = 'right'; cx.fillText(v, P.l - 4, yy + 3);
+  });
+  [[0, '#2c5378', 'left lane'], [1, '#b45309', 'right lane']].forEach(([ln, col, name], k) => {
+    cx.strokeStyle = col; cx.lineWidth = 2; cx.lineJoin = 'round';
+    cx.beginPath();
+    laneHist.forEach((h2, i) => {
+      const px = P.l + i / Math.max(1, laneHist.length - 1) * pw;
+      const py = P.t + P.h - Math.min(KMH(h2[ln]), 130) / 130 * P.h;
+      if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+    });
+    cx.stroke();
+    cx.fillStyle = col; cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+    cx.fillText(name, P.l + 8 + k * 90, P.t + 14);
+  });
+  cx.fillStyle = '#4b5563'; cx.font = '600 11px ' + SANS;
+  cx.fillText('mean lane speeds, last 2 min (km/h) — equalize p and bias and the lanes converge', P.l, P.t - 6);
+}
+let laneHist = [];
+
+function loop(ts){
+  if (lastRAF === null) lastRAF = ts;
+  let dt = (ts - lastRAF) / 1000; lastRAF = ts;
+  dt = Math.min(dt, 0.05);
+  frame++;
+  const sdt = dt * 2, sub = 4, h = sdt / sub;
+  for (let k = 0; k < sub; k++) step(h);
+  if (frame % 10 === 0){
+    const mean = ln => {
+      const g = cars.filter(c => c.lane === ln);
+      return g.length ? g.reduce((a2, b2) => a2 + b2.v, 0) / g.length : 0;
+    };
+    laneHist.push([mean(0), mean(1)]);
+    while (laneHist.length > 240) laneHist.shift();
+  }
+  draw();
+  if (frame % 10 === 0){
+    const trucks = cars.filter(c => c.truck);
+    el('c1').textContent = (lcWindow.length).toFixed(0) + ' /min';
+    el('c2').textContent = laneHist.length ? KMH(laneHist[laneHist.length - 1][0]).toFixed(0) + ' km/h' : '—';
+    el('c3').textContent = laneHist.length ? KMH(laneHist[laneHist.length - 1][1]).toFixed(0) + ' km/h' : '—';
+    el('c4').textContent = trucks.filter(c => c.lane === 1).length + ' / ' + trucks.length;
+    el('c5').textContent = refSafe + '';
+    el('c6').textContent = refInc + '';
+  }
+  requestAnimationFrame(loop);
+}
+
+const fmt = () => {
+  el('ppV').textContent = (+el('pp').value).toFixed(2);
+  el('daV').textContent = (+el('da').value).toFixed(2);
+  el('bsV').textContent = (+el('bs').value).toFixed(2);
+  el('abV').textContent = (+el('ab').value).toFixed(2);
+  el('nvV').textContent = el('nv').value;
+};
+['pp','da','bs','ab'].forEach(id => el(id).addEventListener('input', fmt));
+el('nv').addEventListener('input', () => { fmt(); makeCars(); laneHist = []; });
+fmt(); makeCars();
+requestAnimationFrame(loop);
+
+// chapter navigation drawer
+(function(){
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>

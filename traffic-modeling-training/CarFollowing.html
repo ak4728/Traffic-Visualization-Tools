@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ch.8 — Car-Following Models (Treiber)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f7f8fa; color: #1f2937; padding: 10px 14px; }
+  .container { max-width: 1900px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 10px; }
+  h1 { font-size: 1.35em; color: #0f7b82; font-weight: 700; }
+  .subtitle { color: #6b7280; font-size: 0.9em; }
+  .layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; }
+  .panel { background: #fff; border: 1px solid #e2e6ee; border-radius: 12px; padding: 10px; box-shadow: 0 2px 10px rgba(30,40,60,.06); }
+  .panel canvas { width: 100%; height: auto; display: block; }
+  #main { max-height: calc(100vh - 290px); width: auto; max-width: 100%; margin: 0 auto; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0 2px; }
+  .control-group { display: flex; align-items: center; gap: 7px; font-size: 0.85em; color: #374151; }
+  .control-group label { font-weight: 600; white-space: nowrap; }
+  .control-group .val { color: #0f7b82; font-weight: 700; min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 110px; accent-color: #14919b; }
+  .mode { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #d6dae2; background: #fff; color: #374151; font-size: 0.8em; font-weight: 600; cursor: pointer; }
+  .mode:hover { border-color: #14919b; color: #0f7b82; }
+  .mode.on { background: #14919b; border-color: transparent; color: #fff; }
+  .action { padding: 5px 12px; border-radius: 9px; border: 1.5px solid #e5b4b6; background: #fff; color: #a4161a; font-size: 0.8em; font-weight: 700; cursor: pointer; }
+  .action:hover { background: #fdf2f2; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .card { background: #f8fafb; border: 1px solid #e6eaf1; border-radius: 10px; padding: 8px 10px; }
+  .card h3 { font-size: 0.66em; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-bottom: 2px; font-weight: 700; }
+  .card .value { font-size: 1.05em; font-weight: 700; color: #1f2937; font-variant-numeric: tabular-nums; }
+  .card .value small { font-weight: 600; color: #8a94a3; font-size: 0.7em; }
+  .card.bad .value { color: #a4161a; }
+  .eqbox { background: #f8fafb; border: 1px solid #e6eaf1; border-left: 4px solid #14919b; border-radius: 8px; padding: 9px 12px; font-size: 0.85em; color: #374151; margin-bottom: 8px; line-height: 1.55; }
+  .eqbox b { color: #0f7b82; }
+  .eqbox .eq { display: block; text-align: center; font-size: 1.02em; margin: 5px 0; color: #1f2937; font-weight: 600; }
+  .note { font-size: 0.95em; color: #6b7280; }
+  .banner { text-align: center; font-size: 0.95em; padding: 8px; border-radius: 9px; background: #e8f6f5; color: #0e6e63; font-weight: 700; margin-bottom: 8px; }
+  .banner.bad { background: #fdecea; color: #a4161a; }
+  .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 390px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help:hover .tip { display: block; }
+  .help .tip a { color: #0f7b82; }
+  @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
+
+  /* ── chapter navigation drawer (hamburger) ── */
+  .nav-burger { position: fixed; top: 12px; left: 12px; z-index: 1200; width: 40px; height: 36px; border-radius: 8px; background: #fff; border: 1px solid #e2e6ee; box-shadow: 0 2px 8px rgba(30,40,60,.12); cursor: pointer; display: flex; flex-direction: column; justify-content: center; gap: 5px; align-items: center; }
+  .nav-burger:hover { border-color: #14919b; }
+  .nav-burger span { display: block; width: 18px; height: 2.5px; background: #0f7b82; border-radius: 2px; }
+  .nav-drawer { position: fixed; top: 0; left: -300px; width: 286px; height: 100vh; background: #fff; border-right: 1px solid #e2e6ee; box-shadow: 4px 0 24px rgba(16,24,40,.14); z-index: 1190; transition: left .22s ease; padding: 62px 16px 16px; overflow-y: auto; }
+  .nav-drawer.open { left: 0; }
+  .nav-drawer .nd-title { color: #1f2937; font-weight: 700; font-size: 0.95em; margin-bottom: 6px; }
+  .nav-drawer h4 { color: #0f7b82; font-size: 0.74em; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 4px; }
+  .nav-drawer a { display: block; padding: 7px 10px; border-radius: 6px; color: #374151; text-decoration: none; font-size: 0.9em; }
+  .nav-drawer a:hover { background: #f0fafa; color: #0f7b82; }
+  .nav-drawer a.cur { background: #14919b; color: #fff; font-weight: 600; }
+  .nav-scrim { position: fixed; inset: 0; background: rgba(16,24,40,.25); z-index: 1180; display: none; }
+  .nav-scrim.show { display: block; }
+</style>
+</head>
+<body>
+<div class="nav-burger" id="navBurger" title="Chapters"><span></span><span></span><span></span></div>
+<div class="nav-scrim" id="navScrim"></div>
+<nav class="nav-drawer" id="navDrawer">
+  <div class="nd-title">Traffic Modeling Training</div>
+  <h4>Ch. 1 — Time-Space Diagrams</h4>
+  <a href="TimeSpaceDiagram.html">Time-Space Diagram</a>
+  <a href="DilemmaZone.html">Dilemma Zone</a>
+  <h4>Ch. 2 — Cumulative Plots</h4>
+  <a href="CumulativePlots.html">Cumulative Plots (N-Curves)</a>
+  <a href="DetectorCumulatives.html">Detector N-Curves — I-70 Data</a>
+  <h4>Ch. 3 — Optimization</h4>
+  <a href="Optimization.html">Optimization &amp; Assignment</a>
+  <h4>Ch. 4 — Traffic Flow Theory</h4>
+  <a href="GeneralizedDefinitions.html">Generalized Definitions (Edie)</a>
+  <a href="FundamentalDiagrams.html">Time-Independent Models — Fundamental Diagrams</a>
+  <a href="ConservationLaw.html">The Conservation Law</a>
+  <a href="DynamicMacroscopic.html">Dynamic Macroscopic Models (LWR)</a>
+  <a href="JamGame.html">🎮 Game — Dissolve the Phantom Jam</a>
+  <h4>Ch. 5 — Control</h4>
+  <a href="SignalControl.html">Signal Timing &amp; Gap Acceptance</a>
+  <a href="RampMeterGame.html">🎮 Game — Ramp Metering</a>
+  <h4>Ch. 6 — Observation &amp; Measurement</h4>
+  <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
+  <h4>Ch. 7 — Scheduled Transportation</h4>
+  <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+  <h4>Ch. 8 — Car-Following Models</h4>
+  <a href="CarFollowing.html">OVM · FVDM · Gipps · IDM</a>
+  <h4>Ch. 9 — Lane Changing</h4>
+  <a href="LaneChanging.html">MOBIL — Politeness &amp; Safety</a>
+</nav>
+
+<div class="container">
+  <header>
+    <h1>Car-Following Models</h1>
+    <span class="subtitle">Ch. 8 — the city start-stop scenario from Treiber &amp; Kesting Ch. 10–11: same road, four brains
+      <span class="help">?<span class="tip">
+        Fifteen vehicles queue at a red light, accelerate on green, cruise, then hit a second red — the "city scenario" the book uses as a fact sheet for every model (§10.5). Pick a model and watch the same situation handled by four different acceleration laws:<br><br>
+        <b>OVM</b> (Bando, Eq. 10.19): relax toward an optimal speed v<sub>opt</sub>(gap) with time constant τ. Famous flaw: no reaction to closing speed — τ = 0.65 s is needed to avoid crashes but produces absurd ±20 m/s² accelerations; raise τ a little and vehicles collide (§10.6).<br><br>
+        <b>FVDM</b> (Eq. 10.23): adds a speed-difference term −γΔv. Accident-free with a relaxed τ — but the Δv term ignores distance, so a red light far ahead slows cars that should still be driving (the book's "incomplete model" lesson).<br><br>
+        <b>Gipps</b> (Eq. 11.10–11.11): drive at min(v + aΔt, v₀, v<sub>safe</sub>) where v<sub>safe</sub> guarantees stopping behind the leader even in the worst case. Simplest complete accident-free model.<br><br>
+        <b>IDM</b> (Eq. 11.3): smooth acceleration a[1 − (v/v₀)⁴ − (s*/s)²] with dynamic desired gap s* — the modern standard (and the engine of this site's games).<br><br>
+        Source: M. Treiber &amp; A. Kesting, <i>Traffic Flow Dynamics</i> (Springer 2013), <a href="https://traffic-simulation.de" target="_blank">traffic-simulation.de</a>.
+      </span></span>
+    </span>
+  </header>
+
+  <div class="layout">
+    <div class="panel">
+      <canvas id="main" width="1240" height="740"></canvas>
+      <div class="controls">
+        <button class="mode" data-m="ovm">OVM (Bando)</button>
+        <button class="mode" data-m="fvdm">FVDM</button>
+        <button class="mode" data-m="gipps">Gipps</button>
+        <button class="mode on" data-m="idm">IDM</button>
+        <button class="action" id="reset">↺ Restart scenario</button>
+        <span id="params" style="display:contents"></span>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:10px">
+        <div class="banner" id="banner">—</div>
+        <div class="eqbox" id="story">—</div>
+        <div class="cards">
+          <div class="card"><h3>scenario clock</h3><div class="value" id="c1">—</div></div>
+          <div class="card"><h3>max acceleration seen</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3>strongest braking seen</h3><div class="value" id="c3">—</div></div>
+          <div class="card"><h3>minimum gap seen</h3><div class="value" id="c4">—</div></div>
+          <div class="card"><h3>platoon through light 2</h3><div class="value" id="c5">—</div></div>
+          <div class="card"><h3>speed of last car</h3><div class="value" id="c6">—</div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="eqbox" style="border-left-color:#b45309">
+          <b>What to look for</b><br>
+          <span class="note" id="hint">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const el = id => document.getElementById(id);
+const SANS = "'Segoe UI', system-ui, sans-serif";
+const KMH = ms => ms * 3.6;
+
+// ── scenario: city start-stop (Treiber §10.5) ───────────────────────
+const ROAD = 700, LEN = 5, NV = 15;
+const L1 = 200, L2 = 520;                        // traffic lights (m)
+const T_G1 = 2, T_R2_ON = 0, T_G2 = 55, T_END = 100;
+const V0C = 15;                                  // city desired speed 54 km/h
+
+// ── models (Treiber & Kesting notation) ─────────────────────────────
+const MODELS = {
+  ovm: {
+    name: 'OVM (Bando)', col: '#a4161a',
+    params: { tau: { lbl: 'τ adapt (s)', min: 0.4, max: 1.4, step: 0.05, val: 0.65 },
+              ds:  { lbl: 'Δs width (m)', min: 4, max: 16, step: 1, val: 8 } },
+    eq: 'v̇ = [v_opt(s) − v]/τ  ·  v_opt = v₀·[tanh(s/Δs − β) + tanh β]/(1 + tanh β)   (Eqs. 10.19, 10.21)',
+    info: '<b>Optimal Velocity Model</b> — relax toward the speed the current gap "deserves"; the closing speed Δv is ignored entirely. The book\'s Table 10.1 city values (τ = 0.65 s, Δs = 8 m, β = 1.5) barely avoid crashes at the cost of accelerations ten times human. <b>Try it:</b> nudge τ up past ~0.7 s and watch the collision banner — exactly the ±5% fragility described in §10.6.',
+    hint: 'Watch the acceleration card: |v̇| hits absurd values (±10–20 m/s²) even when nothing crashes. Then raise τ slightly → 💥. Lower τ → rock stable but physically impossible driving. A model with no good parameter region.',
+    accel(c, lead, lightGap){
+      const beta = 1.5, ds = this.params.ds.val, tau = this.params.tau.val;
+      let s = lead ? lead.x - c.x - LEN : 1e9;
+      if (lightGap !== null) s = Math.min(s, lightGap);
+      const vopt = V0C * (Math.tanh(s / ds - beta) + Math.tanh(beta)) / (1 + Math.tanh(beta));
+      return (vopt - c.v) / tau;
+    }
+  },
+  fvdm: {
+    name: 'FVDM', col: '#b45309',
+    params: { tau: { lbl: 'τ adapt (s)', min: 2, max: 10, step: 0.5, val: 5 },
+              gam: { lbl: 'γ Δv-sens (1/s)', min: 0.1, max: 1.2, step: 0.05, val: 0.6 } },
+    eq: 'v̇ = [v_opt(s) − v]/τ − γ·Δv   (Eq. 10.23)',
+    info: '<b>Full Velocity Difference Model</b> — the OVM plus a linear reaction to the closing speed Δv = v − v_lead. Now τ can be a relaxed 5 s and nothing crashes. But γΔv does not care <i>how far away</i> the slower object is: a red light 300 m ahead already brakes the platoon. The book calls this an <b>incomplete</b> model — it cannot represent all situations (§10.7).',
+    hint: 'Watch the start: the platoon never reaches 54 km/h, because the standing light 2 — three hundred meters away — is already "braking" every car through the γΔv term. The fact sheet in Fig. 10.6 shows max ~15 km/h for the same reason.',
+    accel(c, lead, lightGap){
+      const beta = 1.5, ds = 8, tau = this.params.tau.val, gam = this.params.gam.val;
+      let s = lead ? lead.x - c.x - LEN : 1e9;
+      let dv = lead ? c.v - lead.v : 0;
+      if (lightGap !== null && lightGap < s){ s = lightGap; dv = c.v; }
+      const vopt = V0C * (Math.tanh(s / ds - beta) + Math.tanh(beta)) / (1 + Math.tanh(beta));
+      return (vopt - c.v) / tau - gam * dv;
+    }
+  },
+  gipps: {
+    name: 'Gipps', col: '#4f3f5c',
+    params: { dt: { lbl: 'Δt react (s)', min: 0.6, max: 2.0, step: 0.1, val: 1.1 },
+              b:  { lbl: 'b brake (m/s²)', min: 0.5, max: 3, step: 0.1, val: 1.0 } },
+    eq: 'v(t+Δt) = min[v + aΔt, v₀, v_safe]  ·  v_safe = −bΔt + √(b²Δt² + v_l² + 2b(s−s₀))   (Eqs. 11.10–11.11)',
+    info: '<b>Gipps\' model</b> (simplified, §11.2) — never exceed the speed from which you could still stop behind the leader, assuming the worst (leader slams to a halt) and a reaction time Δt. Complete, accident-free by construction, triangular fundamental diagram. The price: speeds snap between regimes, so the acceleration profile is boxy rather than human.',
+    hint: 'Note the boxy speed traces: constant-a ramps that hit v₀ or v_safe and stick. Raise Δt to 2 s and the platoon spreads out (bigger safety gaps, lower capacity); the model stays crash-free at any setting — that is its whole design.',
+    accel: null            // handled as an iterated map in step()
+  },
+  idm: {
+    name: 'IDM', col: '#0e7c86',
+    params: { a: { lbl: 'a accel (m/s²)', min: 0.4, max: 2.5, step: 0.1, val: 1.0 },
+              T: { lbl: 'T time gap (s)', min: 0.6, max: 2.5, step: 0.1, val: 1.0 } },
+    eq: 'v̇ = a·[1 − (v/v₀)⁴ − (s*/s)²]  ·  s* = s₀ + max(0, vT + vΔv/(2√(ab)))   (Eq. 11.3)',
+    info: '<b>Intelligent Driver Model</b> (§11.3) — one smooth formula covering free driving, following, and emergency braking. The dynamic desired gap s* grows with speed (vT) and with closing rate (the intelligent braking term). Standard city parameters from Table 11.2: a = 1.0, b = 1.5 m/s², T = 1.0 s, s₀ = 2 m. This is the model behind this site\'s jam and ramp games.',
+    hint: 'Compare the acceleration card with the OVM: everything stays within ±3 m/s², gaps never collapse, and the speed traces are smooth S-curves. Drop T to 0.6 s for aggressive ACC-style following — capacity rises, comfort falls.',
+    accel(c, lead, lightGap){
+      const a = this.params.a.val, T = this.params.T.val, b = 1.5, s0 = 2;
+      let s = lead ? lead.x - c.x - LEN : 1e9;
+      let dv = lead ? c.v - lead.v : 0;
+      if (lightGap !== null && lightGap < s){ s = lightGap; dv = c.v; }
+      s = Math.max(s, 0.01);
+      const sStar = s0 + Math.max(0, c.v * T + c.v * dv / (2 * Math.sqrt(a * b)));
+      return a * (1 - Math.pow(c.v / V0C, 4) - Math.pow(sStar / s, 2));
+    }
+  }
+};
+let model = 'idm';
+
+// ── simulation state ────────────────────────────────────────────────
+let cars = [], simT = 0, crashed = false, passed2 = 0;
+let maxA = 0, minA = 0, minGap = 1e9;
+let hist = [];                                   // [t, x[], v[]] samples for charts
+let gippsAccum = 0;
+
+function reset(){
+  cars = [];
+  for (let i = 0; i < NV; i++) cars.push({ id: i, x: L1 - 8 - i * (LEN + 2.5), v: 0 });
+  simT = 0; crashed = false; passed2 = 0;
+  maxA = 0; minA = 0; minGap = 1e9; hist = []; gippsAccum = 0;
+}
+function lightRed(which, t){
+  if (which === 1) return t < T_G1;
+  return t < T_G2;
+}
+function lightGapOf(c, t){
+  // gap to the nearest red light ahead (as a standing virtual vehicle), else null
+  for (const [pos, id] of [[L1, 1], [L2, 2]]){
+    if (c.x < pos - 1 && lightRed(id, t)) return pos - c.x - 2;
+  }
+  return null;
+}
+function step(dt){
+  if (crashed) return;
+  const M = MODELS[model];
+  simT += dt;
+  if (model === 'gipps'){
+    gippsAccum += dt;
+    const gdt = M.params.dt.val;
+    if (gippsAccum >= gdt){
+      gippsAccum = 0;
+      const aG = 1.5, b = M.params.b.val, s0 = 2;
+      for (let i = 0; i < cars.length; i++){
+        const c = cars[i], lead = i > 0 ? cars[i - 1] : null;
+        let s = lead ? lead.x - c.x - LEN : 1e9;
+        let vl = lead ? lead.v : 0;
+        const lg = lightGapOf(c, simT);
+        if (lg !== null && lg < s){ s = lg; vl = 0; }
+        const vs = -b * gdt + Math.sqrt(b * b * gdt * gdt + vl * vl + 2 * b * Math.max(0, s - s0));
+        const vOld = c.v;
+        c.v = Math.max(0, Math.min(c.v + aG * gdt, V0C, vs));
+        const aEff = (c.v - vOld) / gdt;
+        maxA = Math.max(maxA, aEff); minA = Math.min(minA, aEff);
+      }
+    }
+  } else {
+    for (let i = 0; i < cars.length; i++){
+      const c = cars[i], lead = i > 0 ? cars[i - 1] : null;
+      const a = M.accel(c, lead, lightGapOf(c, simT));
+      c.a = a;
+      maxA = Math.max(maxA, a); minA = Math.min(minA, a);
+    }
+    cars.forEach(c => { c.v = Math.max(0, c.v + c.a * dt); });
+  }
+  cars.forEach(c => { c.x += c.v * dt; });
+  for (let i = 1; i < cars.length; i++){
+    const g = cars[i - 1].x - cars[i].x - LEN;
+    minGap = Math.min(minGap, g);
+    if (g < 0) crashed = true;
+  }
+  for (let i = cars.length - 1; i >= 0; i--){
+    if (cars[i].x > ROAD + 20){ cars.splice(i, 1); }
+  }
+  passed2 = cars.filter(c => c.x > L2).length + (NV - cars.length);
+  if (simT >= T_END) reset();
+}
+
+// ── drawing ─────────────────────────────────────────────────────────
+const C = el('main'), cx = C.getContext('2d');
+const W = C.width, H = C.height;
+let lastRAF = null, frame = 0;
+const XR = x => 40 + x / ROAD * (W - 80);
+
+function speedColor(v){
+  const u = Math.max(0, Math.min(1, v / V0C));
+  if (u < 0.5){ const s = u / 0.5; return `rgb(${164 + 32 * s | 0},${22 + 98 * s | 0},${26 + 4 * s | 0})`; }
+  const s = (u - 0.5) / 0.5;
+  return `rgb(${196 - 182 * s | 0},${120 + 25 * s | 0},${30 + 125 * s | 0})`;
+}
+
+function draw(){
+  const M = MODELS[model];
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // ── road band ──
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('city start-stop scenario (§10.5): green at t = ' + T_G1 + ' s, light 2 turns green at t = ' + T_G2 + ' s · color = speed', 40, 22);
+  const ry = 66;
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(40, ry - 14, W - 80, 28);
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(40, ry - 14, W - 80, 28);
+  [[L1, 1], [L2, 2]].forEach(([pos, id]) => {
+    const red = lightRed(id, simT);
+    cx.fillStyle = '#374151'; cx.fillRect(XR(pos), ry - 22, 3, 36);
+    cx.beginPath(); cx.arc(XR(pos) + 2, ry - 30, 7, 0, Math.PI * 2);
+    cx.fillStyle = red ? '#c1121f' : '#1d7a6f'; cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
+  });
+  cars.forEach(c => {
+    cx.fillStyle = speedColor(c.v);
+    cx.beginPath(); cx.roundRect(XR(c.x) - 8, ry - 7, 16, 14, 3); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
+  });
+  if (crashed){
+    cx.fillStyle = '#a4161a'; cx.font = '700 22px ' + SANS; cx.textAlign = 'center';
+    cx.fillText('💥 collision — press ↺ (see the model notes)', W / 2, ry + 46);
+  }
+
+  // ── time-space diagram (progressive) ──
+  const P = { l: 60, r: 20, t: 130, h: 330 };
+  const pw = W - P.l - P.r;
+  const XT = t => P.l + t / T_END * pw, YX = x => P.t + P.h - x / ROAD * P.h;
+  cx.strokeStyle = '#eef0f4'; cx.fillStyle = '#9aa1ad'; cx.font = '10px ' + SANS;
+  for (let t = 0; t <= T_END; t += 20){ cx.beginPath(); cx.moveTo(XT(t), P.t); cx.lineTo(XT(t), P.t + P.h); cx.stroke(); cx.textAlign = 'center'; cx.fillText(t, XT(t), P.t + P.h + 14); }
+  for (let x = 0; x <= ROAD; x += 100){ cx.beginPath(); cx.moveTo(P.l, YX(x)); cx.lineTo(P.l + pw, YX(x)); cx.stroke(); cx.textAlign = 'right'; cx.fillText(x, P.l - 5, YX(x) + 3); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
+  // red phases on the light lines
+  cx.lineWidth = 3.5;
+  cx.strokeStyle = '#c1121f';
+  cx.beginPath(); cx.moveTo(XT(0), YX(L1)); cx.lineTo(XT(T_G1), YX(L1)); cx.stroke();
+  cx.beginPath(); cx.moveTo(XT(0), YX(L2)); cx.lineTo(XT(Math.min(T_G2, T_END)), YX(L2)); cx.stroke();
+  cx.strokeStyle = '#1d7a6f';
+  cx.beginPath(); cx.moveTo(XT(T_G1), YX(L1)); cx.lineTo(XT(T_END), YX(L1)); cx.stroke();
+  cx.beginPath(); cx.moveTo(XT(Math.min(T_G2, T_END)), YX(L2)); cx.lineTo(XT(T_END), YX(L2)); cx.stroke();
+  // trajectories
+  cx.lineWidth = 1.3; cx.strokeStyle = 'rgba(31,41,55,0.55)'; cx.lineJoin = 'round';
+  for (let i = 0; i < NV; i++){
+    cx.beginPath();
+    let started = false;
+    for (const h of hist){
+      const xv = h[1][i];
+      if (xv === undefined || xv > ROAD) { if (started) break; else continue; }
+      if (!started){ cx.moveTo(XT(h[0]), YX(xv)); started = true; } else cx.lineTo(XT(h[0]), YX(xv));
+    }
+    cx.stroke();
+  }
+  cx.fillStyle = '#4b5563'; cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('time-space diagram — x: t (s), y: position (m); red/green bars = the two signals', P.l, P.t - 6);
+
+  // ── speed traces (fact-sheet style, cars 1, 5, 10, 15) ──
+  const P2 = { l: 60, r: 20, t: 505, h: 200 };
+  const YV = v => P2.t + P2.h - v / (V0C * 1.25) * P2.h;
+  cx.strokeStyle = '#eef0f4';
+  for (let v = 0; v <= 54; v += 18){ const yy = YV(v / 3.6); cx.beginPath(); cx.moveTo(P2.l, yy); cx.lineTo(P2.l + pw, yy); cx.stroke(); cx.fillStyle = '#9aa1ad'; cx.textAlign = 'right'; cx.fillText(v, P2.l - 5, yy + 3); }
+  cx.strokeStyle = '#d6dae2'; cx.strokeRect(P2.l, P2.t, pw, P2.h);
+  const picks = [0, 4, 9, 14], pcols = ['#1f2937', '#2c5378', '#b45309', '#a4161a'];
+  picks.forEach((idx, k) => {
+    cx.strokeStyle = pcols[k]; cx.lineWidth = 1.8;
+    cx.beginPath();
+    let started = false;
+    for (const h of hist){
+      const vv = h[2][idx];
+      if (vv === undefined){ continue; }
+      if (!started){ cx.moveTo(XT(h[0]), YV(vv)); started = true; } else cx.lineTo(XT(h[0]), YV(vv));
+    }
+    cx.stroke();
+    cx.fillStyle = pcols[k]; cx.font = '600 10px ' + SANS; cx.textAlign = 'left';
+    cx.fillText('car ' + (idx + 1), P2.l + 8 + k * 60, P2.t + 13);
+  });
+  cx.fillStyle = '#4b5563'; cx.font = '600 11px ' + SANS;
+  cx.fillText('speed traces (km/h) — the book\'s fact-sheet view (Fig. 10.3d): how the platoon transmits the leader\'s moves', P2.l, P2.t - 6);
+}
+
+function loop(ts){
+  if (lastRAF === null) lastRAF = ts;
+  let dt = (ts - lastRAF) / 1000; lastRAF = ts;
+  dt = Math.min(dt, 0.05);
+  frame++;
+  const sdt = dt * 3;                            // time ×3
+  const sub = 6, h = sdt / sub;
+  for (let k = 0; k < sub; k++) step(h);
+  if (frame % 2 === 0 && !crashed){
+    const xs = new Array(NV), vs = new Array(NV);
+    cars.forEach(c => { xs[c.id] = c.x; vs[c.id] = c.v; });
+    hist.push([simT, xs, vs]);
+  }
+  draw();
+  if (frame % 8 === 0){
+    el('c1').textContent = simT.toFixed(0) + ' / ' + T_END + ' s';
+    el('c2').textContent = '+' + maxA.toFixed(1) + ' m/s²';
+    el('c3').textContent = minA.toFixed(1) + ' m/s²';
+    el('c4').textContent = minGap < 1e8 ? minGap.toFixed(1) + ' m' : '—';
+    el('c5').textContent = passed2 + ' / ' + NV;
+    el('c6').textContent = cars.length ? KMH(cars[cars.length - 1].v).toFixed(0) + ' km/h' : '—';
+    document.querySelectorAll('.card')[3].className = 'card' + (minGap < 0.5 ? ' bad' : '');
+    document.querySelectorAll('.card')[2].className = 'card' + (minA < -8 ? ' bad' : '');
+    const b2 = el('banner');
+    if (crashed){ b2.className = 'banner bad'; b2.textContent = '💥 collision! the ' + MODELS[model].name + ' failed here — read why in the model notes, then ↺'; }
+    else { b2.className = 'banner'; b2.textContent = MODELS[model].name + ' — running the city scenario'; }
+  }
+  requestAnimationFrame(loop);
+}
+
+// ── UI ──────────────────────────────────────────────────────────────
+function buildParams(){
+  const box = el('params');
+  box.querySelectorAll('.control-group').forEach(g => g.remove());
+  const M = MODELS[model];
+  Object.values(M.params).forEach(p => {
+    const g = document.createElement('div');
+    g.className = 'control-group';
+    g.innerHTML = `<label>${p.lbl}</label><input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.val}"><span class="val">${p.val}</span>`;
+    const inp = g.querySelector('input'), vs = g.querySelector('.val');
+    inp.addEventListener('input', () => { p.val = parseFloat(inp.value); vs.textContent = inp.value; reset(); });
+    box.appendChild(g);
+  });
+  el('story').innerHTML = '<span class="eq">' + M.eq + '</span>' + M.info;
+  el('hint').innerHTML = M.hint;
+}
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
+  model = b.dataset.m;
+  document.querySelectorAll('.mode').forEach(x => x.classList.toggle('on', x === b));
+  buildParams(); reset();
+}));
+el('reset').addEventListener('click', reset);
+buildParams(); reset();
+requestAnimationFrame(loop);
+
+// chapter navigation drawer
+(function(){
+  const b = document.getElementById('navBurger'), d = document.getElementById('navDrawer'), s = document.getElementById('navScrim');
+  const open = () => { d.classList.add('open'); s.classList.add('show'); };
+  const close = () => { d.classList.remove('open'); s.classList.remove('show'); };
+  b.addEventListener('click', () => d.classList.contains('open') ? close() : open());
+  b.addEventListener('mouseenter', open);
+  d.addEventListener('mouseleave', close);
+  s.addEventListener('click', close);
+  const here = decodeURIComponent(location.pathname.split('/').pop() || '');
+  d.querySelectorAll('a').forEach(a => { if (a.getAttribute('href') === here) a.classList.add('cur'); });
+})();
+</script>
+</body>
+</html>

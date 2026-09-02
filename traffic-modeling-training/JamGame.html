@@ -83,6 +83,10 @@
   <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
   <h4>Ch. 7 — Scheduled Transportation</h4>
   <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+  <h4>Ch. 8 — Car-Following Models</h4>
+  <a href="CarFollowing.html">OVM · FVDM · Gipps · IDM</a>
+  <h4>Ch. 9 — Lane Changing</h4>
+  <a href="LaneChanging.html">MOBIL — Politeness &amp; Safety</a>
 </nav>
 
 <div class="container">
@@ -119,7 +123,11 @@
           <div class="card"><h3>jammed cars (&lt; 9 mph)</h3><div class="value" id="c5">—</div></div>
           <div class="card"><h3>best score this session</h3><div class="value" id="c6">—</div></div>
         </div>
-        <canvas id="spark" width="760" height="170"></canvas>
+        <div class="controls" style="justify-content:space-between;margin-top:2px">
+          <span style="font-size:0.78em;font-weight:700;color:#6b7280">TIME–SPACE DIAGRAM — ring position vs time (color = speed): the jam is the red band drifting backward</span>
+          <button class="action sec" id="recClear">⏺ restart recording</button>
+        </div>
+        <canvas id="tsd" width="760" height="270"></canvas>
       </div>
       <div class="panel">
         <div class="eqbox">
@@ -151,7 +159,7 @@ function initRing(){
   const N = +el('nn').value;
   cars = [];
   for (let i = 0; i < N; i++) cars.push({ x: i * L / N, v: Math.min(V0, (L / N - CARLEN - S0) / T) * 0.9 });
-  simT = 0; perturbUntil = -1; speedHist = [];
+  simT = 0; perturbUntil = -1; speedHist = []; tsHist = [];
 }
 function idmStep(dt){
   const vLim = (+el('vl').value) / 2.23694;
@@ -189,7 +197,8 @@ function step(dt){
 // ── drawing ─────────────────────────────────────────────────────────
 const C = el('ring'), cx = C.getContext('2d');
 const W = C.width, H = C.height, CXc = W / 2, CYc = H / 2 + 12, R = 218;
-const SP = el('spark'), sp = SP.getContext('2d');
+const TS = el('tsd'), tp = TS.getContext('2d');
+let tsHist = [];
 let lastRAF = null, frame = 0;
 
 function speedColor(v){
@@ -231,28 +240,32 @@ function draw(){
   cx.fillText(vl < 34 ? 'mph limit' : 'no limit', CXc, CYc + 28);
 }
 
-function drawSpark(){
-  sp.clearRect(0, 0, SP.width, SP.height); sp.fillStyle = '#fff'; sp.fillRect(0, 0, SP.width, SP.height);
-  const P = { l: 46, r: 10, t: 22, b: 30 };
-  const pw = SP.width - P.l - P.r, ph = SP.height - P.t - P.b;
-  sp.strokeStyle = '#d6dae2'; sp.strokeRect(P.l, P.t, pw, ph);
-  sp.fillStyle = '#9aa1ad'; sp.font = '10px ' + SANS;
-  const vMaxD = MPH(V0) * 1.1;
-  [0, 10, 20, 30].forEach(v => {
-    const y = P.t + ph - v / vMaxD * ph;
-    sp.strokeStyle = '#eef0f4'; sp.beginPath(); sp.moveTo(P.l, y); sp.lineTo(P.l + pw, y); sp.stroke();
-    sp.textAlign = 'right'; sp.fillText(v, P.l - 4, y + 3);
+const TWIN = 60;                                // recorded window (sim-s)
+function drawTSD(){
+  tp.clearRect(0, 0, TS.width, TS.height); tp.fillStyle = '#fff'; tp.fillRect(0, 0, TS.width, TS.height);
+  const P = { l: 46, r: 10, t: 10, b: 28 };
+  const pw = TS.width - P.l - P.r, ph = TS.height - P.t - P.b;
+  const t0 = Math.max(tsHist.length ? tsHist[0][0] : 0, simT - TWIN);
+  const t1 = t0 + TWIN;
+  // samples as speed-colored dots: the backward-drifting red band IS the jam
+  tsHist.forEach(smp => {
+    if (smp[0] < t0) return;
+    const px = P.l + (smp[0] - t0) / TWIN * pw;
+    for (let i = 0; i < smp[1].length; i++){
+      tp.fillStyle = speedColor(smp[2][i]);
+      tp.fillRect(px - 1.4, P.t + ph - smp[1][i] / L * ph - 1.4, 2.8, 2.8);
+    }
   });
-  sp.strokeStyle = '#0e7c86'; sp.lineWidth = 2; sp.lineJoin = 'round';
-  sp.beginPath();
-  speedHist.forEach(([t2, v], i) => {
-    const x = P.l + (i / Math.max(1, speedHist.length - 1)) * pw;
-    const y = P.t + ph - Math.min(MPH(v), vMaxD) / vMaxD * ph;
-    if (i === 0) sp.moveTo(x, y); else sp.lineTo(x, y);
+  tp.strokeStyle = '#d6dae2'; tp.lineWidth = 1.2; tp.strokeRect(P.l, P.t, pw, ph);
+  tp.fillStyle = '#9aa1ad'; tp.font = '10px ' + SANS;
+  [0, 200, 400, 600].forEach(x => {
+    tp.textAlign = 'right'; tp.fillText(x, P.l - 4, P.t + ph - x / L * ph + 3);
   });
-  sp.stroke();
-  sp.fillStyle = '#4b5563'; sp.font = '600 11px ' + SANS; sp.textAlign = 'left';
-  sp.fillText('mean ring speed, last 60 s (mph)', P.l, 14);
+  for (let tt = Math.ceil(t0 / 10) * 10; tt <= t1; tt += 10){
+    tp.textAlign = 'center'; tp.fillText(Math.round(tt) + 's', P.l + (tt - t0) / TWIN * pw, P.t + ph + 13);
+  }
+  tp.fillStyle = '#4b5563'; tp.font = '600 10px ' + SANS; tp.textAlign = 'left';
+  tp.fillText('y: ring position (m) · x: time — trajectories wrap top↔bottom', P.l, TS.height - 3);
 }
 
 function loop(ts){
@@ -265,9 +278,13 @@ function loop(ts){
   const mean = vs.reduce((a, b) => a + b, 0) / vs.length;
   speedHist.push([simT, mean]);
   while (speedHist.length > 600) speedHist.shift();
+  if (frame % 3 === 0){
+    tsHist.push([simT, cars.map(c2 => c2.x), cars.map(c2 => c2.v)]);
+    while (tsHist.length && tsHist[0][0] < simT - TWIN) tsHist.shift();
+  }
   draw();
   if (frame % 6 === 0){
-    drawSpark();
+    drawTSD();
     const vmin = Math.min(...vs);
     const jammed = vs.filter(v => MPH(v) < 9).length;
     const last30 = speedHist.slice(-300);
@@ -296,6 +313,7 @@ el('perturb').addEventListener('click', () => {
 });
 el('nn').addEventListener('input', () => { el('nnV').textContent = el('nn').value + ' cars'; initRing(); });
 el('vl').addEventListener('input', () => { el('vlV').textContent = (+el('vl').value < 34 ? el('vl').value + ' mph' : 'none'); });
+el('recClear').addEventListener('click', () => { tsHist = []; });
 el('nnV').textContent = el('nn').value + ' cars';
 el('vlV').textContent = 'none';
 initRing();

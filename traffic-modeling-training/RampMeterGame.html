@@ -79,6 +79,10 @@
   <a href="ObservationMeasurement.html">Counting, Estimation &amp; Correlated Data</a>
   <h4>Ch. 7 — Scheduled Transportation</h4>
   <a href="ScheduledTransportation.html">Waiting Time &amp; Bus Bunching</a>
+  <h4>Ch. 8 — Car-Following Models</h4>
+  <a href="CarFollowing.html">OVM · FVDM · Gipps · IDM</a>
+  <h4>Ch. 9 — Lane Changing</h4>
+  <a href="LaneChanging.html">MOBIL — Politeness &amp; Safety</a>
 </nav>
 
 <div class="container">
@@ -251,8 +255,8 @@ function draw(){
   const y = 110;
   // ── on-ramp: tapered wedge that meets the freeway edge flush ──
   const mx = XP(XM);
-  const foot = [mx - 330, y + 150];
-  const tipL = [mx - 96, y + 16], tipR = [mx + 12, y + 16];   // taper along band bottom
+  const foot = [mx - 300, y + 150];
+  const tipL = [mx - 54, y + 16], tipR = [mx + 52, y + 16];   // taper straddles the insertion point
   const CT = [(tipL[0] + tipR[0]) / 2, y + 16];               // centerline tip
   const dxr = CT[0] - foot[0], dyr = CT[1] - foot[1];
   const lenR = Math.hypot(dxr, dyr);
@@ -305,7 +309,7 @@ function draw(){
     cx.fillText('+' + (rampQ - 12) + ' more waiting', foot[0] - 10, foot[1] + 28);
   }
   // mainline cars — fresh merges glide from the stop bar onto the lane
-  const MDUR = 1.8;                                    // sim-seconds of merge glide
+  const MDUR = 1.1;                                    // sim-seconds of merge glide
   cars.forEach(c2 => {
     const tx = XP(c2.x), ty = y;
     let px2 = tx, py2 = ty, rot = 0;
