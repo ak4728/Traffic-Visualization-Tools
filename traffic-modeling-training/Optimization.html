@@ -356,6 +356,79 @@ function drawVeh(ctx, x, y, color, s=1){
   ctx.fillRect(x-L*0.3,  y-Wd*0.3, L*0.16, Wd*0.6);  // rear window
 }
 
+// vehicle rotated to its heading th (radians)
+function drawVehR(ctx, x, y, th, color, s=1){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(th);
+  const L=18*s, Wd=12*s;
+  ctx.save();
+  ctx.shadowColor='rgba(16,24,40,0.35)'; ctx.shadowBlur=3*s; ctx.shadowOffsetY=1;
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.roundRect(-L/2, -Wd/2, L, Wd, 3*s); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=1.6*s;
+  ctx.beginPath(); ctx.roundRect(-L/2, -Wd/2, L, Wd, 3*s); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  ctx.fillRect(L*0.08, -Wd*0.3, L*0.2, Wd*0.6);
+  ctx.fillRect(-L*0.3, -Wd*0.3, L*0.16, Wd*0.6);
+  ctx.restore();
+}
+
+// polyline with circular fillets at each interior corner, parametrized by
+// arclength — at(s) returns [x, y, heading]; sAt[i] is the distance at the
+// i-th original vertex (arc midpoint for rounded corners), so link
+// boundaries can be mapped onto the smoothed path
+function makePath(pts, R){
+  const segs=[], sAt=[0];
+  let total=0, cur=pts[0];
+  const norm=a=>{ while(a>Math.PI)a-=2*Math.PI; while(a<-Math.PI)a+=2*Math.PI; return a; };
+  for(let i=1;i<pts.length;i++){
+    const B=pts[i];
+    if(i===pts.length-1){
+      const len=Math.hypot(B[0]-cur[0],B[1]-cur[1]);
+      segs.push({t:'l',a:cur,th:Math.atan2(B[1]-cur[1],B[0]-cur[0]),len});
+      total+=len; sAt.push(total);
+      break;
+    }
+    const Cn=pts[i+1];
+    const th1=Math.atan2(B[1]-cur[1],B[0]-cur[0]);
+    const th2=Math.atan2(Cn[1]-B[1],Cn[0]-B[0]);
+    const dth=norm(th2-th1);
+    const lin=Math.hypot(B[0]-cur[0],B[1]-cur[1]);
+    const lout=Math.hypot(Cn[0]-B[0],Cn[1]-B[1]);
+    if(Math.abs(dth)<0.03){                       // effectively straight
+      segs.push({t:'l',a:cur,th:th1,len:lin});
+      total+=lin; sAt.push(total); cur=B; continue;
+    }
+    const tt=Math.min(R*Math.tan(Math.abs(dth)/2), 0.45*lin, 0.45*lout);
+    const r=tt/Math.tan(Math.abs(dth)/2);
+    const lenL=lin-tt;
+    segs.push({t:'l',a:cur,th:th1,len:lenL}); total+=lenL;
+    const P1=[B[0]-Math.cos(th1)*tt, B[1]-Math.sin(th1)*tt];
+    const side=Math.sign(dth);
+    const cc=[P1[0]-r*side*Math.sin(th1), P1[1]+r*side*Math.cos(th1)];
+    const arcLen=r*Math.abs(dth);
+    segs.push({t:'c',c:cc,r,a0:th1-side*Math.PI/2,dth,len:arcLen});
+    total+=arcLen/2; sAt.push(total); total+=arcLen/2;
+    cur=[B[0]+Math.cos(th2)*tt, B[1]+Math.sin(th2)*tt];
+  }
+  return {
+    len: total, sAt,
+    at(s){
+      s=Math.max(0, Math.min(s, total-0.001));
+      for(const g of segs){
+        if(s<=g.len){
+          if(g.t==='l') return [g.a[0]+Math.cos(g.th)*s, g.a[1]+Math.sin(g.th)*s, g.th];
+          const f=s/g.len, ang=g.a0+g.dth*f;
+          return [g.c[0]+g.r*Math.cos(ang), g.c[1]+g.r*Math.sin(ang), ang+Math.sign(g.dth)*Math.PI/2];
+        }
+        s-=g.len;
+      }
+      const g=segs[segs.length-1];
+      return [g.a[0]+Math.cos(g.th)*g.len, g.a[1]+Math.sin(g.th)*g.len, g.th];
+    }
+  };
+}
+
 function tooltipCard(ctx, x, y, rows, P, pw, ph){
   ctx.font='600 12px '+SANS;
   const tw=Math.max(...rows.map(r=>ctx.measureText(r[0]).width))+22;
@@ -809,6 +882,10 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const OD_COL={'11':'#0e7c86','12':'#2c5378','21':'#b45309','22':'#8c3a4c'};
   const OD_NAME={'11':'O1→D1','12':'O1→D2','21':'O2→D1','22':'O2→D2'};
   let odCars=[];
+  // animation clock + measured a→b travel times per route (model minutes)
+  const K2=0.45, T_ACC=2.0;   // sim-s per model-min; access links 1.5 mi @ 45 mph ≈ 2 min
+  let simT2=0, tMeas2={N:[], S:[]};
+  const measAvg=arr2=>arr2.length?arr2.reduce((p,q2)=>p+q2,0)/arr2.length:null;
   function drawNet(){
     cx.clearRect(0,0,W,H);
     cx.fillStyle='#fff'; cx.fillRect(0,0,W,H);
@@ -876,10 +953,10 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         [WPS[0], WPS[1]+82,'✓ weighted w = '+((1-a.s)*100).toFixed(0)+'% — both routes pull every estimate', '#e3f4f2', '#0e6e63']
       ];
     }
-    // pass 2: moving vehicles (colored by O-D pair)
+    // pass 2: moving vehicles (colored by O-D pair), rotated to their heading
     odCars.forEach(c=>{
-      const [x,y]=carXY2(c);
-      drawVeh(cx, x, y, OD_COL[c.od], 1.1);
+      const [x,y,th]=carXY2(c);
+      drawVehR(cx, x, y, th, OD_COL[c.od], 1.1);
     });
     // pass 3: label chips on top
     Object.keys(LINKS).forEach(l=>{
@@ -901,7 +978,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.fillStyle=col; cx.textAlign='center';
       cx.fillText(txt, mid[0], mid[1]+off+1);
       cx.fillStyle='#6b7280'; cx.font='600 11px '+SANS;
-      const tSfx = l==='LN' ? ' · t = '+a.tN.toFixed(2)+' min' : l==='LS' ? ' · t = '+a.tS.toFixed(2)+' min' : '';
+      const msr = l==='LN' ? measAvg(tMeas2.N) : l==='LS' ? measAvg(tMeas2.S) : null;
+      const tSfx = l==='LN' ? ' · BPR '+a.tN.toFixed(2)+' min'+(msr!==null?' · sim ⌀ '+msr.toFixed(2):'')
+                 : l==='LS' ? ' · BPR '+a.tS.toFixed(2)+' min'+(msr!==null?' · sim ⌀ '+msr.toFixed(2):'') : '';
       cx.fillText(L.name+(counted?' — vol / count':' — no count')+tSfx, mid[0], mid[1]+off+19);
     });
     // method chips on top of everything
@@ -1072,14 +1151,25 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     return kk-1;
   }
   function rNegBin2(mu){ return rPoisson2(rGamma2(NB_R2)*(mu/NB_R2)); }
-  const seg2=(a,b,u)=>[a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u];
+  // smoothed trajectories: full O→a→wp→b→D path with rounded corners, so
+  // cars turn through the nodes instead of sliding straight over them
+  const PATH2={};
+  function pathFor(od, mid){
+    const key=od+mid;
+    if(!PATH2[key]) PATH2[key]=makePath([
+      NODES[od[0]==='1'?'O1':'O2'], NODES.a,
+      mid==='N'?WPN:WPS, NODES.b,
+      NODES[od[1]==='1'?'D1':'D2']
+    ], 34);
+    return PATH2[key];
+  }
   function carXY2(c){
-    if(c.phase===0) return seg2(NODES[c.od[0]==='1'?'O1':'O2'], NODES.a, c.u);
-    if(c.phase===1){
-      const wp=c.mid==='N'?WPN:WPS;
-      return c.u<0.5 ? seg2(NODES.a,wp,c.u/0.5) : seg2(wp,NODES.b,(c.u-0.5)/0.5);
-    }
-    return seg2(NODES.b, NODES[c.od[1]==='1'?'D1':'D2'], c.u);
+    const p=pathFor(c.od, c.mid);
+    let s;
+    if(c.phase===0)      s=c.u*p.sAt[1];
+    else if(c.phase===1) s=p.sAt[1]+c.u*(p.sAt[3]-p.sAt[1]);
+    else                 s=p.sAt[3]+c.u*(p.len-p.sAt[3]);
+    return p.at(s);   // [x, y, heading]
   }
   let lastSim2=null;
   function simLoop2(ts){
@@ -1095,27 +1185,44 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         odCars.push({od, phase:0, u:Math.random()*0.05, mid: Math.random()<a.s?'N':'S'});
       }
     });
-    // move — mid-route duration scales with the congested route time.
-    // Newell-style spacing per link: within each lane group a car can never
-    // pass or overlap its leader (minimum front-to-front spacing in u units)
+    // move — free-flow durations anchored to link speed limits (access
+    // roads ~2 min at 45 mph; routes at their BPR-congested time), K2 sim-
+    // seconds per model-minute. Newell-style spacing per link: within each
+    // lane group a car can never pass or overlap its leader
+    simT2+=sdt;
     const GAPU = 0.055;
+    const gkOf = c => c.phase===0 ? 'e'+c.od[0] : c.phase===1 ? 'm'+c.mid : 'x'+c.od[1];
     const grp = {};
-    odCars.forEach(c=>{
-      const gk = c.phase===0 ? 'e'+c.od[0] : c.phase===1 ? 'm'+c.mid : 'x'+c.od[1];
-      (grp[gk] = grp[gk] || []).push(c);
-    });
+    odCars.forEach(c=>{ const gk=gkOf(c); (grp[gk] = grp[gk] || []).push(c); });
     Object.values(grp).forEach(g=>{
       g.sort((p,q2)=>q2.u-p.u);
       g.forEach((c,i2)=>{
         let dur;
-        if(c.phase===0) dur=1.4;
-        else if(c.phase===1) dur=2.2*(c.mid==='N' ? a.tN/RT.N.tf : a.tS/RT.S.tf);
-        else dur=1.4;
+        if(c.phase===0) dur=K2*T_ACC;
+        else if(c.phase===1) dur=K2*(c.mid==='N' ? a.tN : a.tS);
+        else dur=K2*T_ACC;
         let target=c.u+sdt/dur;
         if(i2>0) target=Math.min(target, g[i2-1].u-GAPU);
         c.u=Math.max(c.u, target);
-        if(c.u>=1){ c.u=0; c.phase++; }
       });
+    });
+    // link transitions with GAP ACCEPTANCE: a car merges onto the next link
+    // only if no vehicle already occupies its entry — otherwise it yields
+    // at the node and its followers queue behind it
+    odCars.forEach(c=>{
+      if(c.u<1) return;
+      if(c.phase===2){ c.phase=3; return; }
+      const tgt = c.phase===0 ? 'm'+c.mid : 'x'+c.od[1];
+      const clear = !odCars.some(o=>o!==c && o.phase<3 && gkOf(o)===tgt && o.u<GAPU*1.1);
+      if(clear){
+        if(c.phase===0) c.tIn=simT2;
+        else {
+          const tm=(simT2-c.tIn)/K2;               // measured a→b time, model min
+          const arr2=tMeas2[c.mid];
+          arr2.push(tm); if(arr2.length>12) arr2.shift();
+        }
+        c.phase++; c.u=0;
+      } else c.u=0.999;                            // yield at the node
     });
     odCars=odCars.filter(c=>c.phase<3);
     drawNet();
@@ -1415,14 +1522,16 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   // NegBin(mean μ, dispersion r): Gamma-Poisson mixture → variance μ(1+μ/r) > μ
   function rNegBin(mu){ return rPoisson(rGamma(NB_R)*(mu/NB_R)); }
 
-  const seg=(a,b,u)=>[a[0]+(b[0]-a[0])*u, a[1]+(b[1]-a[1])*u];
+  // smoothed full-route paths (rounded corners at the diverge, waypoint and
+  // merge) so vehicles turn through the geometry instead of sliding straight
+  const UEPATH=[0,1,2].map(r=>makePath([O, DV, WPS2[r], M, DEST], 30));
   function carXY(c){
-    if(c.phase===0) return seg(O,DV,c.d/LE);
-    if(c.phase===1){
-      const [l1,l2]=RL[c.route];
-      return c.d<l1 ? seg(DV,WPS2[c.route],c.d/l1) : seg(WPS2[c.route],M,(c.d-l1)/l2);
-    }
-    return seg(M,DEST,c.d/LX);
+    const p=UEPATH[c.route];
+    let s;
+    if(c.phase===0)      s=(c.d/LE)*p.sAt[1];
+    else if(c.phase===1) s=p.sAt[1]+(c.d/RLEN[c.route])*(p.sAt[3]-p.sAt[1]);
+    else                 s=p.sAt[3]+(c.d/LX)*(p.len-p.sAt[3]);
+    return p.at(s);   // [x, y, heading]
   }
 
   function simLoop(ts){
@@ -1472,12 +1581,17 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       }
       c.a=idmA3(c.v, 150, TE, s, dv);
     });
-    // routes: per-route IDM with route-specific v0 and time gap
+    // routes: per-route IDM with route-specific v0 and time gap; the FRONT
+    // car additionally car-follows the rear vehicle of the shared exit link
+    // across the merge node M, so approaches to a busy merge slow physically
+    let xRear=null;
+    groups.x.forEach(o=>{ if(!xRear || o.d<xRear.d) xRear=o; });
     [0,1,2].forEach(r=>{
       const g=groups['r'+r];
       g.forEach((c,i2)=>{
         let s=1e9, dv=0;
         if(i2>0){ s=g[i2-1].d-c.d-CL; dv=c.v-g[i2-1].v; }
+        else if(xRear){ s=(RLEN[r]-c.d)+xRear.d-CL; dv=c.v-xRear.v; }
         c.a=idmA3(c.v, V0R[r], TR[r], s, dv);
       });
     });
@@ -1486,14 +1600,25 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       c.v=Math.max(0, c.v+c.a*sdt);
       c.d+=c.v*sdt;
     });
-    // transitions
+    // transitions with GAP ACCEPTANCE: a car enters the next link only if
+    // its entry is physically clear — otherwise it yields at the node
     cars2.forEach(c=>{
-      if(c.phase===0 && c.d>=LE){ c.phase=1; c.d=0; c.tEnter=simT3; }
+      if(c.phase===0 && c.d>=LE){
+        const rg=cars2.filter(o=>o.phase===1 && o.route===c.route);
+        const rearR=rg.length ? Math.min(...rg.map(o=>o.d)) : 1e9;
+        if(rearR>CL+S0P){ c.phase=1; c.d=0; c.tEnter=simT3; }
+        else { c.d=LE; c.v=0; }
+      }
       else if(c.phase===1 && c.d>=RLEN[c.route]){
-        const tm=(simT3-c.tEnter)/KAPPA;             // model minutes
-        tMeas[c.route].push(tm);
-        if(tMeas[c.route].length>10) tMeas[c.route].shift();
-        c.phase=2; c.d=0;
+        const xg=cars2.filter(o=>o.phase===2);
+        const rearX=xg.length ? Math.min(...xg.map(o=>o.d)) : 1e9;
+        if(rearX>CL+S0P){
+          const tm=(simT3-c.tEnter)/KAPPA;           // model minutes
+          tMeas[c.route].push(tm);
+          if(tMeas[c.route].length>10) tMeas[c.route].shift();
+          c.phase=2; c.d=0;
+        }
+        else { c.d=RLEN[c.route]; c.v=0; }           // yield at the merge
       }
     });
     cars2=cars2.filter(c=>!(c.phase===2 && c.d>=LX));
@@ -1535,16 +1660,17 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     scx.fillText('route choice — P = this iteration\'s shares', DV[0], DV[1]+32);
     // labels
     scx.fillStyle='#6b7280'; scx.font='600 11px '+SANS; scx.textAlign='left';
-    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — IDM car-following: congestion & delay are physical, and speeds adapt gradually after an iteration step`, 16, 24);
+    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — IDM car-following with gap acceptance at the merge: congestion, queuing and delay are physical`, 16, 24);
     const tt=tally[0]+tally[1]+tally[2];
     if(tt>0){
       const parts=tally.map((x,i2)=>`R${i2+1} ${(100*x/tt).toFixed(0)}%`);
       scx.fillText(`realized choices at this iteration: ${parts.join(' · ')}  (${tt} veh sampled)`, 16, SH-12);
     }
-    // vehicles: gray until they pass the choice node, then route-colored
+    // vehicles: gray until they pass the choice node, then route-colored;
+    // rotated to the smoothed-path heading
     cars2.forEach(c=>{
-      const [x,y]=carXY(c);
-      drawVeh(scx, x, y, c.phase===0 ? '#6b7280' : RCOLS[c.route], 0.95);
+      const [x,y,th]=carXY(c);
+      drawVehR(scx, x, y, th, c.phase===0 ? '#6b7280' : RCOLS[c.route], 0.95);
     });
     scx.fillStyle='#1f2937'; scx.font='600 12px '+SANS; scx.textAlign='right';
     scx.fillText(`iteration ${Math.min(k,len)} · ${NAMES[el('ueSel').value]}`, SW-16, 24);
