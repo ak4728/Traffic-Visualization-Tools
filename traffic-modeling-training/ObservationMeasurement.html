@@ -88,7 +88,8 @@
       <span class="help">?<span class="tip">
         <b>Counting error</b> (§6.1.4, §6.2.1): vehicle arrivals behave like a Poisson process, so a count N in a window T has variance equal to its mean. The flow estimate q̂ = N/T then has relative error 1/√(counted vehicles) — to halve the error you must count four times as long. The histogram shows 400 simulated observation windows; the smooth curve is the normal approximation.<br><br>
         Headways of a Poisson process are exponential ("forgetful", §6.1.5): the histogram in the corner shows the simulated headways against the exponential density.<br><br>
-        <b>Correlated samples</b> (§6.2.1.1, §6.2.2): a queue evolves slowly — successive cycles remember each other. Averaging one contiguous stretch of W cycles is NOT worth W independent observations: its error stops shrinking once W is short compared with the queue's relaxation time. The chart compares the error of contiguous-window averages against genuinely independent samples of the same size.
+        <b>Correlated samples</b> (§6.2.1.1, §6.2.2): a queue evolves slowly — successive cycles remember each other. Averaging one contiguous stretch of W cycles is NOT worth W independent observations: its error stops shrinking once W is short compared with the queue's relaxation time. The chart compares the error of contiguous-window averages against genuinely independent samples of the same size.<br><br>
+        <b>Random numbers</b>: every "random" arrival in these animations is computed by a deterministic recurrence (a pseudo-random number generator). The same seed replays the identical traffic day — which is a feature, not a bug — and a badly designed generator hides structure that can silently bias a simulation.
       </span></span>
     </span>
   </header>
@@ -99,12 +100,17 @@
       <div class="controls">
         <button class="mode on" data-m="count">📊 Counting error</button>
         <button class="mode" data-m="corr">🔁 Correlated samples (queues)</button>
+        <button class="mode" data-m="prng">🎲 Random numbers aren't random</button>
         <span id="gCount" style="display:contents">
           <div class="control-group"><label>true flow q</label><input type="range" id="qq" min="200" max="2000" step="50" value="800"><span class="val" id="qqV"></span></div>
           <div class="control-group"><label>window T</label><input type="range" id="tt" min="15" max="900" step="15" value="120"><span class="val" id="ttV"></span></div>
         </span>
         <span id="gCorr" style="display:none">
           <div class="control-group"><label>saturation x</label><input type="range" id="xx" min="0.5" max="0.97" step="0.01" value="0.9"><span class="val" id="xxV"></span></div>
+        </span>
+        <span id="gPrng" style="display:none">
+          <div class="control-group"><label>seed</label><input type="range" id="sd" min="1" max="999" step="1" value="99"><span class="val" id="sdV"></span></div>
+          <div class="control-group"><label>draws plotted</label><input type="range" id="np" min="500" max="5000" step="250" value="2500"><span class="val" id="npV"></span></div>
         </span>
       </div>
     </div>
@@ -381,31 +387,145 @@ function cardsCorr(){
   paramsDirty = false;
 }
 
+// ── PRNG MODE: why "random" numbers are not random ─────────────────
+let prngCache = null, prngProg = 0;
+function buildPrng(){
+  const s = +el('sd').value, n = +el('np').value;
+  const lehmer = st => (st * 16807) % 2147483647;
+  // three short sequences: seed s (twice — identical) and seed s+1
+  const strip = s0 => { const out = []; let a = s0; for (let i = 0; i < 9; i++){ a = lehmer(a); out.push(a / 2147483647); } return out; };
+  const seqA = strip(s), seqC = strip(s + 1);
+  // good generator: Park–Miller consecutive pairs (u_k, u_k+1)
+  const good = []; let g = lehmer(s), prev = g / 2147483647, sum = prev;
+  for (let i = 0; i < n; i++){ g = lehmer(g); const u = g / 2147483647; good.push([prev, u]); sum += u; prev = u; }
+  // bad generator: tiny LCG x' = (137x + 187) mod 256 — uniform in 1-D,
+  // but consecutive pairs fall on a lattice (Marsaglia: "random numbers
+  // fall mainly in the planes")
+  const bad = []; let b = (s % 256) || 1, bp = b / 256;
+  for (let i = 0; i < n; i++){ b = (137 * b + 187) % 256; const u = b / 256; bad.push([bp, u]); bp = u; }
+  // toy LCG with a SHORT period you can watch repeat: x' = (13x + 7) mod 64
+  const tiny = []; let t2 = s % 64;
+  for (let k = 0; k < 130; k++){ tiny.push(t2); t2 = (13 * t2 + 7) % 64; }
+  prngCache = { s, n, seqA, seqC, good, bad, tiny, mean: sum / (n + 1) };
+  prngProg = 0;
+}
+function framePrng(dt){
+  if (!prngCache || prngCache.s !== +el('sd').value || prngCache.n !== +el('np').value) buildPrng();
+  const { s, n, seqA, seqC, good, bad, tiny } = prngCache;
+  prngProg = Math.min(n, prngProg + dt * 1200);              // points revealed/s
+  const shown = Math.max(40, Math.floor(prngProg));
+
+  cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
+  // ── the recurrence itself ──
+  cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
+  cx.fillText('every "random" arrival on this site comes from ONE deterministic line — a Lehmer / Park–Miller linear congruential generator:', 40, 30);
+  cx.fillStyle = '#f3f4f8';
+  cx.beginPath(); cx.roundRect(40, 42, 560, 30, 6); cx.fill();
+  cx.fillStyle = '#0e7c86'; cx.font = '700 15px Consolas, monospace';
+  cx.fillText('seed = (seed × 16807) mod 2147483647    u = seed / 2147483647', 52, 62);
+  // sequence strips
+  const num = (x2, y2, v, col) => { cx.fillStyle = col; cx.font = '600 12px Consolas, monospace'; cx.fillText(v.toFixed(3), x2, y2); };
+  const rowLbl = (y2, t2, col) => { cx.fillStyle = col; cx.font = '600 12px ' + SANS; cx.fillText(t2, 40, y2); };
+  rowLbl(102, 'seed = ' + s + ':', '#2c5378');
+  rowLbl(126, 'seed = ' + s + ' again:', '#0e7c86');
+  rowLbl(150, 'seed = ' + (s + 1) + ':', '#a4161a');
+  for (let i = 0; i < 9; i++){
+    num(190 + i * 78, 102, seqA[i], '#2c5378');
+    num(190 + i * 78, 126, seqA[i], '#0e7c86');
+    num(190 + i * 78, 150, seqC[i], '#a4161a');
+  }
+  cx.fillStyle = '#6b7280'; cx.font = '600 11px ' + SANS;
+  cx.fillText('→ the same seed reproduces the sequence EXACTLY (that is how “Reset” replays the identical traffic day); a neighbouring seed shares nothing', 190, 172);
+
+  // ── three panels ──
+  const PW = 344, PH = 430, PT = 240, PXs = [40, 448, 856];
+  const title = (i2, t2) => { cx.fillStyle = '#1f2937'; cx.font = '600 12.5px ' + SANS; cx.textAlign = 'left'; cx.fillText(t2, PXs[i2], PT - 12); };
+  const box = i2 => { cx.strokeStyle = '#d6dae2'; cx.strokeRect(PXs[i2], PT, PW, PH); };
+  const cap = (i2, lines, col) => { cx.font = '600 11px ' + SANS; cx.fillStyle = col || '#6b7280'; lines.forEach((t2, j) => cx.fillText(t2, PXs[i2], PT + PH + 20 + j * 15)); };
+
+  // panel 1: toy generator repeats — the PERIOD
+  title(0, 'a generator is a loop: x′ = (13x + 7) mod 64');
+  box(0);
+  const X1 = k => PXs[0] + 10 + k / 129 * (PW - 20), Y1 = v => PT + PH - 14 - v / 63 * (PH - 28);
+  cx.strokeStyle = '#eef0f4';
+  cx.beginPath(); cx.moveTo(X1(64), PT); cx.lineTo(X1(64), PT + PH); cx.stroke();
+  cx.strokeStyle = '#c9ced6'; cx.setLineDash([5, 4]);
+  cx.beginPath(); cx.moveTo(X1(64), PT); cx.lineTo(X1(64), PT + PH); cx.stroke(); cx.setLineDash([]);
+  tiny.forEach((v, k2) => {
+    cx.fillStyle = k2 < 64 ? '#2c5378' : '#b45309';
+    cx.beginPath(); cx.arc(X1(k2), Y1(v), 2.6, 0, Math.PI * 2); cx.fill();
+  });
+  cx.fillStyle = '#b45309'; cx.font = '600 11px ' + SANS;
+  cx.fillText('draw #64 onward: the exact same', X1(50), PT + 22);
+  cx.fillText('sequence again (period = 64)', X1(50), PT + 37);
+  cap(0, ['x-axis: draw number k · y-axis: value x_k. With only 64 possible', 'states the cycle closes after 64 draws — every LCG cycles; a good', 'one just has a period of billions (Park–Miller: 2³¹ − 2).']);
+
+  // panel 2: good generator — pairs fill the square
+  title(1, 'good generator: consecutive pairs (uₖ, uₖ₊₁)');
+  box(1);
+  cx.fillStyle = 'rgba(44,83,120,0.55)';
+  for (let i2 = 0; i2 < Math.min(shown, good.length); i2++){
+    const p = good[i2];
+    cx.fillRect(PXs[1] + 4 + p[0] * (PW - 8), PT + 4 + (1 - p[1]) * (PH - 8), 2, 2);
+  }
+  cap(1, ['each dot: one draw against the next. A well-designed generator', 'fills the square with no visible structure — pairs behave like', 'independent uniforms (this is the generator the whole site uses).']);
+
+  // panel 3: bad generator — the lattice
+  title(2, 'bad generator: x′ = (137x + 187) mod 256');
+  box(2);
+  cx.fillStyle = 'rgba(164,22,26,0.6)';
+  for (let i2 = 0; i2 < Math.min(shown, bad.length); i2++){
+    const p = bad[i2];
+    cx.fillRect(PXs[2] + 4 + p[0] * (PW - 8), PT + 4 + (1 - p[1]) * (PH - 8), 2, 2);
+  }
+  cap(2, ['SAME 1-D histogram as the good one — perfectly uniform — but', 'consecutive pairs land on a few parallel lines (Marsaglia 1968:', '“random numbers fall mainly in the planes”). Fed into a simulation,', 'this structure silently correlates “independent” headways.'], '#a4161a');
+
+  cx.textAlign = 'left';
+  if (paramsDirty || frame % 30 === 0) cardsPrng();
+}
+function cardsPrng(){
+  const { s, mean } = prngCache;
+  el('story').innerHTML = '<b>Pseudo-random numbers.</b> A computer cannot roll dice: it iterates a fixed recurrence u<sub>k+1</sub> = f(u<sub>k</sub>) whose outputs merely <i>look</i> random. Everything is determined by the <b>seed</b> — the Poisson counts, exponential headways and queue paths in the other two panels are all replays of this one recurrence. Because the state space is finite the sequence must eventually revisit a state, and from there it repeats forever: the <b>period</b>.';
+  el('lesson').innerHTML = '<b>Determinism is a feature.</b> A seeded run can be <i>reproduced exactly</i> — you can debug the one day where the queue exploded, and you can compare a signal retiming against the base case under the <b>same</b> arrival pattern (common random numbers), so the difference you measure is the treatment, not luck. Change the seed and you get a fresh “day”; replicate over many seeds to estimate variability (§6.2). Quality matters too: a generator that is uniform in 1-D can still hide lattice structure in higher dimensions — modern simulators use generators such as the Mersenne Twister or PCG, never a raw LCG for anything cryptographic.';
+  const setc = (i, t2, v) => { el('c' + i + 't').textContent = t2; el('c' + i).innerHTML = v; };
+  setc(1, 'seed', s + '');
+  setc(2, 'toy LCG period', '64<small> draws</small>');
+  setc(3, 'Park–Miller period', '2³¹ − 2 <small>≈ 2.1 billion</small>');
+  setc(4, 'mean of drawn u (should → 0.5)', mean.toFixed(4));
+  setc(5, '1-D uniformity', 'both generators pass');
+  setc(6, '2-D pairs', 'good: cloud · bad: lattice');
+  paramsDirty = false;
+}
+
 // ── loop ────────────────────────────────────────────────────────────
 function loop(ts){
   if (lastRAF === null) lastRAF = ts;
   let dt = (ts - lastRAF) / 1000; lastRAF = ts;
   dt = Math.min(dt, 0.05);
   frame++;
-  if (mode === 'count') frameCount(dt); else frameCorr(dt);
+  if (mode === 'count') frameCount(dt); else if (mode === 'corr') frameCorr(dt); else framePrng(dt);
   requestAnimationFrame(loop);
 }
 function updateVals(){
   el('qqV').textContent = el('qq').value + ' veh/hr';
   el('ttV').textContent = el('tt').value + ' s';
   el('xxV').textContent = (+el('xx').value).toFixed(2);
+  el('sdV').textContent = el('sd').value;
+  el('npV').textContent = el('np').value + ' pts';
 }
 document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
   mode = b.dataset.m;
   document.querySelectorAll('.mode').forEach(y => y.classList.toggle('on', y === b));
   el('gCount').style.display = mode === 'count' ? 'contents' : 'none';
   el('gCorr').style.display = mode === 'corr' ? 'contents' : 'none';
-  paramsDirty = true; resetCount(); corrCache = null;
+  el('gPrng').style.display = mode === 'prng' ? 'contents' : 'none';
+  paramsDirty = true; resetCount(); corrCache = null; prngCache = null;
   updateVals();
-  (mode === 'count' ? frameCount : frameCorr)(0);
+  (mode === 'count' ? frameCount : mode === 'corr' ? frameCorr : framePrng)(0);
 }));
 ['qq','tt'].forEach(id => el(id).addEventListener('input', () => { paramsDirty = true; resetCount(); updateVals(); if (mode === 'count') frameCount(0); }));
 el('xx').addEventListener('input', () => { paramsDirty = true; corrCache = null; updateVals(); if (mode === 'corr') frameCorr(0); });
+['sd','np'].forEach(id => el(id).addEventListener('input', () => { paramsDirty = true; prngCache = null; updateVals(); if (mode === 'prng') framePrng(0); }));
 updateVals(); resetCount();
 frameCount(0);
 requestAnimationFrame(loop);
