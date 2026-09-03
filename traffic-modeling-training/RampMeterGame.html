@@ -33,7 +33,7 @@
   .banner { text-align: center; font-size: 1em; padding: 9px; border-radius: 9px; background: #e8f6f5; color: #0e6e63; font-weight: 700; margin-bottom: 8px; }
   .banner.bad { background: #fdecea; color: #a4161a; }
   .help { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 50%; background: #e8f4f5; color: #0f7b82; font-size: 0.72em; font-weight: 700; cursor: help; position: relative; vertical-align: middle; }
-  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 380px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
+  .help .tip { display: none; position: absolute; top: 22px; right: -10px; width: 390px; background: #fff; border: 1px solid #d6dae2; border-radius: 10px; padding: 10px 12px; font-size: 0.84rem; font-weight: 400; color: #374151; box-shadow: 0 8px 26px rgba(16,24,40,.16); z-index: 50; text-align: left; line-height: 1.45; }
   .help:hover .tip { display: block; }
   .help .tip a { color: #0f7b82; }
   @media (max-width: 1100px){ .layout { grid-template-columns: 1fr; } }
@@ -87,24 +87,24 @@
 <div class="container">
   <header>
     <h1>🎮 Ramp Metering</h1>
-    <span class="subtitle">Ch. 5 game — protect the mainline without strangling the ramp
+    <span class="subtitle">Ch. 5 game — a full micro-simulation: IDM car-following + MOBIL lane changing + gap-accepted merging
       <span class="help">?<span class="tip">
-        A 1.2 km freeway (IDM cars) with a busy on-ramp. Every merging car disturbs the mainline; too many merges too fast and the disturbances grow into a breakdown that rolls upstream — then <i>everybody</i> loses. Too slow a meter and the ramp queue explodes instead.<br><br>
-        <b>Your control:</b> the metering rate (one car per green). Total delay = mainline slowdown + ramp waiting, in vehicle-minutes, accumulated over a 3-minute episode.<br><br>
-        <b>Goal:</b> finish an episode with less total delay than the "no meter" baseline — then try to beat your own best. The sweet spot releases just under the spare mainline capacity at the merge, which is exactly the logic of ALINEA-style feedback metering.<br><br>
-        Inspired by the ramp-metering game at <a href="https://traffic-simulation.de/rampMeteringGame.html" target="_blank">traffic-simulation.de</a> (M. Treiber &amp; A. Kesting).
+        A 1.2 km <b>two-lane</b> freeway (IDM cars) with a busy on-ramp joining the right lane. Mainline drivers run <b>MOBIL</b> lane changes: they overtake slow traffic, drift back right (keep-right bias), and — near the merge — shift left to open the right lane for entering vehicles, the "zipper courtesy" you see on real freeways. Ramp cars queue at the meter, launch on green, and <b>yield at the nose</b> until an IDM-checked gap in the right lane actually works.<br><br>
+        <b>Your control:</b> the metering rate (one car per green). Total delay = mainline slowdown + ramp waiting, in vehicle-minutes, over a 3-minute episode.<br><br>
+        <b>Goal:</b> minimize total delay. Metering hard protects the mainline but drowns the ramp; wide open floods the right lane and the disturbance spreads to both lanes through lane changing. The sweet spot is ALINEA's logic: release just under the spare capacity of the merge.<br><br>
+        Models: IDM &amp; MOBIL from Treiber &amp; Kesting, <i>Traffic Flow Dynamics</i> (Ch. 11, 14); game inspired by <a href="https://traffic-simulation.de/rampMeteringGame.html" target="_blank">traffic-simulation.de</a>.
       </span></span>
     </span>
   </header>
 
   <div class="layout">
     <div class="panel">
-      <canvas id="road" width="1240" height="530"></canvas>
+      <canvas id="road" width="1240" height="560"></canvas>
       <div class="controls">
         <button class="action" id="go">▶ Start 3-minute episode</button>
-        <div class="control-group"><label>metering rate</label><input type="range" id="mr" min="1" max="12" step="1" value="5"><span class="val" id="mrV"></span></div>
-        <div class="control-group"><label>mainline demand</label><input type="range" id="qm" min="600" max="1200" step="50" value="1000"><span class="val" id="qmV"></span></div>
-        <div class="control-group"><label>ramp demand</label><input type="range" id="qr" min="50" max="300" step="25" value="200"><span class="val" id="qrV"></span></div>
+        <div class="control-group"><label>metering rate</label><input type="range" id="mr" min="2" max="20" step="1" value="8"><span class="val" id="mrV"></span></div>
+        <div class="control-group"><label>mainline demand</label><input type="range" id="qm" min="1200" max="2400" step="100" value="2000"><span class="val" id="qmV"></span></div>
+        <div class="control-group"><label>ramp demand</label><input type="range" id="qr" min="100" max="600" step="50" value="400"><span class="val" id="qrV"></span></div>
       </div>
     </div>
 
@@ -113,25 +113,26 @@
         <div class="banner" id="banner">set your metering rate, then start the episode</div>
         <div class="cards">
           <div class="card"><h3>episode clock</h3><div class="value" id="c1">—</div></div>
-          <div class="card"><h3>speed at merge</h3><div class="value" id="c2">—</div></div>
+          <div class="card"><h3>right-lane speed at merge</h3><div class="value" id="c2">—</div></div>
           <div class="card"><h3>ramp queue</h3><div class="value" id="c3">—</div></div>
           <div class="card"><h3>mainline delay</h3><div class="value" id="c4">—</div></div>
           <div class="card"><h3>ramp delay</h3><div class="value" id="c5">—</div></div>
           <div class="card"><h3>TOTAL delay</h3><div class="value" id="c6">—</div></div>
         </div>
-        <div class="cards" style="grid-template-columns:1fr 1fr">
-          <div class="card"><h3>best episode (lowest total)</h3><div class="value" id="cBest">—</div></div>
+        <div class="cards" style="grid-template-columns:1fr 1fr 1fr">
+          <div class="card"><h3>best episode</h3><div class="value" id="cBest">—</div></div>
           <div class="card"><h3>throughput past merge</h3><div class="value" id="cThr">—</div></div>
+          <div class="card"><h3>lane changes</h3><div class="value" id="cLC">—</div></div>
         </div>
       </div>
       <div class="panel">
         <div class="eqbox">
-          <b>The tradeoff you are steering</b><br>
-          <span class="note">The merge is a bottleneck: mainline demand + ramp releases must stay below its capacity or the freeway breaks down and discharges <i>below</i> capacity (the capacity-drop). Metering rations the ramp so the sum stays just under the line — mainline delay is bought down with ramp delay. The optimum is not "meter hard": every vehicle held on the ramp is delay too.</span>
+          <b>Three models, one road</b><br>
+          <span class="note"><b>IDM</b> keeps every car a safe dynamic gap behind its leader. <b>MOBIL</b> decides lane changes: safety first (new follower braking ≤ b_safe), then incentive with politeness p = 0.3 and a keep-right bias that flips to keep-<i>left</i> in the 250 m before the merge — so courtesy for merging traffic emerges from the model, not from a script. <b>Gap acceptance</b> governs the nose: a launched ramp car enters only when neither it nor the right-lane follower would need an impossible deceleration; otherwise it yields.</span>
         </div>
         <div class="eqbox" style="border-left-color:#b45309">
           <b>Playbook</b><br>
-          <span class="note">1) Run once with the meter wide open (24/min ≈ no meter) — watch the breakdown roll upstream. 2) Run at 6/min — mainline flows but the ramp queue balloons. 3) Find the rate that minimizes the total. 4) Raise mainline demand to 2,000 and find it again — the optimal rate falls as spare capacity shrinks.</span>
+          <span class="note">1) Meter wide open (20/min): watch the right lane sag at the merge and the disturbance leak into the left lane via lane changes. 2) 3/min: the mainline glides but the ramp queue explodes. 3) Find the minimum-total rate. 4) Push mainline demand to 2,400 — the optimum drops as spare capacity shrinks, and the courtesy shift to the left lane becomes easy to spot.</span>
         </div>
       </div>
     </div>
@@ -143,117 +144,169 @@
 const el = id => document.getElementById(id);
 const SANS = "'Segoe UI', system-ui, sans-serif";
 
-// ── IDM freeway with one on-ramp ────────────────────────────────────
+// ── world ───────────────────────────────────────────────────────────
 const LRD = 1200, XM = 800;                 // road length m, merge position
 const CARLEN = 5, V0 = 30, T = 1.25, S0 = 2, A0 = 1.1, B0 = 1.6;
 const MPH = ms => ms * 2.23694;
-const EPI = 180;                            // episode length s
+const EPI = 180;
+// MOBIL (fixed game parameters, Treiber Table 14.1 flavor)
+const P_POL = 0.3, B_SAFE = 2.5, D_TH = 0.2, A_BIAS = 0.25;
 
-let cars = [], simT = 0, running = false;
+let cars = [], rampCars = [], simT = 0, running = false;
 let nextMain = 0, nextRampArr = 0, nextGreen = 0;
-let rampQ = 0, dMain = 0, dRamp = 0, passed = 0, best = null;
+let rampQ = 0, dMain = 0, dRamp = 0, passed = 0, best = null, lcCount = 0;
 let seed = 5;
 function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
 function expo(mean){ return -Math.log(1 - rnd()) * mean; }
 
-let rampCars = [];                             // {d px-from-nose, state 'q'|'launch', born}
-function reset(){
-  cars = []; simT = 0; rampQ = 0; dMain = 0; dRamp = 0; passed = 0;
-  rampCars = [];
-  seed = 5;
-  nextMain = 0.5; nextRampArr = expo(3600 / (+el('qr').value)); nextGreen = 0;
-  // pre-populate
-  for (let x = 40; x < LRD; x += 60) cars.push({ x, v: V0 * 0.95 });
-  cars.sort((a, b) => b.x - a.x);           // front first
-}
-function idmA(v, s, dv){
+function idmA(v, v0, s, dv){
   s = Math.max(s, 0.01);
   const sStar = S0 + Math.max(0, v * T + v * dv / (2 * Math.sqrt(A0 * B0)));
-  return A0 * (1 - Math.pow(v / V0, 4) - Math.pow(sStar / s, 2));
+  return A0 * (1 - Math.pow(v / v0, 4) - Math.pow(sStar / s, 2));
 }
-function idm(dt){
-  for (let i = 0; i < cars.length; i++){
-    const c2 = cars[i];
-    const a = i > 0 ? idmA(c2.v, cars[i - 1].x - c2.x - CARLEN, c2.v - cars[i - 1].v)
-                    : idmA(c2.v, 1e9, 0);
-    c2.v = Math.max(0, c2.v + a * dt);
+function neighbors(c, lane){
+  let lead = null, foll = null, dLead = 1e9, dFoll = 1e9;
+  for (const o of cars){
+    if (o === c || o.lane !== lane) continue;
+    if (o.x >= c.x){ const d = o.x - c.x; if (d < dLead){ dLead = d; lead = o; } }
+    else { const d = c.x - o.x; if (d < dFoll){ dFoll = d; foll = o; } }
   }
-  cars.forEach(c2 => { c2.x += c2.v * dt; });
-  for (let i = cars.length - 1; i >= 0; i--){
-    if (cars[i].x > LRD){ cars.splice(i, 1); passed++; }
+  return { lead, foll, dLead, dFoll };
+}
+function accOf(c, lead, gapFF){
+  if (!lead) return idmA(c.v, c.v0 || V0, 1e9, 0);
+  return idmA(c.v, c.v0 || V0, gapFF - CARLEN, c.v - lead.v);
+}
+
+function reset(){
+  cars = []; rampCars = []; simT = 0; rampQ = 0; dMain = 0; dRamp = 0;
+  passed = 0; lcCount = 0;
+  seed = 5;
+  nextMain = 0.3; nextRampArr = expo(3600 / (+el('qr').value)); nextGreen = 0;
+  for (let x = 40; x < LRD; x += 65){
+    cars.push({ x, v: V0 * 0.95, lane: 0, lcT: -9, lcFrom: 0, cool: rnd() });
+    cars.push({ x: x + 30, v: V0 * 0.95, lane: 1, lcT: -9, lcFrom: 1, cool: rnd() });
   }
 }
+
+// ── MOBIL lane change (mainline) ────────────────────────────────────
+function tryChange(c){
+  const target = 1 - c.lane;
+  const cur = neighbors(c, c.lane);
+  const tgt = neighbors(c, target);
+  const aC  = accOf(c, cur.lead, cur.dLead);
+  const aCn = accOf(c, tgt.lead, tgt.dLead);
+  let aFn_new = 0, aFn_old = 0;
+  if (tgt.foll){
+    aFn_new = idmA(tgt.foll.v, V0, tgt.dFoll - CARLEN, tgt.foll.v - c.v);
+    aFn_old = accOf(tgt.foll, tgt.lead, tgt.dFoll + tgt.dLead);
+  }
+  let aFo_new = 0, aFo_old = 0;
+  if (cur.foll){
+    aFo_old = idmA(cur.foll.v, V0, cur.dFoll - CARLEN, cur.foll.v - c.v);
+    aFo_new = accOf(cur.foll, cur.lead, cur.dFoll + cur.dLead);
+  }
+  // safety
+  if (tgt.foll && aFn_new < -B_SAFE) return false;
+  if (tgt.dLead - CARLEN < 3 || tgt.dFoll - CARLEN < 3) return false;
+  // keep-right bias — flipped to keep-LEFT in the merge approach zone,
+  // so mainline drivers open the right lane for entering traffic
+  const inMergeZone = c.x > XM - 250 && c.x < XM + 30;
+  let biasTerm;
+  if (inMergeZone) biasTerm = target === 0 ? -A_BIAS * 1.6 : A_BIAS * 1.6;
+  else             biasTerm = target === 1 ? -A_BIAS : A_BIAS;
+  const lhs = (aCn - aC) + P_POL * ((aFn_new - aFn_old) + (aFo_new - aFo_old));
+  return lhs > D_TH + biasTerm;
+}
+
 function step(dt){
   if (!running) return;
   const sub = 4, h = dt / sub;
   for (let k = 0; k < sub; k++){
     simT += h;
-    // mainline inflow
+    // mainline inflow: pick the lane with more room at the entry
     nextMain -= h;
     if (nextMain <= 0){
-      const lastX = cars.length ? Math.min(...cars.map(c2 => c2.x)) : 1e9;
-      if (lastX > CARLEN + S0 + 6) cars.push({ x: 0, v: Math.min(V0, Math.max(5, lastX / T)) });
+      let bestLane = -1, bestRoom = -1;
+      for (const ln of [0, 1]){
+        let rear = 1e9;
+        cars.forEach(c2 => { if (c2.lane === ln && c2.x < rear) rear = c2.x; });
+        if (rear > bestRoom){ bestRoom = rear; bestLane = ln; }
+      }
+      if (bestRoom > CARLEN + S0 + 6){
+        cars.push({ x: 0, v: Math.min(V0, Math.max(6, bestRoom / T)), lane: bestLane, lcT: -9, lcFrom: bestLane, cool: rnd() });
+      }
       nextMain = expo(3600 / (+el('qm').value));
     }
-    // ramp arrivals: spawn at the visible foot and roll up to the queue
+    // ramp arrivals → visible queue rolling up from the foot
     nextRampArr -= h;
     if (nextRampArr <= 0){
       rampCars.push({ d: R_LEN - 6, state: 'q', born: simT });
       nextRampArr = expo(3600 / (+el('qr').value));
     }
-    // ramp car kinematics (px along the centerline, toward the nose at d = 0)
     for (let i = 0; i < rampCars.length; i++){
       const rc = rampCars[i];
       const target = i === 0 ? (rc.state === 'q' ? R_STOP : 3) : Math.max(rampCars[i - 1].d + 19, R_STOP + 19 * i);
       if (rc.d > target) rc.d = Math.max(target, rc.d - 75 * h);
     }
-    // meter: one launch per green, from the stop bar
+    // meter
     nextGreen -= h;
     if (nextGreen <= 0 && rampCars.length && rampCars[0].state === 'q' && rampCars[0].d <= R_STOP + 2){
       rampCars[0].state = 'launch';
       nextGreen = 60 / (+el('mr').value);
     }
-    // launched car reaches the nose → merge only if the gap REALLY works
-    // (MOBIL-style safety: neither the new follower nor the merger would
-    // have to brake beyond a safe limit) — otherwise it yields at the nose
+    // nose: gap acceptance against the RIGHT lane
     if (rampCars.length && rampCars[0].state === 'launch' && rampCars[0].d <= 4){
-      let up = null, down = null;
-      cars.forEach(c2 => {
-        if (c2.x <= XM && (up === null || c2.x > up.x)) up = c2;
-        if (c2.x > XM && (down === null || c2.x < down.x)) down = c2;
-      });
-      const vIn = Math.max(6, Math.min(20, down ? down.v + 2 : 16, up ? up.v + 2 : 16));
-      const gDn = down ? down.x - XM - CARLEN : 1e9;
-      const gUp = up ? XM - up.x - CARLEN : 1e9;
-      const aSelf = idmA(vIn, gDn, vIn - (down ? down.v : V0));
-      const aFoll = up ? idmA(up.v, gUp, up.v - vIn) : 0;
+      const probe = { x: XM, lane: 1 };
+      const nb = neighbors(probe, 1);
+      const vIn = Math.max(6, Math.min(20, nb.lead ? nb.lead.v + 2 : 16, nb.foll ? nb.foll.v + 2 : 16));
+      const gDn = nb.lead ? nb.dLead - CARLEN : 1e9;
+      const gUp = nb.foll ? nb.dFoll - CARLEN : 1e9;
+      const aSelf = idmA(vIn, gDn, vIn - (nb.lead ? nb.lead.v : V0));
+      const aFoll = nb.foll ? idmA(nb.foll.v, gUp, nb.foll.v - vIn) : 0;
       if (gDn > 4 && gUp > 4 && aFoll > -2.5 && aSelf > -3.5){
-        cars.push({ x: XM, v: vIn, mt: simT });
-        cars.sort((a2, b2) => b2.x - a2.x);
+        cars.push({ x: XM, v: vIn, lane: 1, mt: simT, lcT: -9, lcFrom: 1, cool: 2 });
         rampCars.shift();
       }
-      // else: keep yielding at the nose until a workable gap appears
     }
     rampQ = rampCars.length;
-    idm(h);
-    cars.sort((a2, b2) => b2.x - a2.x);
-    // delay accumulation (veh-s): mainline shortfall from free flow + ramp queue
+    // MOBIL decisions (staggered ~1 s)
+    for (const c2 of cars){
+      c2.cool -= h;
+      if (c2.cool > 0) continue;
+      c2.cool = 1.0 + rnd() * 0.3;
+      if (simT - (c2.mt || -9) < 1.5) continue;        // fresh merges settle first
+      if (tryChange(c2)){
+        c2.lcFrom = c2.lane; c2.lane = 1 - c2.lane; c2.lcT = simT;
+        c2.cool = 3; lcCount++;
+      }
+    }
+    // IDM per lane
+    for (const c2 of cars){
+      const nb = neighbors(c2, c2.lane);
+      c2.a = accOf(c2, nb.lead, nb.dLead);
+    }
+    for (const c2 of cars){
+      c2.v = Math.max(0, c2.v + c2.a * h);
+      c2.x += c2.v * h;
+    }
+    for (let i = cars.length - 1; i >= 0; i--){
+      if (cars[i].x > LRD){ cars.splice(i, 1); passed++; }
+    }
+    // delays
     let short = 0;
     cars.forEach(c2 => { short += Math.max(0, 1 - c2.v / (V0 * 0.97)); });
     dMain += short * h;
-    dRamp += rampQ * h;
+    dRamp += rampCars.length * h;
   }
   if (simT >= EPI){
     running = false;
     const tot = (dMain + dRamp) / 60;
     if (best === null || tot < best) best = tot;
-    finalBanner(tot);
+    const b2 = el('banner');
+    b2.className = 'banner' + (tot > 80 ? ' bad' : '');
+    b2.textContent = '🏁 episode over — total delay ' + tot.toFixed(1) + ' veh·min' + (best !== null && tot <= best ? '  ·  new best!' : '  ·  best ' + best.toFixed(1));
   }
-}
-function finalBanner(tot){
-  const b2 = el('banner');
-  b2.className = 'banner' + (tot > 60 ? ' bad' : '');
-  b2.textContent = '🏁 episode over — total delay ' + tot.toFixed(1) + ' veh·min' + (best !== null && tot <= best ? '  ·  new best!' : '  ·  best ' + best.toFixed(1));
 }
 
 // ── drawing ─────────────────────────────────────────────────────────
@@ -262,17 +315,19 @@ const W = C.width, H = C.height;
 let lastRAF = null, frame = 0;
 const XP = x => 30 + x / LRD * (W - 60);
 
-// ── ramp geometry (canvas coords), shared by physics & drawing ──────
-const RY = 110;
+// lane geometry
+const L0Y = 96, L1Y = 128;                 // lane centerlines (left lane on top)
+const BAND_T = 80, BAND_B = 144;
+// ramp geometry: wedge joins the RIGHT lane's bottom edge
 const MXpx = XP(XM);
 const R_TIPL = MXpx - 54, R_TIPR = MXpx + 52;
-const R_CT = [(R_TIPL + R_TIPR) / 2, RY + 16];
-const R_FOOT = [MXpx - 300, RY + 150];
+const R_CT = [(R_TIPL + R_TIPR) / 2, BAND_B];
+const R_FOOT = [MXpx - 300, BAND_B + 134];
 const R_LEN = Math.hypot(R_CT[0] - R_FOOT[0], R_CT[1] - R_FOOT[1]);
 const R_UX = (R_CT[0] - R_FOOT[0]) / R_LEN, R_UY = (R_CT[1] - R_FOOT[1]) / R_LEN;
 const R_PX = R_UY * 15, R_PY = -R_UX * 15;
 const R_ANG = Math.atan2(R_CT[1] - R_FOOT[1], R_CT[0] - R_FOOT[0]);
-const R_STOP = 74;                               // stop bar distance from nose (px)
+const R_STOP = 74;
 
 function speedColor(v){
   const u = Math.max(0, Math.min(1, v / V0));
@@ -283,30 +338,35 @@ function speedColor(v){
 function draw(){
   cx.clearRect(0, 0, W, H); cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H);
   cx.fillStyle = '#1f2937'; cx.font = '600 13px ' + SANS; cx.textAlign = 'left';
-  cx.fillText('1.2 km freeway — merge at 800 m · color = speed · the meter releases one car per green', 30, 24);
-  const y = RY;
-  // ── on-ramp: tapered wedge that meets the freeway edge flush ──
+  cx.fillText('1.2 km two-lane freeway — IDM + MOBIL + gap acceptance · merge into the right lane at 800 m · color = speed', 30, 24);
+  // ramp wedge (under the band)
   cx.fillStyle = '#f0f2f6';
   cx.beginPath();
   cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY);
-  cx.lineTo(R_TIPL, y + 16);
-  cx.lineTo(R_TIPR, y + 16);
+  cx.lineTo(R_TIPL, BAND_B);
+  cx.lineTo(R_TIPR, BAND_B);
   cx.lineTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY);
   cx.closePath(); cx.fill();
   cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1.2;
-  cx.beginPath(); cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY); cx.lineTo(R_TIPL, y + 16); cx.stroke();
-  cx.beginPath(); cx.moveTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY); cx.lineTo(R_TIPR, y + 16); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY); cx.lineTo(R_TIPL, BAND_B); cx.stroke();
+  cx.beginPath(); cx.moveTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY); cx.lineTo(R_TIPR, BAND_B); cx.stroke();
   cx.beginPath(); cx.moveTo(R_FOOT[0] + R_PX, R_FOOT[1] + R_PY); cx.lineTo(R_FOOT[0] - R_PX, R_FOOT[1] - R_PY); cx.stroke();
-  // ── freeway drawn on top so the wedge tucks under its edge ──
-  cx.fillStyle = '#f0f2f6'; cx.fillRect(30, y - 16, W - 60, 32);
-  cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1;
-  cx.strokeRect(30, y - 16, W - 60, 32);
-  cx.strokeStyle = '#fff'; cx.lineWidth = 2;
-  cx.beginPath(); cx.moveTo(R_TIPL, y + 16); cx.lineTo(R_TIPR, y + 16); cx.stroke();
-  cx.strokeStyle = '#c9ced6'; cx.setLineDash([6, 5]); cx.lineWidth = 1.4;
-  cx.beginPath(); cx.moveTo(R_TIPL, y + 16); cx.lineTo(R_TIPR, y + 16); cx.stroke();
+  // two-lane band on top
+  cx.fillStyle = '#f0f2f6'; cx.fillRect(30, BAND_T, W - 60, BAND_B - BAND_T);
+  cx.strokeStyle = '#d6dae2'; cx.lineWidth = 1; cx.strokeRect(30, BAND_T, W - 60, BAND_B - BAND_T);
+  cx.strokeStyle = '#fff'; cx.lineWidth = 2.2; cx.setLineDash([15, 11]);
+  cx.beginPath(); cx.moveTo(30, (L0Y + L1Y) / 2); cx.lineTo(W - 30, (L0Y + L1Y) / 2); cx.stroke();
   cx.setLineDash([]);
-  // ── meter stop bar + signal ──
+  // gore line
+  cx.strokeStyle = '#fff'; cx.lineWidth = 2;
+  cx.beginPath(); cx.moveTo(R_TIPL, BAND_B); cx.lineTo(R_TIPR, BAND_B); cx.stroke();
+  cx.strokeStyle = '#c9ced6'; cx.setLineDash([6, 5]); cx.lineWidth = 1.4;
+  cx.beginPath(); cx.moveTo(R_TIPL, BAND_B); cx.lineTo(R_TIPR, BAND_B); cx.stroke();
+  cx.setLineDash([]);
+  cx.fillStyle = '#9aa1ad'; cx.font = '600 10px ' + SANS;
+  cx.fillText('left lane', 36, BAND_T - 4);
+  cx.fillText('right lane (merge)', 36, BAND_B + 12);
+  // meter bar + signal
   const sbx = R_CT[0] - R_UX * R_STOP, sby = R_CT[1] - R_UY * R_STOP;
   cx.save(); cx.translate(sbx, sby); cx.rotate(R_ANG);
   cx.fillStyle = '#374151'; cx.fillRect(-2, -13, 4, 26);
@@ -315,7 +375,7 @@ function draw(){
   cx.beginPath(); cx.arc(sbx + 17, sby + 15, 8, 0, Math.PI * 2);
   cx.fillStyle = launching ? '#1d7a6f' : '#c1121f'; cx.fill();
   cx.strokeStyle = '#fff'; cx.lineWidth = 1.5; cx.stroke();
-  // ── ramp cars: arrive at the foot (fade in), roll up, launch, yield ──
+  // ramp cars
   rampCars.slice(0, 14).forEach(rc => {
     const rx = R_CT[0] - R_UX * rc.d, ry = R_CT[1] - R_UY * rc.d;
     cx.save(); cx.translate(rx, ry); cx.rotate(R_ANG);
@@ -330,27 +390,33 @@ function draw(){
     cx.fillStyle = '#a4161a'; cx.font = '700 12px ' + SANS; cx.textAlign = 'left';
     cx.fillText('+' + (rampCars.length - 14) + ' more waiting', R_FOOT[0] - 148, R_FOOT[1] + 4);
   }
-  // mainline cars — fresh merges blend from the ramp nose onto the lane
-  const MDUR = 0.5;                                    // short lateral blend only
+  // mainline cars: lane-change glide + merge blend from the nose
+  const LCD = 0.8, MDUR = 0.5;
   cars.forEach(c2 => {
-    const tx = XP(c2.x), ty = y;
-    let px2 = tx, py2 = ty, rot = 0;
+    let y = c2.lane === 0 ? L0Y : L1Y;
+    if (simT - c2.lcT < LCD){
+      let f = (simT - c2.lcT) / LCD;
+      f = f * f * (3 - 2 * f);
+      const y0 = c2.lcFrom === 0 ? L0Y : L1Y;
+      y = y0 + ((c2.lane === 0 ? L0Y : L1Y) - y0) * f;
+    }
+    let px2 = XP(c2.x), py2 = y, rot = 0;
     if (c2.mt !== undefined && simT - c2.mt < MDUR){
       let f = (simT - c2.mt) / MDUR;
-      f = f * f * (3 - 2 * f);                         // smoothstep
+      f = f * f * (3 - 2 * f);
       const gx0 = R_CT[0] - R_UX * 3, gy0 = R_CT[1] - R_UY * 3;
-      px2 = gx0 + (tx - gx0) * f;
-      py2 = gy0 + (ty - gy0) * f;
+      px2 = gx0 + (XP(c2.x) - gx0) * f;
+      py2 = gy0 + (L1Y - gy0) * f;
       rot = R_ANG * (1 - f);
     }
     cx.save(); cx.translate(px2, py2); cx.rotate(rot);
     cx.fillStyle = speedColor(c2.v);
-    cx.beginPath(); cx.roundRect(-10, -7, 20, 14, 3); cx.fill();
+    cx.beginPath(); cx.roundRect(-10, -6.5, 20, 13, 3); cx.fill();
     cx.strokeStyle = '#fff'; cx.lineWidth = 1; cx.stroke();
     cx.restore();
   });
-  // speed profile strip
-  const P = { l: 30, r: 30, t: 300, h: 190 };
+  // per-lane speed profile
+  const P = { l: 30, r: 30, t: 330, h: 200 };
   const pw = W - P.l - P.r;
   cx.strokeStyle = '#d6dae2'; cx.strokeRect(P.l, P.t, pw, P.h);
   cx.fillStyle = '#9aa1ad'; cx.font = '10px ' + SANS;
@@ -361,16 +427,20 @@ function draw(){
   });
   cx.strokeStyle = '#b45309'; cx.setLineDash([5, 4]);
   cx.beginPath(); cx.moveTo(P.l + XM / LRD * pw, P.t); cx.lineTo(P.l + XM / LRD * pw, P.t + P.h); cx.stroke(); cx.setLineDash([]);
-  cx.strokeStyle = '#0e7c86'; cx.lineWidth = 2.2; cx.lineJoin = 'round';
-  cx.beginPath();
-  const sorted = [...cars].sort((a2, b2) => a2.x - b2.x);
-  sorted.forEach((c2, i) => {
-    const px = P.l + c2.x / LRD * pw, py = P.t + P.h - Math.min(MPH(c2.v), 70) / 70 * P.h;
-    if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+  [[0, '#2c5378', 'left lane'], [1, '#0e7c86', 'right lane']].forEach(([ln, col, name], k) => {
+    const sorted = cars.filter(c2 => c2.lane === ln).sort((a2, b2) => a2.x - b2.x);
+    cx.strokeStyle = col; cx.lineWidth = 2; cx.lineJoin = 'round';
+    cx.beginPath();
+    sorted.forEach((c2, i) => {
+      const px = P.l + c2.x / LRD * pw, py = P.t + P.h - Math.min(MPH(c2.v), 70) / 70 * P.h;
+      if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+    });
+    cx.stroke();
+    cx.fillStyle = col; cx.font = '600 11px ' + SANS; cx.textAlign = 'left';
+    cx.fillText(name, P.l + 8 + k * 80, P.t + 14);
   });
-  cx.stroke();
-  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS; cx.textAlign = 'left';
-  cx.fillText('speed along the road (mph) — a breakdown shows up as a valley rolling left from the merge (dashed)', P.l, P.t - 8);
+  cx.fillStyle = '#4b5563'; cx.font = '600 12px ' + SANS;
+  cx.fillText('speed along the road by lane (mph) — a breakdown is a valley rolling left from the merge (dashed)', P.l, P.t - 8);
 }
 
 function loop(ts){
@@ -378,11 +448,11 @@ function loop(ts){
   let dt = (ts - lastRAF) / 1000; lastRAF = ts;
   dt = Math.min(dt, 0.05);
   frame++;
-  step(dt * 3);                              // time ×3 → 60 s episode real time
+  step(dt * 3);
   draw();
   if (frame % 6 === 0){
     let vm = V0, nNear = 0;
-    cars.forEach(c2 => { if (Math.abs(c2.x - XM) < 120){ vm = Math.min(vm, c2.v); nNear++; } });
+    cars.forEach(c2 => { if (c2.lane === 1 && Math.abs(c2.x - XM) < 120){ vm = Math.min(vm, c2.v); nNear++; } });
     el('c1').textContent = running ? simT.toFixed(0) + ' / ' + EPI + ' s' : (simT > 0 ? 'done' : '—');
     el('c2').textContent = nNear ? MPH(vm).toFixed(0) + ' mph' : '—';
     el('c3').textContent = rampQ + ' veh';
@@ -391,10 +461,11 @@ function loop(ts){
     el('c6').textContent = ((dMain + dRamp) / 60).toFixed(1) + ' veh·min';
     el('cBest').textContent = best === null ? '—' : best.toFixed(1) + ' veh·min';
     el('cThr').textContent = simT > 5 ? Math.round(passed / simT * 3600) + ' veh/hr' : '—';
+    el('cLC').textContent = lcCount + '';
     if (running){
       const b2 = el('banner');
-      if (MPH(vm) < 25 && nNear > 2){ b2.className = 'banner bad'; b2.textContent = '🚨 breakdown at the merge — the wave is rolling upstream'; }
-      else { b2.className = 'banner'; b2.textContent = '🟢 episode running — keep the merge above ~45 mph without drowning the ramp'; }
+      if (MPH(vm) < 25 && nNear > 2){ b2.className = 'banner bad'; b2.textContent = '🚨 breakdown at the merge — watch it spread to the left lane through lane changes'; }
+      else { b2.className = 'banner'; b2.textContent = '🟢 episode running — keep the merge moving without drowning the ramp'; }
     }
   }
   requestAnimationFrame(loop);
