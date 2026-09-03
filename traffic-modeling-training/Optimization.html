@@ -1213,7 +1213,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       if(c.u<1) return;
       if(c.phase===2){ c.phase=3; return; }
       const tgt = c.phase===0 ? 'm'+c.mid : 'x'+c.od[1];
-      const clear = !odCars.some(o=>o!==c && o.phase<3 && gkOf(o)===tgt && o.u<GAPU*1.1);
+      const clear = !odCars.some(o=>o!==c && o.phase<3 && gkOf(o)===tgt && o.u<GAPU*0.5);
       if(clear){
         if(c.phase===0) c.tIn=simT2;
         else {
@@ -1581,17 +1581,14 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       }
       c.a=idmA3(c.v, 150, TE, s, dv);
     });
-    // routes: per-route IDM with route-specific v0 and time gap; the FRONT
-    // car additionally car-follows the rear vehicle of the shared exit link
-    // across the merge node M, so approaches to a busy merge slow physically
-    let xRear=null;
-    groups.x.forEach(o=>{ if(!xRear || o.d<xRear.d) xRear=o; });
+    // routes: per-route IDM with route-specific v0 and time gap. The exit
+    // link is schematic (it just carries cars off to D), so approaches do
+    // NOT car-follow across the merge — that made M an artificial bottleneck
     [0,1,2].forEach(r=>{
       const g=groups['r'+r];
       g.forEach((c,i2)=>{
         let s=1e9, dv=0;
         if(i2>0){ s=g[i2-1].d-c.d-CL; dv=c.v-g[i2-1].v; }
-        else if(xRear){ s=(RLEN[r]-c.d)+xRear.d-CL; dv=c.v-xRear.v; }
         c.a=idmA3(c.v, V0R[r], TR[r], s, dv);
       });
     });
@@ -1600,25 +1597,26 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       c.v=Math.max(0, c.v+c.a*sdt);
       c.d+=c.v*sdt;
     });
-    // transitions with GAP ACCEPTANCE: a car enters the next link only if
-    // its entry is physically clear — otherwise it yields at the node
+    // transitions with LIGHT gap acceptance: entry must not overlap the
+    // rear car of the next link (yield briefly, keeping speed) — enough to
+    // prevent cars stacking, without turning the merge into a bottleneck
     cars2.forEach(c=>{
       if(c.phase===0 && c.d>=LE){
         const rg=cars2.filter(o=>o.phase===1 && o.route===c.route);
         const rearR=rg.length ? Math.min(...rg.map(o=>o.d)) : 1e9;
-        if(rearR>CL+S0P){ c.phase=1; c.d=0; c.tEnter=simT3; }
-        else { c.d=LE; c.v=0; }
+        if(rearR>CL*0.8){ c.phase=1; c.d=0; c.tEnter=simT3; }
+        else { c.d=LE; c.v=Math.min(c.v,30); }
       }
       else if(c.phase===1 && c.d>=RLEN[c.route]){
         const xg=cars2.filter(o=>o.phase===2);
         const rearX=xg.length ? Math.min(...xg.map(o=>o.d)) : 1e9;
-        if(rearX>CL+S0P){
+        if(rearX>CL*0.8){
           const tm=(simT3-c.tEnter)/KAPPA;           // model minutes
           tMeas[c.route].push(tm);
           if(tMeas[c.route].length>10) tMeas[c.route].shift();
           c.phase=2; c.d=0;
         }
-        else { c.d=RLEN[c.route]; c.v=0; }           // yield at the merge
+        else { c.d=RLEN[c.route]; c.v=Math.min(c.v,30); }  // brief yield only
       }
     });
     cars2=cars2.filter(c=>!(c.phase===2 && c.d>=LX));
