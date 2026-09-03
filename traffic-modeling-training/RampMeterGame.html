@@ -122,7 +122,7 @@
         <div class="cards" style="grid-template-columns:1fr 1fr 1fr">
           <div class="card"><h3>best episode</h3><div class="value" id="cBest">—</div></div>
           <div class="card"><h3>throughput past merge</h3><div class="value" id="cThr">—</div></div>
-          <div class="card"><h3>lane changes</h3><div class="value" id="cLC">—</div></div>
+          <div class="card"><h3>lane changes / merged</h3><div class="value" id="cLC">—</div></div>
         </div>
       </div>
       <div class="panel">
@@ -154,7 +154,7 @@ const P_POL = 0.3, B_SAFE = 2.5, D_TH = 0.2, A_BIAS = 0.25;
 
 let cars = [], rampCars = [], simT = 0, running = false;
 let nextMain = 0, nextRampArr = 0, nextGreen = 0;
-let rampQ = 0, dMain = 0, dRamp = 0, passed = 0, best = null, lcCount = 0;
+let rampQ = 0, dMain = 0, dRamp = 0, passed = 0, best = null, lcCount = 0, mergeCount = 0;
 let seed = 5;
 function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
 function expo(mean){ return -Math.log(1 - rnd()) * mean; }
@@ -180,7 +180,7 @@ function accOf(c, lead, gapFF){
 
 function reset(){
   cars = []; rampCars = []; simT = 0; rampQ = 0; dMain = 0; dRamp = 0;
-  passed = 0; lcCount = 0;
+  passed = 0; lcCount = 0; mergeCount = 0;
   seed = 5;
   nextMain = 0.3; nextRampArr = expo(3600 / (+el('qr').value)); nextGreen = 0;
   for (let x = 40; x < LRD; x += 65){
@@ -255,18 +255,25 @@ function step(dt){
       rampCars[0].state = 'launch';
       nextGreen = 60 / (+el('mr').value);
     }
-    // nose: gap acceptance against the RIGHT lane
+    // nose: gap acceptance against the RIGHT lane. Merging is a MANDATORY
+    // lane change, so the safe-braking limit is higher than for MOBIL
+    // (Treiber Ch. 14), and a waiting driver accepts tighter gaps over time
     if (rampCars.length && rampCars[0].state === 'launch' && rampCars[0].d <= 4){
+      const rc0 = rampCars[0];
+      rc0.waitT = (rc0.waitT || 0) + h;
       const probe = { x: XM, lane: 1 };
       const nb = neighbors(probe, 1);
-      const vIn = Math.max(6, Math.min(20, nb.lead ? nb.lead.v + 2 : 16, nb.foll ? nb.foll.v + 2 : 16));
+      // enter close to traffic speed (acceleration lane), capped at 26 m/s
+      const vIn = Math.max(10, Math.min(26, nb.lead ? nb.lead.v + 1 : 26));
       const gDn = nb.lead ? nb.dLead - CARLEN : 1e9;
       const gUp = nb.foll ? nb.dFoll - CARLEN : 1e9;
-      const aSelf = idmA(vIn, gDn, vIn - (nb.lead ? nb.lead.v : V0));
-      const aFoll = nb.foll ? idmA(nb.foll.v, gUp, nb.foll.v - vIn) : 0;
-      if (gDn > 4 && gUp > 4 && aFoll > -2.5 && aSelf > -3.5){
+      const aSelf = idmA(vIn, V0, gDn, vIn - (nb.lead ? nb.lead.v : V0));
+      const aFoll = nb.foll ? idmA(nb.foll.v, V0, gUp, nb.foll.v - vIn) : 0;
+      const bMerge = 4.0 + Math.min(3.0, rc0.waitT * 0.6);   // patience loosens the limit
+      if (gDn > 6 && gUp > 6 && aFoll > -bMerge && aSelf > -5.0){
         cars.push({ x: XM, v: vIn, lane: 1, mt: simT, lcT: -9, lcFrom: 1, cool: 2 });
         rampCars.shift();
+        mergeCount++;
       }
     }
     rampQ = rampCars.length;
@@ -461,7 +468,7 @@ function loop(ts){
     el('c6').textContent = ((dMain + dRamp) / 60).toFixed(1) + ' veh·min';
     el('cBest').textContent = best === null ? '—' : best.toFixed(1) + ' veh·min';
     el('cThr').textContent = simT > 5 ? Math.round(passed / simT * 3600) + ' veh/hr' : '—';
-    el('cLC').textContent = lcCount + '';
+    el('cLC').textContent = lcCount + ' / ' + mergeCount;
     if (running){
       const b2 = el('banner');
       if (MPH(vm) < 25 && nNear > 2){ b2.className = 'banner bad'; b2.textContent = '🚨 breakdown at the merge — watch it spread to the left lane through lane changes'; }
