@@ -1462,6 +1462,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
   const SW=SIMC.width, SH=SIMC.height;
   const O=[70,150], DV=[230,150], M=[1030,150], DEST=[1140,150];
   const WPS2=[[620,56],[620,150],[620,240]];
+  // three RECEIVING lanes at the destination — one per route, so the exit
+  // never meters flow (no merge conflict at the end)
+  const MR=[[1030,128],[1030,150],[1030,172]], DR=[[1140,128],[1140,150],[1140,172]];
   const NB_R=3;                // NegBin dispersion; vehicle pace via its own slider
   let cars2=[], tally=[0,0,0], stateKey='', carsKey='', lastSim=null, simT3=0;
 
@@ -1524,7 +1527,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
 
   // smoothed full-route paths (rounded corners at the diverge, waypoint and
   // merge) so vehicles turn through the geometry instead of sliding straight
-  const UEPATH=[0,1,2].map(r=>makePath([O, DV, WPS2[r], M, DEST], 30));
+  const UEPATH=[0,1,2].map(r=>makePath([O, DV, WPS2[r], MR[r], DR[r]], 30));
   function carXY(c){
     const p=UEPATH[c.route];
     let s;
@@ -1562,11 +1565,11 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cars2.push({phase:0, route, d:0, v:V0R[route]*0.8});
       break;                                          // at most one insert per tick
     }
-    // ── IDM per lane group ──
-    const groups={e:[],x:[],r0:[],r1:[],r2:[]};
+    // ── IDM per lane group (one exit lane PER ROUTE — unmetered) ──
+    const groups={e:[],x0:[],x1:[],x2:[],r0:[],r1:[],r2:[]};
     cars2.forEach(c=>{
       if(c.phase===0) groups.e.push(c);
-      else if(c.phase===2) groups.x.push(c);
+      else if(c.phase===2) groups['x'+c.route].push(c);
       else groups['r'+c.route].push(c);
     });
     ['r0','r1','r2'].forEach((g,r)=>groups[g].sort((a,b)=>b.d-a.d));
@@ -1592,7 +1595,14 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         c.a=idmA3(c.v, V0R[r], TR[r], s, dv);
       });
     });
-    groups.x.forEach(c=>{ c.a=(140-c.v)*2; });
+    ['x0','x1','x2'].forEach(gk=>{
+      const g=groups[gk];
+      g.sort((a,b)=>b.d-a.d);
+      g.forEach((c,i2)=>{
+        if(i2>0) c.a=idmA3(c.v, 150, TE, g[i2-1].d-c.d-CL, c.v-g[i2-1].v);
+        else c.a=(140-c.v)*2;
+      });
+    });
     cars2.forEach(c=>{
       c.v=Math.max(0, c.v+c.a*sdt);
       c.d+=c.v*sdt;
@@ -1608,7 +1618,9 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         else { c.d=LE; c.v=Math.min(c.v,30); }
       }
       else if(c.phase===1 && c.d>=RLEN[c.route]){
-        const xg=cars2.filter(o=>o.phase===2);
+        // own receiving lane: only same-route cars can block, and only if
+        // one is sitting right at the lane entrance
+        const xg=cars2.filter(o=>o.phase===2 && o.route===c.route);
         const rearX=xg.length ? Math.min(...xg.map(o=>o.d)) : 1e9;
         if(rearX>CL*0.8){
           const tm=(simT3-c.tEnter)/KAPPA;           // model minutes
@@ -1634,8 +1646,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       scx.stroke();
     }
     road([O,DV]);
-    for(let r=0;r<3;r++) road([DV,WPS2[r],M]);
-    road([M,DEST]);
+    for(let r=0;r<3;r++) road([DV,WPS2[r],MR[r],DR[r]]);   // own receiving lane each
     // route labels with live iteration shares/times
     for(let r=0;r<3;r++){
       const share=stt.v[r]/D;
@@ -1645,12 +1656,13 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       scx.fillStyle=RCOLS[r]; scx.font='600 13px '+SANS; scx.textAlign='center';
       scx.fillText(`Route ${r+1} · ${(share*100).toFixed(0)}% · ${Math.round(stt.v[r])} veh/hr · BPR ${stt.t[r].toFixed(1)} min`+(ms!==null?` · sim ⌀ ${ms.toFixed(1)}`:''), wp[0], wp[1]+oy);
     }
-    // nodes
-    [[O,'O'],[M,''],[DEST,'D']].forEach(([p,lb])=>{
-      scx.fillStyle='#14919b';
-      scx.beginPath(); scx.arc(p[0],p[1], lb===''?7:13, 0, Math.PI*2); scx.fill();
-      if(lb){ scx.fillStyle='#fff'; scx.font='700 11px '+SANS; scx.textAlign='center'; scx.fillText(lb,p[0],p[1]+4); }
-    });
+    // nodes: O circle + a destination terminal bar spanning all 3 lanes
+    scx.fillStyle='#14919b';
+    scx.beginPath(); scx.arc(O[0],O[1],13,0,Math.PI*2); scx.fill();
+    scx.fillStyle='#fff'; scx.font='700 11px '+SANS; scx.textAlign='center'; scx.fillText('O',O[0],O[1]+4);
+    scx.fillStyle='#14919b';
+    scx.beginPath(); scx.roundRect(DEST[0]-4, MR[0][1]-14, 22, MR[2][1]-MR[0][1]+28, 8); scx.fill();
+    scx.fillStyle='#fff'; scx.font='700 13px '+SANS; scx.fillText('D', DEST[0]+7, DEST[1]+5);
     scx.fillStyle='#b45309';
     scx.beginPath(); scx.arc(DV[0],DV[1],13,0,Math.PI*2); scx.fill();
     scx.fillStyle='#fff'; scx.font='700 14px '+SANS; scx.textAlign='center'; scx.fillText('?',DV[0],DV[1]+5);
@@ -1658,7 +1670,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     scx.fillText('route choice — P = this iteration\'s shares', DV[0], DV[1]+32);
     // labels
     scx.fillStyle='#6b7280'; scx.font='600 11px '+SANS; scx.textAlign='left';
-    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — IDM car-following with gap acceptance at the merge: congestion, queuing and delay are physical`, 16, 24);
+    scx.fillText(`arrivals ~ NegBin(r=${NB_R}), mean ${D} veh/hr — IDM car-following; each route discharges into its own receiving lane at D (unmetered exit)`, 16, 24);
     const tt=tally[0]+tally[1]+tally[2];
     if(tt>0){
       const parts=tally.map((x,i2)=>`R${i2+1} ${(100*x/tt).toFixed(0)}%`);
