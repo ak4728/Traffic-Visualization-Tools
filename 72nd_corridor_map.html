@@ -198,6 +198,11 @@ input:checked + .slider:before { transform: translateX(13px); }
 #date-filter { background: #0f3460; border: 1px solid #1e4a7a; color: #ccd6f6; border-radius: 4px; padding: 3px 6px; font-size: 10px; cursor: pointer; }
 #date-filter option { background: #16213e; }
 
+/* Key-free basemap restyling: OSM tiles inverted for the dark theme and
+   desaturated for the light theme (replaces CARTO, which needs an API key) */
+.tiles-dark  { filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.35); }
+.tiles-light { filter: grayscale(0.85) brightness(1.05) contrast(0.94); }
+
 /* Tooltip */
 .custom-tooltip {
   background: rgba(22,33,62,0.95) !important; border: 1px solid #0f3460 !important;
@@ -454,10 +459,13 @@ const SL_HOURLY  = {"EAST": [{"h": "12am-1am", "v": 33, "s": 35.2}, {"h": "12am-
 // ── Map ───────────────────────────────────────────────────────────────
 const map = L.map('map', { center: [39.8272, -105.1188], zoom: 15 });
 const BASEMAPS = {
-  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',      { attribution:'&copy; CARTO', subdomains:'abcd', maxZoom:20 }),
-  light:     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',     { attribution:'&copy; CARTO', subdomains:'abcd', maxZoom:20 }),
-  street:    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap', maxZoom:19 }),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxZoom:20 })
+  // all four basemaps are 100% key-free: OSM tiles (restyled with CSS
+  // filters for the dark/light looks — no CARTO, which now serves
+  // "API key required" watermark tiles to many referers) + Esri imagery
+  dark:      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }),
+  light:     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-light' }),
+  street:    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20 }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 })
 };
 var currentBasemap = 'dark';
 BASEMAPS.dark.addTo(map);
