@@ -30,3 +30,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# raw corridor data exports (INRIX/StreetLight/Replica - license-restricted); commit only processed corridors/*.js
+corridor-studies/corridor data/
