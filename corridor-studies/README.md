@@ -59,13 +59,20 @@ window.registerCorridor({
     odPairs: [ { name:'Olde Town → Denver CBD', trips: 3400 }, … ]
   },
 
-  // ── Count station / TCDS (optional) ──
+  // ── Count stations / TCDS (optional) — one or many; click a marker to
+  //    load that station's counts. Direction keys are per station (EB/WB on
+  //    the corridor, NB/SB on a cross street). `aadt` is optional: stations
+  //    with it get the AADT-by-year chart, short-count stations get a
+  //    daily-totals-by-count-date chart instead.
   tcds: {
-    station: { id:'203149', label:'72nd Ave E/O Oak St', lat:39.82717, lon:-105.1175 },
-    aadt:  { years:['2011', …], aadt:[15483, …], growth:[0, …] },
-    dates: ['2025-04-15', …],
-    // per-date hourly arrays keyed by the LOWERCASE dir short name (eb/wb or nb/sb)
-    hourly: { '2025-04-15': { hours:[0,…,23], eb:[…], wb:[…] }, … }
+    stations: [
+      { id:'103876', label:'Arapahoe Rd W/O Parker Rd', lat:39.5947, lon:-104.8085,
+        aadt: { years:['2011', …], aadt:[15483, …], growth:[0, …] },   // optional
+        counts: { '2023-09-14': { hours:[0,…,23], dirs:{ EB:[…], WB:[…] } }, … } },
+      …
+    ]
+    // (the legacy single-station shape — station/aadt/dates/hourly with eb/wb
+    //  keys — is still accepted and normalized automatically)
   },
 
   // ── Safety (optional) ──

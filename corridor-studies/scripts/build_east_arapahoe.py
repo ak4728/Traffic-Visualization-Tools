@@ -21,8 +21,10 @@ corridor (see filter_crashes_to_corridor.py; default 250 ft).
 Run from anywhere:
     python corridor-studies/scripts/build_east_arapahoe.py [--buffer-ft 250]
 """
-import argparse, csv, json, os, re, struct, zipfile
+import argparse, csv, datetime, glob, json, os, re, struct, zipfile
 from collections import defaultdict
+
+import openpyxl
 
 from filter_crashes_to_corridor import filter_crashes
 
@@ -177,6 +179,57 @@ with open(os.path.join(DATA, "TMC_Identification.csv"), newline="", encoding="ut
         })
 print(f"INRIX: {len(feats)} TMC segments")
 
+# ── TCDS short counts: MS2 "Volume Count Report" xlsx exports ─────────
+# Station coordinates are approximate, placed from the "Located On"
+# description against the corridor geometry.
+TCDS_COORDS = {
+    "103876": (39.5947, -104.8085, "Arapahoe Rd W/O Parker Rd (SH 83)"),
+    "203231": (39.5950, -104.8000, "Arapahoe Rd E/O Parker Rd (SH 83)"),
+    "902108": (39.5925, -104.8228, "Jordan Rd S/O Arapahoe Rd"),
+}
+
+def parse_tcds_folder(folder):
+    stations = {}
+    for p in sorted(glob.glob(os.path.join(folder, "*.xlsx"))):
+        wb = openpyxl.load_workbook(p, read_only=True)
+        ws = wb[wb.sheetnames[0]]
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        wb.close()
+        kv = {}
+        for r in rows:
+            cells = [c for c in r if c is not None]
+            for i in range(len(cells) - 1):
+                k = str(cells[i]).strip()
+                if k in ("Location ID", "Direction", "Start Date", "Located On") and k not in kv:
+                    kv[k] = cells[i + 1]
+        locid = str(kv.get("Location ID", "")).strip()
+        base = locid.split("_")[0]
+        dirn = str(kv.get("Direction", "") or locid.split("_")[-1]).strip().upper()
+        sd = kv.get("Start Date")
+        if hasattr(sd, "strftime"):
+            date = sd.strftime("%Y-%m-%d")
+        else:
+            date = datetime.datetime.strptime(str(sd).strip(), "%m/%d/%Y").strftime("%Y-%m-%d")
+        vols = [int(r[1]) for r in rows
+                if r and isinstance(r[0], str) and re.match(r"^\d{2}:00 - \d{2}:00$", r[0].strip())]
+        st = stations.setdefault(base, {"counts": {}})
+        st["counts"].setdefault(date, {"hours": list(range(24)), "dirs": {}})["dirs"][dirn] = vols
+        st["located"] = str(kv.get("Located On", "")).strip()
+    out = []
+    for base, st in sorted(stations.items()):
+        if base not in TCDS_COORDS:
+            print(f"  WARNING: no coordinates mapped for TCDS station {base} ({st.get('located')}) — skipped;"
+                  " add it to TCDS_COORDS")
+            continue
+        lat, lon, label = TCDS_COORDS[base]
+        out.append({"id": base, "label": label, "lat": lat, "lon": lon, "counts": st["counts"]})
+    return out
+
+tcds_stations = parse_tcds_folder(os.path.join(DATA, "TCDS"))
+print(f"TCDS: {len(tcds_stations)} stations: " +
+      ", ".join(s["id"] + " (" + "/".join(sorted({d for c in s['counts'].values() for d in c['dirs']})) + ")"
+                for s in tcds_stations))
+
 # ── Crashes: statewide listings -> corridor buffer ────────────────────
 crashes = filter_crashes(os.path.join(DATA, "TMC_Identification.csv"),
                          CRASH_DIR, a.buffer_ft)
@@ -212,6 +265,7 @@ src = (
     f"    hourly: {shj}\n"
     "  },\n"
     f"  inrix: {{ geojson: {gj} }},\n"
+    f"  tcds: {{ stations: {json.dumps(tcds_stations, separators=(',', ':'))} }},\n"
     f"  crashes: {cj}\n"
     "});\n"
 )

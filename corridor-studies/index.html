@@ -328,9 +328,9 @@ input:checked + .slider:before { transform: translateX(13px); }
             <span style="color:#8892b0;font-size:9px">Total visible</span>
             <span style="color:#e94560;font-size:10px;font-weight:700" id="lc-total">0</span>
           </div>
-          <div class="leg-row" style="cursor:default;margin-top:4px">
+          <div class="leg-row" id="legrow-cluster" style="margin-top:4px" onclick="toggleClusters()">
             <div class="leg-dot" style="background:rgba(233,69,96,0.18);border:1.5px dashed rgba(233,69,96,0.6)"></div>
-            <span class="leg-label">hotspot cluster (&ge;3 within ~400 ft)</span>
+            <span class="leg-label">hotspot clusters (&ge;3 within ~400 ft) — click to toggle</span>
           </div>
         </div>
 
@@ -433,7 +433,7 @@ function setBasemap(name) {
   if (name === currentBasemap) return;
   map.removeLayer(BASEMAPS[currentBasemap]);
   BASEMAPS[name].addTo(map);
-  [streetlightOutline, streetlightLayer, inrixLayer, equityLayer, safetyLayer, transitLayer, schoolsLayer, tcdsMarker].forEach(l => l && l.bringToFront && l.bringToFront());
+  [streetlightOutline, streetlightLayer, inrixLayer, equityLayer, safetyLayer, transitLayer, schoolsLayer, tcdsMarkers].forEach(l => l && l.bringToFront && l.bringToFront());
   currentBasemap = name;
   document.querySelectorAll('.bm-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('bm-'+name).classList.add('active');
@@ -641,14 +641,29 @@ function buildSchoolsLayer() {
   schoolsLayer.addTo(map);
 }
 
-// ── Count-station marker ──────────────────────────────────────────────
-var tcdsMarker=null;
-function buildTcdsMarker() {
-  if (tcdsMarker) return;
-  const st=C.tcds.station;
-  tcdsMarker=L.circleMarker([st.lat,st.lon],{radius:10,color:'#ffb74d',fillColor:'#ffb74d',fillOpacity:0.25,weight:2.5}).addTo(map);
-  tcdsMarker.bindTooltip('<b>Count Station '+st.id+'</b><br>'+st.label, {className:'custom-tooltip',sticky:true});
-  tcdsMarker.on('click',()=>{ document.getElementById('tcds-panel').classList.add('open'); setTimeout(()=>map.invalidateSize(), 380); });
+// ── Count stations (one or many; click a marker to load its counts) ──
+var tcdsMarkers=null, tcdsSel=0;
+function getTcdsStations(){
+  const t=C.tcds;
+  if (t.stations) return t.stations;
+  // legacy single-station schema: {station, aadt, dates, hourly:{date:{hours,eb,wb}}}
+  const counts={};
+  (t.dates||Object.keys(t.hourly||{})).forEach(d=>{
+    const h=(t.hourly||{})[d]||{};
+    counts[d]={hours:h.hours||[], dirs:{EB:h.eb, WB:h.wb}};
+  });
+  return [Object.assign({}, t.station, {aadt:t.aadt, counts})];
+}
+function buildTcdsMarkers() {
+  if (tcdsMarkers) return;
+  tcdsMarkers=L.layerGroup();
+  getTcdsStations().forEach((st,i)=>{
+    const m=L.circleMarker([st.lat,st.lon],{radius:10,color:'#ffb74d',fillColor:'#ffb74d',fillOpacity:i===tcdsSel?0.6:0.25,weight:2.5});
+    m.bindTooltip('<b>Count Station '+st.id+'</b><br>'+st.label+'<br><span style="color:#a8b2d8;font-size:10px">click to load its counts</span>', {className:'custom-tooltip',sticky:true});
+    m.on('click',()=>{ selectTcdsStation(i); document.getElementById('tcds-panel').classList.add('open'); setTimeout(()=>map.invalidateSize(), 380); });
+    tcdsMarkers.addLayer(m);
+  });
+  tcdsMarkers.addTo(map);
 }
 
 // ── Crash layer ───────────────────────────────────────────────────────
@@ -687,6 +702,37 @@ function buildCrashLayer() {
 
   // ── transparent hotspot clusters (drawn FIRST = under the dots),
   //    recomputed from exactly the crashes the filters leave visible ──
+  if (showClusters) buildClusterBubbles(vis);
+
+  // ── individual crash dots on top (tooltips use the richer fields when
+  //    the corridor config provides them, else fall back to the basics) ──
+  vis.forEach(c => {
+    const col=CRASH_COLORS[c.severity];
+    const m=L.circleMarker([c.lat,c.lon],{radius:CRASH_RADII[c.severity],color:col,fillColor:col,fillOpacity:0.75,weight:1.5});
+    const pb=[c.ped?'&#128694; Ped':'',c.bike?'&#128690; Bike':''].filter(Boolean).join(' &nbsp; ');
+    const casual=[c.killed?c.killed+' killed':'', c.inj?c.inj+' injured':''].filter(Boolean).join(', ');
+    const when=c.date ? c.date+(c.time?' &middot; '+c.time:'') : ''+c.year;
+    const cond=[c.wx&&c.wx!=='Clear'?c.wx:'', c.lt&&c.lt!=='Daylight'?c.lt:'', c.rd&&c.rd!=='Dry'?c.rd+' road':''].filter(Boolean).join(' &middot; ');
+    m.bindTooltip(
+      '<div style="font-weight:700;color:'+col+'">'+c.sev_label+(c.type?' &mdash; '+c.type:'')+'</div>'+
+      '<div>'+c.location+'</div>'+
+      '<div style="color:#a8b2d8;font-size:10px">'+when+(pb?' &nbsp;|&nbsp; '+pb:'')+(casual?' &nbsp;|&nbsp; <span style="color:#e94560">'+casual+'</span>':'')+'</div>'+
+      (cond?'<div style="color:#8892b0;font-size:10px">'+cond+'</div>':''),
+      {className:'custom-tooltip',sticky:true});
+    safetyLayer.addLayer(m);
+  });
+  safetyLayer.addTo(map);
+  const total=Object.values(counts).reduce((a,b)=>a+b,0);
+  [0,1,2,3].forEach(s=>{ document.getElementById('lc-'+s).textContent=counts[s]; });
+  document.getElementById('lc-total').textContent=total;
+}
+var showClusters=true;
+function toggleClusters(){
+  showClusters=!showClusters;
+  document.getElementById('legrow-cluster').classList.toggle('off',!showClusters);
+  if (safetyLayer) buildCrashLayer();
+}
+function buildClusterBubbles(vis){
   const CLR=120;                                   // cluster radius, meters (~400 ft)
   const mLat=111132, mLon=111320*Math.cos(C.center[0]*Math.PI/180);
   const clusters=[];
@@ -716,28 +762,6 @@ function buildCrashLayer() {
       {className:'custom-tooltip',sticky:true});
     safetyLayer.addLayer(m);
   });
-
-  // ── individual crash dots on top (tooltips use the richer fields when
-  //    the corridor config provides them, else fall back to the basics) ──
-  vis.forEach(c => {
-    const col=CRASH_COLORS[c.severity];
-    const m=L.circleMarker([c.lat,c.lon],{radius:CRASH_RADII[c.severity],color:col,fillColor:col,fillOpacity:0.75,weight:1.5});
-    const pb=[c.ped?'&#128694; Ped':'',c.bike?'&#128690; Bike':''].filter(Boolean).join(' &nbsp; ');
-    const casual=[c.killed?c.killed+' killed':'', c.inj?c.inj+' injured':''].filter(Boolean).join(', ');
-    const when=c.date ? c.date+(c.time?' &middot; '+c.time:'') : ''+c.year;
-    const cond=[c.wx&&c.wx!=='Clear'?c.wx:'', c.lt&&c.lt!=='Daylight'?c.lt:'', c.rd&&c.rd!=='Dry'?c.rd+' road':''].filter(Boolean).join(' &middot; ');
-    m.bindTooltip(
-      '<div style="font-weight:700;color:'+col+'">'+c.sev_label+(c.type?' &mdash; '+c.type:'')+'</div>'+
-      '<div>'+c.location+'</div>'+
-      '<div style="color:#a8b2d8;font-size:10px">'+when+(pb?' &nbsp;|&nbsp; '+pb:'')+(casual?' &nbsp;|&nbsp; <span style="color:#e94560">'+casual+'</span>':'')+'</div>'+
-      (cond?'<div style="color:#8892b0;font-size:10px">'+cond+'</div>':''),
-      {className:'custom-tooltip',sticky:true});
-    safetyLayer.addLayer(m);
-  });
-  safetyLayer.addTo(map);
-  const total=Object.values(counts).reduce((a,b)=>a+b,0);
-  [0,1,2,3].forEach(s=>{ document.getElementById('lc-'+s).textContent=counts[s]; });
-  document.getElementById('lc-total').textContent=total;
 }
 function toggleCrashSev(sev) {
   if (crashSevFilter.has(sev)) crashSevFilter.delete(sev); else crashSevFilter.add(sev);
@@ -869,8 +893,8 @@ function toggleLayer(name,on) {
   }
   if (name==='tcds') {
     const panel=document.getElementById('tcds-panel');
-    if (on) { buildTcdsMarker(); el.classList.add('active'); panel.classList.add('open'); initTcdsCharts(); }
-    else { if(tcdsMarker){map.removeLayer(tcdsMarker);tcdsMarker=null;} el.classList.remove('active'); panel.classList.remove('open'); }
+    if (on) { buildTcdsMarkers(); el.classList.add('active'); panel.classList.add('open'); selectTcdsStation(tcdsSel); }
+    else { if(tcdsMarkers){map.removeLayer(tcdsMarkers);tcdsMarkers=null;} el.classList.remove('active'); panel.classList.remove('open'); }
     setTimeout(()=>map.invalidateSize(), 380);
   }
   if (name==='safety') {
@@ -971,37 +995,59 @@ function showSegmentInfo(p) {
   chartSpd=new Chart(document.getElementById('chartSegSpd'),{type:'line',options:o,data:{labels,datasets:dsS}});
 }
 
-// ── Count-station charts ──────────────────────────────────────────────
-var chartAadt=null,chartHourly=null,tcdsInited=false;
-function initTcdsCharts() {
-  if(tcdsInited) return; tcdsInited=true;
-  const TCDS=C.tcds, st=TCDS.station;
-  document.getElementById('tcds-title1').textContent='AADT by Year — Station '+st.id;
-  document.getElementById('tcds-sub1').textContent=st.label+'  |  Growth since '+TCDS.aadt.years[0];
+// ── Count-station charts (per selected station) ───────────────────────
+var chartAadt=null,chartHourly=null;
+function selectTcdsStation(i) {
+  tcdsSel=i;
+  if (tcdsMarkers) tcdsMarkers.getLayers().forEach((m,j)=>m.setStyle({fillOpacity:j===i?0.6:0.25}));
+  const st=getTcdsStations()[i];
+  const dates=Object.keys(st.counts||{}).sort();
   const sel=document.getElementById('date-filter');
   sel.innerHTML='';
-  TCDS.dates.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
-  const d=TCDS.aadt;
-  chartAadt=new Chart(document.getElementById('chartAadt'),{
-    type:'bar',
-    data:{labels:d.years,datasets:[
-      {type:'bar',label:'AADT',data:d.aadt,yAxisID:'y',backgroundColor:d.aadt.map((_,i)=>i===d.aadt.length-1?'rgba(233,69,96,0.7)':'rgba(255,183,77,0.6)'),borderColor:d.aadt.map((_,i)=>i===d.aadt.length-1?'#e94560':'#ffb74d'),borderWidth:1,borderRadius:3},
-      {type:'line',label:'Growth %',data:d.growth,yAxisID:'y2',borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:4,pointBackgroundColor:'#64ffda',borderWidth:2}
-    ]},
-    options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}},tooltip:{callbacks:{afterLabel:ctx=>ctx.datasetIndex===0?'  Growth: '+d.growth[ctx.dataIndex]+'%':''}}},scales:{x:{ticks:{color:'#8892b0',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}},y:{type:'linear',position:'left',ticks:{color:'#8892b0',font:{size:10},callback:v=>v.toLocaleString()},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'AADT (veh/day)',color:'#8892b0',font:{size:10}}},y2:{type:'linear',position:'right',ticks:{color:'#64ffda',font:{size:10},callback:v=>v+'%'},grid:{drawOnChartArea:false},title:{display:true,text:'Growth %',color:'#64ffda',font:{size:10}}}}}
-  });
+  dates.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
+  if(chartAadt){chartAadt.destroy();chartAadt=null;}
+  if (st.aadt){
+    // long-count station: AADT history + growth
+    document.getElementById('tcds-title1').textContent='AADT by Year — Station '+st.id;
+    document.getElementById('tcds-sub1').textContent=st.label+'  |  Growth since '+st.aadt.years[0];
+    const d=st.aadt;
+    chartAadt=new Chart(document.getElementById('chartAadt'),{
+      type:'bar',
+      data:{labels:d.years,datasets:[
+        {type:'bar',label:'AADT',data:d.aadt,yAxisID:'y',backgroundColor:d.aadt.map((_,k)=>k===d.aadt.length-1?'rgba(233,69,96,0.7)':'rgba(255,183,77,0.6)'),borderColor:d.aadt.map((_,k)=>k===d.aadt.length-1?'#e94560':'#ffb74d'),borderWidth:1,borderRadius:3},
+        {type:'line',label:'Growth %',data:d.growth,yAxisID:'y2',borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:4,pointBackgroundColor:'#64ffda',borderWidth:2}
+      ]},
+      options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}},tooltip:{callbacks:{afterLabel:ctx=>ctx.datasetIndex===0?'  Growth: '+d.growth[ctx.dataIndex]+'%':''}}},scales:{x:{ticks:{color:'#8892b0',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}},y:{type:'linear',position:'left',ticks:{color:'#8892b0',font:{size:10},callback:v=>v.toLocaleString()},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'AADT (veh/day)',color:'#8892b0',font:{size:10}}},y2:{type:'linear',position:'right',ticks:{color:'#64ffda',font:{size:10},callback:v=>v+'%'},grid:{drawOnChartArea:false},title:{display:true,text:'Growth %',color:'#64ffda',font:{size:10}}}}}
+    });
+  } else {
+    // short-count station: daily totals per direction per count date
+    document.getElementById('tcds-title1').textContent='Daily Totals — Station '+st.id;
+    document.getElementById('tcds-sub1').textContent=st.label;
+    const dkeys=dates.length?Object.keys(st.counts[dates[0]].dirs).filter(k=>st.counts[dates[0]].dirs[k]):[];
+    chartAadt=new Chart(document.getElementById('chartAadt'),{
+      type:'bar',
+      data:{labels:dates,datasets:dkeys.map((k,x)=>({
+        label:k,
+        data:dates.map(dt=>{ const a=(st.counts[dt].dirs||{})[k]; return a?a.reduce((p,q)=>p+q,0):null; }),
+        backgroundColor:DIR_BGS[x%DIR_BGS.length].replace('0.1','0.55'),
+        borderColor:DIR_COLS[x%DIR_COLS.length], borderWidth:1, borderRadius:3
+      }))},
+      options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}}},scales:{x:{ticks:{color:'#8892b0',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#8892b0',font:{size:10},callback:v=>v.toLocaleString()},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'veh/day counted',color:'#8892b0',font:{size:10}}}}}
+    });
+  }
   updateHourlyChart();
 }
 function updateHourlyChart() {
+  const st=getTcdsStations()[tcdsSel];
   const date=document.getElementById('date-filter').value; if(!date) return;
-  const h=C.tcds.hourly[date]; if(!h) return;
+  const h=(st.counts||{})[date]; if(!h) return;
   const labels=h.hours.map(hr=>hr+':00');
   if(chartHourly){chartHourly.destroy();chartHourly=null;}
-  // per-direction keys in the hourly block use the lowercase short name (eb/wb, nb/sb)
-  const ds=C.dirs.map(d=>{
-    const arr=h[d.short.toLowerCase()]; if(!arr) return null;
-    return {label:d.label,data:arr,backgroundColor:dirBg(d.key).replace('0.1','0.55'),borderColor:dirColor(d.key),borderWidth:1,borderRadius:2};
-  }).filter(Boolean);
+  // direction labels come from the station itself (EB/WB on the corridor,
+  // NB/SB on a cross street), not from the corridor dirs
+  const ds=Object.keys(h.dirs).filter(k=>h.dirs[k]).map((k,x)=>(
+    {label:k,data:h.dirs[k],backgroundColor:DIR_BGS[x%DIR_BGS.length].replace('0.1','0.55'),borderColor:DIR_COLS[x%DIR_COLS.length],borderWidth:1,borderRadius:2}
+  ));
   chartHourly=new Chart(document.getElementById('chartHourly'),{
     type:'bar', data:{labels,datasets:ds},
     options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}}},scales:{x:{ticks:{color:'#8892b0',font:{size:9},maxRotation:45},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8892b0',font:{size:9}},grid:{color:'rgba(255,255,255,0.04)'},title:{display:true,text:'Vehicles',color:'#8892b0',font:{size:9}}}}}
@@ -1021,7 +1067,7 @@ function loadCorridor(id){
   // destroy every chart + reset per-corridor state
   [chartTaz,chartSlVol,chartSlSpd,chartVol,chartSpd,chartAadt,chartHourly,chartModes].forEach(ch=>{ if(ch) ch.destroy(); });
   chartTaz=chartSlVol=chartSlSpd=chartVol=chartSpd=chartAadt=chartHourly=chartModes=null;
-  tcdsInited=false; lastSegProps=null;
+  tcdsSel=0; lastSegProps=null;
   document.getElementById('date-filter').innerHTML='';
   document.getElementById('sl-seg-content').innerHTML='';
   document.getElementById('sl-seg-default').style.display='block';
