@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corridor Study Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// corridor configs (loaded below) register themselves here
+window.REG = [];
+window.registerCorridor = function(cfg){ window.REG.push(cfg); };
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #1a1a2e; }
+
+/* ── Layout ── */
+#main-wrap { display: flex; flex: 1; min-height: 0; }
+#map-area  { display: flex; flex-direction: row; flex: 1; min-width: 0; }
+#map       { flex: 1; position: relative; }
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 280px; flex-shrink: 0; background: #16213e;
+  display: flex; flex-direction: column; z-index: 1000;
+  border-right: 2px solid #0f3460; overflow-y: auto;
+}
+#sidebar-header {
+  padding: 14px 14px 11px; flex-shrink: 0;
+  background: linear-gradient(135deg, #0f3460, #16213e);
+  border-bottom: 1px solid #0f3460;
+}
+#sidebar-header h1 { color: #e94560; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+#sidebar-header p  { color: #8892b0; font-size: 10px; margin-top: 3px; }
+#corridor-sel {
+  width: 100%; margin-top: 9px; background: #0f3460; border: 1px solid #1e4a7a;
+  color: #ccd6f6; border-radius: 5px; padding: 5px 7px; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+#corridor-sel option { background: #16213e; }
+
+.sb-section { padding: 12px 14px; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+.sb-section h2 { color: #ccd6f6; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 9px; }
+
+/* Basemap grid */
+.basemap-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+.bm-btn { border: 2px solid #0f3460; border-radius: 5px; overflow: hidden; cursor: pointer; transition: border-color 0.2s; background: #0f3460; }
+.bm-btn:hover { border-color: #64ffda; }
+.bm-btn.active { border-color: #e94560; }
+.bm-thumb { width: 100%; height: 26px; display: block; }
+.bm-label { color: #ccd6f6; font-size: 9px; text-align: center; padding: 3px; font-weight: 600; }
+
+/* Layer items */
+.layer-instruction { color: #8892b0; font-size: 10px; font-style: italic; margin-bottom: 9px; line-height: 1.5; }
+.layer-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 6px; margin-bottom: 4px;
+  cursor: pointer; border: 1px solid transparent; transition: background 0.2s;
+}
+.layer-item:hover { background: #0f3460; }
+.layer-item.active { background: rgba(233,69,96,0.1); border-color: rgba(233,69,96,0.3); }
+.layer-item.disabled { opacity: 0.35; cursor: default; }
+.layer-item.disabled .toggle { pointer-events: none; }
+.layer-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.layer-label { color: #ccd6f6; font-size: 11px; font-weight: 600; flex: 1; }
+.layer-badge { font-size: 9px; padding: 2px 5px; border-radius: 10px; font-weight: 700; }
+.badge-soon { background: rgba(255,183,77,0.15); color: #ffb74d; border: 1px solid rgba(255,183,77,0.3); }
+
+/* Toggle */
+.toggle { position: relative; width: 30px; height: 17px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; background: #333; border-radius: 17px; transition: 0.3s; cursor: pointer; }
+.slider:before { content: ''; position: absolute; height: 11px; width: 11px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; }
+input:checked + .slider { background: #e94560; }
+input:checked + .slider:before { transform: translateX(13px); }
+
+/* Direction / metric pills */
+.dir-pills { display: flex; gap: 5px; padding: 4px 8px 8px 26px; }
+.dir-pill { padding: 3px 9px; border-radius: 11px; font-size: 10px; font-weight: 700; cursor: pointer; border: 1.5px solid #0f3460; color: #8892b0; background: transparent; transition: all 0.2s; user-select: none; }
+.dir-pill:hover { border-color: #64ffda; color: #64ffda; }
+.dir-pill.active { border-color: #64ffda; color: #16213e; background: #64ffda; }
+.metric-pills { display: flex; gap: 4px; margin-bottom: 9px; flex-wrap: wrap; }
+.met-pill { padding: 3px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; cursor: pointer; border: 1px solid #1e4a7a; color: #8892b0; background: transparent; transition: all 0.2s; }
+.met-pill:hover { color: #ccd6f6; border-color: #64ffda; }
+.met-pill.active { background: #0f3460; color: #64ffda; border-color: #64ffda; }
+
+/* Info card (corridor overview) */
+.info-card { background: #0f3460; border-radius: 6px; padding: 9px 10px; margin-bottom: 8px; }
+.ic-title { color: #64ffda; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; }
+.ic-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.ic-row:last-child { border-bottom: none; }
+.ic-key { color: #8892b0; font-size: 10px; }
+.ic-val { color: #ccd6f6; font-size: 10px; font-weight: 600; }
+.grade-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 900; background: rgba(100,255,218,0.15); color: #64ffda; border: 1px solid rgba(100,255,218,0.3); }
+
+/* ── StreetLight right dock ── */
+#map-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#map-col #map { flex: 1; min-height: 0; height: auto; }
+#sl-panel {
+  flex: 0 0 auto; width: 0; overflow: hidden;
+  background: #16213e; border-left: 2px solid #0f3460;
+  display: flex; flex-direction: column;
+  transition: width 0.35s ease;
+}
+#sl-panel.open { width: 340px; }
+#sl-panel-header, #sl-panel-body { width: 340px; }
+#sl-panel-header {
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  padding: 9px 12px; border-bottom: 1px solid #0f3460;
+}
+#sl-panel-title { color: #64ffda; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; }
+#sl-panel-toggle { color: #8892b0; font-size: 16px; cursor: pointer; padding: 0 2px; }
+#sl-panel-body { padding: 10px 12px; overflow-y: auto; flex: 1; }
+.sl-tabs { display: flex; gap: 4px; margin-bottom: 9px; }
+.sl-tab { flex: 1; text-align: center; padding: 4px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer; color: #8892b0; border: 1px solid #0f3460; transition: all 0.2s; }
+.sl-tab:hover { color: #ccd6f6; }
+.sl-tab.active { background: #0f3460; color: #64ffda; border-color: #64ffda; }
+.sl-chart-wrap { background: #0f3460; border-radius: 5px; padding: 8px; margin-bottom: 8px; }
+.sl-chart-title { color: #a8b2d8; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+#sl-panel canvas { max-height: 100px; }
+.dir-section { margin-bottom: 11px; }
+.dir-title { color: #64ffda; font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid rgba(100,255,218,0.2); padding-bottom: 3px; }
+.dir-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.dir-row:last-child { border-bottom: none; }
+.dir-key { color: #8892b0; font-size: 10px; }
+.dir-val { color: #ccd6f6; font-size: 10px; font-weight: 600; }
+.congested-yes { color: #e94560 !important; }
+.congested-no  { color: #64ffda !important; }
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 11px; }
+.stat-card { background: #0f3460; border-radius: 6px; padding: 9px; text-align: center; }
+.stat-val { color: #e94560; font-size: 17px; font-weight: 700; line-height: 1; }
+.stat-lbl { color: #8892b0; font-size: 9px; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+.seg-name { color: #e2e8f0; font-size: 11px; font-weight: 700; margin-bottom: 10px; line-height: 1.4; }
+
+/* ── Floating panels (population / replica) ── */
+.float-panel {
+  position: absolute; z-index: 997;
+  width: 268px; background: rgba(22,33,62,0.96); border: 1px solid #0f3460;
+  border-radius: 8px; box-shadow: 4px 4px 20px rgba(0,0,0,0.5); display: none;
+  max-height: calc(100% - 20px); overflow-y: auto;
+}
+#pop-panel { left: 54px; top: 10px; }
+#replica-panel { right: 10px; top: 10px; border-color: #34d399; }
+.float-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; border-bottom: 1px solid #0f3460; cursor: pointer;
+}
+#pop-panel-title { color: #818cf8; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; }
+#replica-panel-title { color: #34d399; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; }
+.float-panel-toggle { color: #8892b0; font-size: 16px; }
+.float-panel-body { padding: 10px 12px; }
+.float-panel canvas { max-height: 130px; }
+.od-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.od-key { color: #8892b0; font-size: 10px; }
+.od-val { color: #34d399; font-size: 10px; font-weight: 700; }
+
+/* ── Complete streets banner ── */
+#cs-banner {
+  display: none; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 999; background: rgba(22,33,62,0.95); border: 1px solid #f472b6;
+  border-radius: 8px; padding: 7px 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+.cs-banner-title { color: #f472b6; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 4px; }
+.cs-banner-row { display: flex; gap: 14px; }
+.cs-tag { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #a8b2d8; }
+.cs-score { font-weight: 700; color: #f472b6; }
+
+/* ── Unified Legend box (bottom-left) ── */
+#legend-box {
+  position: absolute; bottom: 40px; left: 10px; z-index: 999;
+  width: 200px; background: rgba(22,33,62,0.95); border: 1px solid #0f3460;
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); display: none;
+}
+#legend-box-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px; border-bottom: 1px solid #0f3460; cursor: pointer;
+}
+#legend-box-header span { color: #ccd6f6; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; }
+#legend-box-toggle { color: #8892b0; font-size: 14px; }
+#legend-box-body { padding: 8px 10px; }
+.leg-section { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.leg-section:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.leg-section-title { color: #a8b2d8; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.leg-row {
+  display: flex; align-items: center; gap: 7px; padding: 3px 5px;
+  border-radius: 4px; margin-bottom: 2px; cursor: pointer;
+  transition: background 0.15s;
+}
+.leg-row:hover { background: rgba(255,255,255,0.06); }
+.leg-row.off { opacity: 0.3; }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid rgba(255,255,255,0.2); }
+.leg-label { color: #a8b2d8; font-size: 10px; flex: 1; }
+.leg-count { color: #ccd6f6; font-size: 10px; font-weight: 700; }
+.leg-grad { height: 8px; border-radius: 4px; width: 100%; margin: 5px 0 3px; }
+.leg-grad-ticks { display: flex; justify-content: space-between; }
+.leg-grad-ticks span { color: #8892b0; font-size: 9px; }
+
+/* ── TCDS bottom panel ── */
+#tcds-panel {
+  height: 0; overflow: hidden; background: #16213e;
+  border-top: 2px solid #0f3460; transition: height 0.35s ease;
+  display: flex; align-items: stretch; flex-shrink: 0;
+}
+#tcds-panel.open { height: 255px; }
+.tcds-card { flex: 1; padding: 10px 14px; display: flex; flex-direction: column; border-right: 1px solid #0f3460; min-width: 0; }
+.tcds-card:last-child { border-right: none; }
+.tcds-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; flex-shrink: 0; }
+.tcds-card-title { color: #ccd6f6; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+.tcds-card-sub { color: #8892b0; font-size: 10px; }
+.tcds-card canvas { flex: 1; min-height: 0; }
+#date-filter { background: #0f3460; border: 1px solid #1e4a7a; color: #ccd6f6; border-radius: 4px; padding: 3px 6px; font-size: 10px; cursor: pointer; }
+#date-filter option { background: #16213e; }
+
+/* Key-free basemap restyling: OSM tiles inverted for the dark theme and
+   desaturated for the light theme (no CARTO — it needs an API key) */
+.tiles-dark  { filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.35); }
+.tiles-light { filter: grayscale(0.85) brightness(1.05) contrast(0.94); }
+
+/* Tooltip */
+.custom-tooltip {
+  background: rgba(22,33,62,0.95) !important; border: 1px solid #0f3460 !important;
+  border-radius: 6px !important; color: #ccd6f6 !important; font-size: 11px !important;
+  font-family: Arial, sans-serif !important; padding: 7px 10px !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important; white-space: nowrap;
+}
+.tooltip-adt { color: #e94560; font-weight: 700; font-size: 13px; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #16213e; }
+::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="main-wrap">
+
+<!-- ═══ SIDEBAR ═══ -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1 id="hdr-name">Corridor Study</h1>
+    <p id="hdr-agency">Corridor Data Dashboard</p>
+    <select id="corridor-sel" onchange="loadCorridor(this.value)"></select>
+  </div>
+
+  <!-- Background Map -->
+  <div class="sb-section">
+    <h2>&#9790; Background Map</h2>
+    <div class="basemap-grid">
+      <div class="bm-btn active" id="bm-dark"      onclick="setBasemap('dark')">      <div class="bm-thumb" style="background:linear-gradient(135deg,#1a1a2e,#0f3460)"></div><div class="bm-label">Dark</div></div>
+      <div class="bm-btn"        id="bm-light"     onclick="setBasemap('light')">     <div class="bm-thumb" style="background:linear-gradient(135deg,#e0e0e0,#bdbdbd)"></div><div class="bm-label">Light</div></div>
+      <div class="bm-btn"        id="bm-street"    onclick="setBasemap('street')">    <div class="bm-thumb" style="background:linear-gradient(135deg,#a5d6a7,#ffe082)"></div><div class="bm-label">Streets</div></div>
+      <div class="bm-btn"        id="bm-satellite" onclick="setBasemap('satellite')"> <div class="bm-thumb" style="background:linear-gradient(135deg,#1b5e20,#33691e)"></div><div class="bm-label">Satellite</div></div>
+    </div>
+  </div>
+
+  <!-- Data Layers (built per corridor — rows disable when the data is missing) -->
+  <div class="sb-section">
+    <h2>&#9776; Data Layers</h2>
+    <p class="layer-instruction">All layers are off by default. Grayed layers have no data uploaded for this corridor yet.</p>
+    <div id="layer-list"></div>
+  </div>
+
+  <!-- Corridor overview (visible when CS ON) -->
+  <div class="sb-section" id="cs-info-panel" style="display:none"></div>
+</div><!-- /sidebar -->
+
+<!-- ═══ MAP AREA ═══ -->
+<div id="map-area">
+  <div id="map-col">
+  <div id="map">
+
+    <!-- Complete Streets banner -->
+    <div id="cs-banner"></div>
+
+    <!-- Population & Employment panel -->
+    <div id="pop-panel" class="float-panel">
+      <div class="float-panel-header" onclick="toggleFloatPanel('pop-panel')">
+        <span id="pop-panel-title">Population &amp; Employment Forecast</span>
+        <span class="float-panel-toggle" id="pop-panel-toggle">&#8964;</span>
+      </div>
+      <div class="float-panel-body" id="pop-panel-body">
+        <div style="color:#8892b0;font-size:10px;margin-bottom:8px" id="pop-note"></div>
+        <canvas id="chartTaz"></canvas>
+      </div>
+    </div>
+
+    <!-- Replica panel (mode share + top O-D pairs) -->
+    <div id="replica-panel" class="float-panel">
+      <div class="float-panel-header" onclick="toggleFloatPanel('replica-panel')">
+        <span id="replica-panel-title">Replica &mdash; Modes &amp; O-D</span>
+        <span class="float-panel-toggle" id="replica-panel-toggle">&#8964;</span>
+      </div>
+      <div class="float-panel-body" id="replica-panel-body">
+        <div style="color:#8892b0;font-size:10px;margin-bottom:8px" id="replica-note"></div>
+        <canvas id="chartModes"></canvas>
+        <div id="replica-od" style="margin-top:9px"></div>
+      </div>
+    </div>
+
+    <!-- Unified Legend box -->
+    <div id="legend-box">
+      <div id="legend-box-header" onclick="toggleLegendBox()">
+        <span>Legend</span>
+        <span id="legend-box-toggle">&#8964;</span>
+      </div>
+      <div id="legend-box-body">
+
+        <div class="leg-section" id="leg-sl" style="display:none">
+          <div class="leg-section-title">StreetLight &mdash; <span id="leg-sl-metric">Daily Traffic (ADT)</span></div>
+          <div class="leg-grad" id="leg-sl-grad" style="background:linear-gradient(to right,#00897b,#ffeb3b,#e53935)"></div>
+          <div class="leg-grad-ticks"><span id="leg-sl-lo">0</span><span id="leg-sl-md"></span><span id="leg-sl-hi"></span></div>
+        </div>
+
+        <div class="leg-section" id="leg-inrix" style="display:none">
+          <div class="leg-section-title">INRIX &mdash; Speed vs Free-Flow</div>
+          <div class="leg-grad" style="background:linear-gradient(to right,#e53935,#ffeb3b,#00897b)"></div>
+          <div class="leg-grad-ticks"><span>&le;40% congested</span><span>&ge;90% free-flow</span></div>
+        </div>
+
+        <div class="leg-section" id="leg-crash" style="display:none">
+          <div class="leg-section-title">Crash Severity (click to filter)</div>
+          <div class="leg-row" id="legrow-0" onclick="toggleCrashSev(0)"><div class="leg-dot" style="background:#94a3b8"></div><span class="leg-label">Property Damage Only</span><span class="leg-count" id="lc-0">0</span></div>
+          <div class="leg-row" id="legrow-1" onclick="toggleCrashSev(1)"><div class="leg-dot" style="background:#fbbf24"></div><span class="leg-label">Possible Injury</span><span class="leg-count" id="lc-1">0</span></div>
+          <div class="leg-row" id="legrow-2" onclick="toggleCrashSev(2)"><div class="leg-dot" style="background:#fb923c"></div><span class="leg-label">Injury</span><span class="leg-count" id="lc-2">0</span></div>
+          <div class="leg-row" id="legrow-3" onclick="toggleCrashSev(3)"><div class="leg-dot" style="background:#e94560"></div><span class="leg-label">Fatal / Serious Inj.</span><span class="leg-count" id="lc-3">0</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.08)">
+            <span style="color:#8892b0;font-size:9px">Total visible</span>
+            <span style="color:#e94560;font-size:10px;font-weight:700" id="lc-total">0</span>
+          </div>
+        </div>
+
+        <div class="leg-section" id="leg-equity" style="display:none">
+          <div class="leg-section-title" id="leg-eq-title">Equity Index Score</div>
+          <div class="leg-grad" id="leg-eq-grad" style="background:linear-gradient(to right,rgb(99,102,241),rgb(180,30,80))"></div>
+          <div class="leg-grad-ticks"><span id="leg-eq-lo">Lower</span><span id="leg-eq-hi">Higher</span></div>
+          <div style="color:#8892b0;font-size:9px;margin-top:4px">Higher score = greater equity need</div>
+        </div>
+
+        <div class="leg-section" id="leg-schools" style="display:none">
+          <div class="leg-section-title">Schools</div>
+          <div class="leg-row" style="cursor:default"><div class="leg-dot" style="background:#c084fc"></div><span class="leg-label">High School</span></div>
+          <div class="leg-row" style="cursor:default"><div class="leg-dot" style="background:#a78bfa"></div><span class="leg-label">Middle School</span></div>
+          <div class="leg-row" style="cursor:default"><div class="leg-dot" style="background:#818cf8"></div><span class="leg-label">Elementary School</span></div>
+          <div class="leg-row" style="cursor:default"><div class="leg-dot" style="background:#93c5fd"></div><span class="leg-label">Charter School</span></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /map -->
+
+  <!-- Count-station bottom panel -->
+  <div id="tcds-panel">
+    <div class="tcds-card">
+      <div class="tcds-card-header">
+        <div>
+          <div class="tcds-card-title" id="tcds-title1">AADT by Year</div>
+          <div class="tcds-card-sub" id="tcds-sub1"></div>
+        </div>
+      </div>
+      <canvas id="chartAadt"></canvas>
+    </div>
+    <div class="tcds-card">
+      <div class="tcds-card-header">
+        <div class="tcds-card-title">Hourly Volume Distribution</div>
+        <select id="date-filter" onchange="updateHourlyChart()"></select>
+      </div>
+      <canvas id="chartHourly"></canvas>
+    </div>
+  </div>
+  </div><!-- /map-col -->
+
+  <!-- StreetLight right dock -->
+  <div id="sl-panel">
+    <div id="sl-panel-header">
+      <span id="sl-panel-title">StreetLight Data</span>
+      <span id="sl-panel-toggle" onclick="document.getElementById('tog-streetlight').checked=false; toggleLayer('streetlight',false);">&#10005;</span>
+    </div>
+    <div id="sl-panel-body">
+      <div class="metric-pills">
+        <span class="met-pill active" id="mpill-adt"   onclick="setMetric('adt')">ADT Volume</span>
+        <span class="met-pill"        id="mpill-speed" onclick="setMetric('speed')">Avg Speed</span>
+        <span class="met-pill"        id="mpill-tti"   onclick="setMetric('tti')">Travel Time Index</span>
+      </div>
+      <div style="display:flex;gap:5px;margin-bottom:10px" id="sl-dir-pills2"></div>
+      <div class="sl-tabs">
+        <div class="sl-tab active" id="sltab-profile" onclick="switchSlTab('profile')">Corridor Profile</div>
+        <div class="sl-tab"        id="sltab-segment" onclick="switchSlTab('segment')">Segment Detail</div>
+      </div>
+      <div id="slview-profile">
+        <div class="sl-chart-wrap"><div class="sl-chart-title">Avg Hourly Volume</div><canvas id="chartSlVol"></canvas></div>
+        <div class="sl-chart-wrap"><div class="sl-chart-title">Avg Hourly Speed</div><canvas id="chartSlSpd"></canvas></div>
+      </div>
+      <div id="slview-segment" style="display:none">
+        <div id="sl-seg-default" style="color:#8892b0;font-size:11px;text-align:center;padding:18px 0">Click a segment on the map</div>
+        <div id="sl-seg-content"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /map-area -->
+</div><!-- /main-wrap -->
+
+<script>
+'use strict';
+// ════════════════════════════════════════════════════════════════════════
+//  GENERIC CORRIDOR STUDY ENGINE — all corridor-specific content lives in
+//  corridors/*.js config files (see README.md for the schema). Every data
+//  block is optional: missing blocks gray out their layer row.
+// ════════════════════════════════════════════════════════════════════════
+var C = null;            // the active corridor config
+
+// ── Map ───────────────────────────────────────────────────────────────
+const map = L.map('map', { center: [39.8272, -105.1188], zoom: 15 });
+const BASEMAPS = {
+  // 100% key-free: OSM tiles (CSS-restyled dark/light) + Esri imagery
+  dark:      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }),
+  light:     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-light' }),
+  street:    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20 }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 })
+};
+var currentBasemap = 'dark';
+BASEMAPS.dark.addTo(map);
+
+function setBasemap(name) {
+  if (name === currentBasemap) return;
+  map.removeLayer(BASEMAPS[currentBasemap]);
+  BASEMAPS[name].addTo(map);
+  [streetlightOutline, streetlightLayer, inrixLayer, equityLayer, safetyLayer, transitLayer, schoolsLayer, tcdsMarker].forEach(l => l && l.bringToFront && l.bringToFront());
+  currentBasemap = name;
+  document.querySelectorAll('.bm-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('bm-'+name).classList.add('active');
+}
+
+// ── Directions (configurable: EB/WB, NB/SB, …) ────────────────────────
+function dirKeys(){ return C.dirs.map(d=>d.key); }
+function activeDirs(){ return currentSlDir==='BOTH' ? C.dirs : C.dirs.filter(d=>d.key===currentSlDir); }
+const DIR_COLS = ['#64ffda','#ffb74d'];
+const DIR_BGS  = ['rgba(100,255,218,0.1)','rgba(255,183,77,0.1)'];
+function dirColor(key){ return DIR_COLS[Math.max(0,dirKeys().indexOf(key))%DIR_COLS.length]; }
+function dirBg(key){ return DIR_BGS[Math.max(0,dirKeys().indexOf(key))%DIR_BGS.length]; }
+
+var currentSlDir = 'BOTH';
+function avgOver(p, prefix){
+  const ks = currentSlDir==='BOTH' ? dirKeys() : [currentSlDir];
+  const vs = ks.map(k=>p[prefix+'_'+k]).filter(v=>v!=null && !isNaN(v));
+  return vs.length ? vs.reduce((a,b)=>a+b,0)/vs.length : null;
+}
+function slRanges(){ return (C.streetlight && C.streetlight.ranges) || { adt:[0,15000], speed:[20,50], tti:[0,2] }; }
+const METRICS = {
+  adt:   { key: p => { if (currentSlDir!=='BOTH') return p['ADT_'+currentSlDir];
+                       return ('Total_ADT' in p) ? p.Total_ADT : dirKeys().reduce((a,k)=>a+(p['ADT_'+k]||0),0)||null; },
+           mn: ()=>slRanges().adt[0], mx: ()=>currentSlDir==='BOTH'?slRanges().adt[1]:Math.round(slRanges().adt[1]*0.53/500)*500,
+           unit:'veh/day', rev:false },
+  speed: { key: p => avgOver(p,'speed'), mn: ()=>slRanges().speed[0], mx: ()=>slRanges().speed[1], unit:'mph', rev:true },
+  tti:   { key: p => avgOver(p,'tti'),   mn: ()=>slRanges().tti[0],   mx: ()=>slRanges().tti[1],   unit:'',   rev:false }
+};
+var currentMetric = 'adt';
+
+function getColor(val, metric) {
+  const mn=METRICS[metric].mn(), mx=METRICS[metric].mx();
+  if (val==null||isNaN(val)) return '#666';
+  let t = Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+  if (METRICS[metric].rev) t=1-t;
+  if (t<0.5) { const s=t*2; return 'rgb('+Math.round(s*255)+','+Math.round(137+s*(235-137))+',0)'; }
+  else        { const s=(t-0.5)*2; return 'rgb(255,'+Math.round(235*(1-s))+',0)'; }
+}
+
+function setMetric(m) {
+  currentMetric=m;
+  document.querySelectorAll('.met-pill').forEach(el=>el.classList.remove('active'));
+  const p=document.getElementById('mpill-'+m); if(p) p.classList.add('active');
+  if (streetlightLayer) buildSlLayer();
+  updateSlLegend();
+}
+
+// ── StreetLight ───────────────────────────────────────────────────────
+var streetlightLayer=null, streetlightOutline=null;
+function buildSlLayer() {
+  if (streetlightOutline) map.removeLayer(streetlightOutline);
+  if (streetlightLayer)   map.removeLayer(streetlightLayer);
+  streetlightOutline = L.geoJSON(C.streetlight.geojson, { style:()=>({ color:'#fff',weight:12,opacity:0.2,lineCap:'round',lineJoin:'round',interactive:false }) }).addTo(map);
+  streetlightLayer   = L.geoJSON(C.streetlight.geojson, {
+    style: f => ({ color:getColor(METRICS[currentMetric].key(f.properties),currentMetric), weight:7, opacity:0.95, lineCap:'round', lineJoin:'round' }),
+    onEachFeature: (f,layer) => {
+      const p=f.properties;
+      const v=METRICS['adt'].key(p);
+      const dl = C.dirs.filter(d=>currentSlDir==='BOTH'||currentSlDir===d.key)
+                       .map(d=>d.arrow+' '+(p['ADT_'+d.key]||0).toLocaleString()).join('&nbsp;&nbsp;');
+      layer.bindTooltip('<div><b>'+p.name+'</b></div><div class="tooltip-adt">'+(v||0).toLocaleString()+' veh/day</div><div style="color:#a8b2d8;font-size:10px">'+dl+'</div>', {className:'custom-tooltip',sticky:true});
+      layer.on('click',()=>showSegmentInfo(p));
+      layer.on('mouseover',function(){this.setStyle({weight:11,opacity:1});});
+      layer.on('mouseout', function(){this.setStyle({weight:7,opacity:0.95});});
+    }
+  }).addTo(map);
+}
+
+function buildDirPills(){
+  const mk = pfx => '<span class="dir-pill active" id="'+pfx+'BOTH" onclick="setSlDir(\'BOTH\')">Both</span>'+
+    C.dirs.map(d=>'<span class="dir-pill" id="'+pfx+d.key+'" onclick="setSlDir(\''+d.key+'\')">'+d.arrow+' '+d.short+'</span>').join('');
+  const dp=document.getElementById('sl-dir-pills'); if (dp) dp.innerHTML=mk('dpill-');
+  document.getElementById('sl-dir-pills2').innerHTML=mk('spill-');
+}
+
+function setSlDir(dir) {
+  currentSlDir=dir;
+  ['BOTH'].concat(dirKeys()).forEach(d=>{
+    ['dpill-','spill-'].forEach(pfx=>{ const e=document.getElementById(pfx+d); if(e) e.classList.toggle('active',d===dir); });
+  });
+  if (streetlightLayer) buildSlLayer();
+  updateSlLegend();
+  buildSlPanelCharts();
+  if (lastSegProps && document.getElementById('slview-segment').style.display!=='none') showSegmentInfo(lastSegProps);
+}
+
+function updateSlLegend() {
+  const m=METRICS[currentMetric];
+  const mn=m.mn(), mx=m.mx(), u=m.unit?' '+m.unit:'';
+  const mid=(mn+mx)/2;
+  const midStr=Number.isInteger(mid)?mid.toLocaleString():mid.toFixed(0);
+  const titles={adt:'Daily Traffic (ADT)',speed:'Avg Speed (mph)',tti:'Travel Time Index'};
+  const grads={adt:'linear-gradient(to right,#00897b,#ffeb3b,#e53935)',speed:'linear-gradient(to right,#e53935,#ffeb3b,#00897b)',tti:'linear-gradient(to right,#00897b,#ffeb3b,#e53935)'};
+  document.getElementById('leg-sl-metric').textContent   = titles[currentMetric];
+  document.getElementById('leg-sl-grad').style.background= grads[currentMetric];
+  document.getElementById('leg-sl-lo').textContent = mn.toLocaleString()+u;
+  document.getElementById('leg-sl-md').textContent = midStr+u;
+  document.getElementById('leg-sl-hi').textContent = mx.toLocaleString()+u;
+}
+
+// ── INRIX (speed vs free-flow ratio on its own segment set) ───────────
+var inrixLayer=null;
+function buildInrixLayer(){
+  if (inrixLayer) map.removeLayer(inrixLayer);
+  inrixLayer = L.geoJSON(C.inrix.geojson, {
+    style: f => {
+      const p=f.properties;
+      const sp=avgOver(p,'speed'), ff=avgOver(p,'freeflow');
+      const ratio = (sp!=null&&ff) ? sp/ff : null;
+      let col='#666';
+      if (ratio!=null){
+        const t=Math.max(0,Math.min(1,(ratio-0.4)/0.5));
+        col = t<0.5 ? 'rgb(229,'+Math.round(57+t*2*178)+',53)' : 'rgb('+Math.round(255-(t-0.5)*2*255)+',200,80)';
+        if (t>=0.98) col='#00897b';
+      }
+      return { color:col, weight:6, opacity:0.95, lineCap:'round', lineJoin:'round' };
+    },
+    onEachFeature: (f,layer) => {
+      const p=f.properties;
+      const rows=C.dirs.map(d=>{
+        const sp=p['speed_'+d.key], ff=p['freeflow_'+d.key];
+        if (sp==null) return '';
+        return '<div style="color:#a8b2d8;font-size:10px">'+d.arrow+' '+d.short+': <b>'+sp+'</b> mph'+(ff?' (free-flow '+ff.toFixed(0)+')':'')+'</div>';
+      }).join('');
+      layer.bindTooltip('<div><b>'+(p.name||'Segment')+'</b></div>'+rows, {className:'custom-tooltip',sticky:true});
+    }
+  }).addTo(map);
+}
+
+// ── Replica (mode share + top O-D pairs panel) ────────────────────────
+var chartModes=null;
+function buildReplicaPanel(){
+  const r=C.replica;
+  document.getElementById('replica-note').textContent = r.note || '';
+  if (chartModes){ chartModes.destroy(); chartModes=null; }
+  if (r.modeShare){
+    chartModes=new Chart(document.getElementById('chartModes'),{
+      type:'doughnut',
+      data:{ labels:r.modeShare.labels, datasets:[{ data:r.modeShare.values,
+        backgroundColor:['#34d399','#64ffda','#818cf8','#f472b6','#ffb74d','#94a3b8'], borderColor:'#16213e', borderWidth:2 }] },
+      options:{ responsive:true, animation:false, plugins:{ legend:{ position:'right', labels:{ color:'#a8b2d8', font:{size:9}, boxWidth:10 } } } }
+    });
+  }
+  const od=document.getElementById('replica-od');
+  od.innerHTML = (r.odPairs&&r.odPairs.length)
+    ? '<div class="sl-chart-title">Top O-D Pairs (daily trips)</div>'+r.odPairs.map(p=>'<div class="od-row"><span class="od-key">'+p.name+'</span><span class="od-val">'+p.trips.toLocaleString()+'</span></div>').join('')
+    : '';
+}
+
+// ── Equity ────────────────────────────────────────────────────────────
+var equityLayer=null;
+function eqColor(s) {
+  const eq=C.equity, mn=eq.min!=null?eq.min:13, mx=eq.max!=null?eq.max:19;
+  const t=Math.max(0,Math.min(1,(s-mn)/(mx-mn)));
+  return 'rgb('+Math.round(99+t*(180-99))+','+Math.round(102+t*(30-102))+','+Math.round(241+t*(80-241))+')';
+}
+function buildEquityLayer() {
+  if (equityLayer) map.removeLayer(equityLayer);
+  equityLayer = L.geoJSON(C.equity.geojson, {
+    style: f => ({ fillColor:eqColor(f.properties.index_score||((C.equity.min+C.equity.max)/2)), color:'#fff', weight:1.5, fillOpacity:0.42 }),
+    onEachFeature: (f,layer) => {
+      const p=f.properties;
+      layer.bindTooltip('<b>'+p.NAME+'</b><br><span style="color:#818cf8">Equity Index: <b>'+p.index_score+'</b> ('+(p.index_q||'')+')</span><br><span style="color:#a8b2d8;font-size:10px">Pop: '+(p.population||0).toLocaleString()+' &nbsp;|&nbsp; '+p.pct_poc+'% PoC &nbsp;|&nbsp; '+p.pct_low_income+'% Low Income</span>', {className:'custom-tooltip',sticky:true});
+    }
+  });
+  equityLayer.addTo(map);
+  equityLayer.bringToBack();
+  if (streetlightLayer) streetlightLayer.bringToFront();
+}
+
+// ── Transit stops ─────────────────────────────────────────────────────
+var transitLayer=null;
+function buildTransitLayer() {
+  if (transitLayer) return;
+  transitLayer=L.layerGroup();
+  C.transit.stops.forEach(s => {
+    const arrow=s.direction==='N'?'&#9650;':s.direction==='S'?'&#9660;':s.direction==='E'?'&#9658;':'&#9668;';
+    const icon=L.divIcon({
+      html: '<div style="background:#0ea5e9;color:#fff;width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.5)" title="'+s.name+'">&#128652;</div>',
+      className:'', iconSize:[26,26], iconAnchor:[13,13]
+    });
+    const m=L.marker([s.lat,s.lon],{icon});
+    m.bindTooltip('<b style="color:#38bdf8">&#128652; Stop '+s.id+'</b><br>'+s.name+'<br><span style="color:#a8b2d8;font-size:10px">Route '+s.routes+' &nbsp;|&nbsp; '+arrow+' '+s.direction+'bound</span>', {className:'custom-tooltip',sticky:true});
+    transitLayer.addLayer(m);
+  });
+  transitLayer.addTo(map);
+}
+
+// ── Schools ───────────────────────────────────────────────────────────
+var schoolsLayer=null;
+const SCHOOL_COLORS={'High School':'#c084fc','Middle School':'#a78bfa','Elementary':'#818cf8','Charter School':'#93c5fd'};
+function buildSchoolsLayer() {
+  if (schoolsLayer) return;
+  schoolsLayer=L.layerGroup();
+  C.schools.forEach(s => {
+    const col=SCHOOL_COLORS[s.type]||'#a78bfa';
+    const icon=L.divIcon({
+      html:'<div style="background:'+col+';color:#fff;width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.5)">&#127979;</div>',
+      className:'', iconSize:[26,26], iconAnchor:[13,13]
+    });
+    const m=L.marker([s.lat,s.lon],{icon});
+    m.bindTooltip('<b style="color:'+col+'">&#127979; '+s.name+'</b><br><span style="color:#a8b2d8;font-size:10px">'+s.type+'</span>', {className:'custom-tooltip',sticky:true});
+    schoolsLayer.addLayer(m);
+  });
+  schoolsLayer.addTo(map);
+}
+
+// ── Count-station marker ──────────────────────────────────────────────
+var tcdsMarker=null;
+function buildTcdsMarker() {
+  if (tcdsMarker) return;
+  const st=C.tcds.station;
+  tcdsMarker=L.circleMarker([st.lat,st.lon],{radius:10,color:'#ffb74d',fillColor:'#ffb74d',fillOpacity:0.25,weight:2.5}).addTo(map);
+  tcdsMarker.bindTooltip('<b>Count Station '+st.id+'</b><br>'+st.label, {className:'custom-tooltip',sticky:true});
+  tcdsMarker.on('click',()=>{ document.getElementById('tcds-panel').classList.add('open'); setTimeout(()=>map.invalidateSize(), 380); });
+}
+
+// ── Crash layer ───────────────────────────────────────────────────────
+const CRASH_COLORS={0:'#94a3b8',1:'#fbbf24',2:'#fb923c',3:'#e94560'};
+const CRASH_RADII={0:6,1:7,2:8,3:11};
+var safetyLayer=null;
+var crashSevFilter=new Set([0,1,2,3]);
+function buildCrashLayer() {
+  if (safetyLayer) map.removeLayer(safetyLayer);
+  safetyLayer=L.layerGroup();
+  const counts={0:0,1:0,2:0,3:0};
+  C.crashes.forEach(c => {
+    if (!crashSevFilter.has(c.severity)) return;
+    counts[c.severity]++;
+    const col=CRASH_COLORS[c.severity];
+    const m=L.circleMarker([c.lat,c.lon],{radius:CRASH_RADII[c.severity],color:col,fillColor:col,fillOpacity:0.75,weight:1.5});
+    const pb=[c.ped?'&#128694; Ped':'',c.bike?'&#128690; Bike':''].filter(Boolean).join(' &nbsp; ');
+    m.bindTooltip('<div style="font-weight:700;color:'+col+'">'+c.sev_label+'</div><div>'+c.location+'</div><div style="color:#a8b2d8;font-size:10px">'+c.year+(pb?' &nbsp;|&nbsp; '+pb:'')+'</div>', {className:'custom-tooltip',sticky:true});
+    safetyLayer.addLayer(m);
+  });
+  safetyLayer.addTo(map);
+  const total=Object.values(counts).reduce((a,b)=>a+b,0);
+  [0,1,2,3].forEach(s=>{ document.getElementById('lc-'+s).textContent=counts[s]; });
+  document.getElementById('lc-total').textContent=total;
+}
+function toggleCrashSev(sev) {
+  if (crashSevFilter.has(sev)) crashSevFilter.delete(sev); else crashSevFilter.add(sev);
+  document.getElementById('legrow-'+sev).classList.toggle('off',!crashSevFilter.has(sev));
+  if (safetyLayer) buildCrashLayer();
+}
+
+// ── Legend box ────────────────────────────────────────────────────────
+var legendOpen=true;
+function updateLegendBox() {
+  const active=['leg-sl','leg-inrix','leg-crash','leg-equity','leg-schools'].some(id=>document.getElementById(id).style.display!=='none');
+  document.getElementById('legend-box').style.display = active ? 'block' : 'none';
+}
+function toggleLegendBox() {
+  legendOpen=!legendOpen;
+  document.getElementById('legend-box-body').style.display=legendOpen?'block':'none';
+  document.getElementById('legend-box-toggle').textContent=legendOpen?'⌄':'⌃';
+}
+
+// ── Population/Employment panel ───────────────────────────────────────
+var chartTaz=null;
+function buildTazChart() {
+  if (chartTaz) return;
+  const TAZ=C.taz;
+  document.getElementById('pop-note').textContent = TAZ.note || '';
+  chartTaz=new Chart(document.getElementById('chartTaz'),{
+    type:'bar',
+    data:{
+      labels:TAZ.years.map(String),
+      datasets:[
+        {type:'bar',  label:'Population', data:TAZ.pop, backgroundColor:'rgba(129,140,248,0.6)', borderColor:'#818cf8', borderWidth:1, borderRadius:3, yAxisID:'y'},
+        {type:'bar',  label:'Employment', data:TAZ.emp, backgroundColor:'rgba(52,211,153,0.6)',  borderColor:'#34d399', borderWidth:1, borderRadius:3, yAxisID:'y'},
+        {type:'line', label:'Households', data:TAZ.hh,  borderColor:'#f472b6', backgroundColor:'rgba(244,114,182,0.08)', tension:0.4, pointRadius:4, pointBackgroundColor:'#f472b6', borderWidth:2, yAxisID:'y'}
+      ]
+    },
+    options:{responsive:true,animation:false,maintainAspectRatio:true,
+      plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}}},
+      scales:{
+        x:{ticks:{color:'#8892b0',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}},
+        y:{ticks:{color:'#8892b0',font:{size:10},callback:v=>v.toLocaleString()},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'Count',color:'#8892b0',font:{size:10}}}
+      }
+    }
+  });
+}
+var floatOpen={'pop-panel':true,'replica-panel':true};
+function toggleFloatPanel(id) {
+  floatOpen[id]=!floatOpen[id];
+  document.getElementById(id+'-body').style.display=floatOpen[id]?'block':'none';
+  document.getElementById(id+'-toggle').textContent=floatOpen[id]?'⌄':'⌃';
+}
+
+// ── Layer registry + sidebar list ─────────────────────────────────────
+const LAYER_DEFS=[
+  { id:'streetlight', label:()=>'StreetLight Traffic',        dot:'#64ffda', avail:c=>!!c.streetlight },
+  { id:'inrix',       label:()=>'INRIX Speeds',               dot:'#fb923c', avail:c=>!!c.inrix },
+  { id:'replica',     label:()=>'Replica Modes / O-D',        dot:'#34d399', avail:c=>!!c.replica },
+  { id:'tcds',        label:()=>'Count Station Volumes',      dot:'#ffb74d', avail:c=>!!c.tcds },
+  { id:'safety',      label:()=>'Safety / Crashes',           dot:'#e94560', avail:c=>!!(c.crashes&&c.crashes.length) },
+  { id:'equity',      label:()=>'Equity Index',               dot:'#818cf8', avail:c=>!!c.equity },
+  { id:'transit',     label:c=>c.transit?c.transit.label:'Transit Stops', dot:'#38bdf8', avail:c=>!!c.transit },
+  { id:'schools',     label:()=>'Schools',                    dot:'#a78bfa', avail:c=>!!(c.schools&&c.schools.length) },
+  { id:'cs',          label:()=>'Complete Streets',           dot:'#f472b6', avail:c=>!!c.completeStreets },
+  { id:'pop',         label:()=>'Population & Employment',    dot:'#818cf8', avail:c=>!!c.taz }
+];
+function buildLayerList(){
+  const host=document.getElementById('layer-list'); host.innerHTML='';
+  LAYER_DEFS.forEach(d=>{
+    const avail=d.avail(C);
+    const lbl=typeof d.label==='function'?d.label(C):d.label;
+    const row=document.createElement('div');
+    row.className='layer-item'+(avail?'':' disabled'); row.id='lyr-'+d.id;
+    row.innerHTML='<div class="layer-dot" style="background:'+d.dot+'"></div><span class="layer-label">'+lbl+'</span>'+
+      (avail?'':'<span class="layer-badge badge-soon">No data</span>')+
+      '<label class="toggle"><input type="checkbox" id="tog-'+d.id+'" '+(avail?'':'disabled')+'><span class="slider"></span></label>';
+    host.appendChild(row);
+    if (avail) row.querySelector('input').addEventListener('change',e=>toggleLayer(d.id,e.target.checked));
+    if (d.id==='streetlight'){
+      const dp=document.createElement('div'); dp.className='dir-pills'; dp.id='sl-dir-pills'; dp.style.display='none';
+      host.appendChild(dp);
+    }
+  });
+  buildDirPills();
+}
+
+// ── Complete Streets blocks from config ───────────────────────────────
+function buildCsBlocks(){
+  const cs=C.completeStreets, bb=document.getElementById('cs-banner'), ip=document.getElementById('cs-info-panel');
+  if (!cs){ bb.innerHTML=''; ip.innerHTML=''; return; }
+  bb.innerHTML='<div class="cs-banner-title">&#128739; Complete Streets Typology</div><div class="cs-banner-row">'+
+    cs.banner.map(r=>'<div class="cs-tag"><span>'+r.name+'</span><span class="cs-score">'+r.score+'</span><span>'+r.label+'</span></div>').join('')+'</div>';
+  ip.innerHTML='<h2>&#128739; Corridor Overview</h2>'+
+    cs.overview.map(card=>'<div class="info-card"><div class="ic-title">'+card.title+'</div>'+
+      card.rows.map(r=>'<div class="ic-row"><span class="ic-key">'+r[0]+'</span><span class="ic-val">'+r[1]+'</span></div>').join('')+'</div>').join('');
+}
+
+// ── Layer toggles ─────────────────────────────────────────────────────
+function toggleLayer(name,on) {
+  const el=document.getElementById('lyr-'+name);
+  if (name==='streetlight') {
+    if (on) {
+      buildSlLayer(); el.classList.add('active');
+      document.getElementById('sl-dir-pills').style.display='flex';
+      document.getElementById('sl-panel').classList.add('open');
+      document.getElementById('leg-sl').style.display='block';
+      updateSlLegend();
+      setTimeout(()=>{ map.invalidateSize(); buildSlPanelCharts(); }, 380);
+    } else {
+      if (streetlightOutline) {map.removeLayer(streetlightOutline);streetlightOutline=null;}
+      if (streetlightLayer)   {map.removeLayer(streetlightLayer);streetlightLayer=null;}
+      el.classList.remove('active');
+      document.getElementById('sl-dir-pills').style.display='none';
+      document.getElementById('sl-panel').classList.remove('open');
+      document.getElementById('leg-sl').style.display='none';
+      setTimeout(()=>map.invalidateSize(), 380);
+    }
+  }
+  if (name==='inrix') {
+    if (on) { buildInrixLayer(); el.classList.add('active'); document.getElementById('leg-inrix').style.display='block'; }
+    else { if(inrixLayer){map.removeLayer(inrixLayer);inrixLayer=null;} el.classList.remove('active'); document.getElementById('leg-inrix').style.display='none'; }
+  }
+  if (name==='replica') {
+    if (on) { document.getElementById('replica-panel').style.display='block'; el.classList.add('active'); buildReplicaPanel(); }
+    else { document.getElementById('replica-panel').style.display='none'; el.classList.remove('active'); }
+  }
+  if (name==='tcds') {
+    const panel=document.getElementById('tcds-panel');
+    if (on) { buildTcdsMarker(); el.classList.add('active'); panel.classList.add('open'); initTcdsCharts(); }
+    else { if(tcdsMarker){map.removeLayer(tcdsMarker);tcdsMarker=null;} el.classList.remove('active'); panel.classList.remove('open'); }
+    setTimeout(()=>map.invalidateSize(), 380);
+  }
+  if (name==='safety') {
+    if (on) { buildCrashLayer(); el.classList.add('active'); document.getElementById('leg-crash').style.display='block'; }
+    else { if(safetyLayer){map.removeLayer(safetyLayer);safetyLayer=null;} el.classList.remove('active'); document.getElementById('leg-crash').style.display='none'; }
+  }
+  if (name==='equity') {
+    if (on) { buildEquityLayer(); el.classList.add('active'); document.getElementById('leg-equity').style.display='block';
+      document.getElementById('leg-eq-title').textContent=C.equity.note||'Equity Index Score';
+      document.getElementById('leg-eq-lo').textContent=(C.equity.min!=null?C.equity.min:'')+' Lower';
+      document.getElementById('leg-eq-hi').textContent=(C.equity.max!=null?C.equity.max:'')+' Higher'; }
+    else { if(equityLayer){map.removeLayer(equityLayer);equityLayer=null;} el.classList.remove('active'); document.getElementById('leg-equity').style.display='none'; }
+  }
+  if (name==='transit') {
+    if (on) { buildTransitLayer(); el.classList.add('active'); }
+    else { if(transitLayer){map.removeLayer(transitLayer);transitLayer=null;} el.classList.remove('active'); }
+  }
+  if (name==='schools') {
+    if (on) { buildSchoolsLayer(); el.classList.add('active'); document.getElementById('leg-schools').style.display='block'; }
+    else { if(schoolsLayer){map.removeLayer(schoolsLayer);schoolsLayer=null;} el.classList.remove('active'); document.getElementById('leg-schools').style.display='none'; }
+  }
+  if (name==='cs') {
+    document.getElementById('cs-info-panel').style.display=on?'block':'none';
+    document.getElementById('cs-banner').style.display=on?'block':'none';
+    el.classList.toggle('active',on);
+  }
+  if (name==='pop') {
+    if (on) { document.getElementById('pop-panel').style.display='block'; el.classList.add('active'); buildTazChart(); }
+    else { document.getElementById('pop-panel').style.display='none'; el.classList.remove('active'); }
+  }
+  updateLegendBox();
+}
+
+// ── StreetLight dock charts ───────────────────────────────────────────
+var chartSlVol=null, chartSlSpd=null;
+function buildSlPanelCharts() {
+  if (!C.streetlight || !C.streetlight.hourly) return;
+  const H=C.streetlight.hourly;
+  const dirs=activeDirs();
+  const labels=(H[dirKeys()[0]]||[]).map(r=>r.h);
+  if(chartSlVol){chartSlVol.destroy();chartSlVol=null;}
+  if(chartSlSpd){chartSlSpd.destroy();chartSlSpd=null;}
+  const opts={animation:false,responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:9}}}},scales:{x:{ticks:{color:'#8892b0',font:{size:8},maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8892b0',font:{size:8}},grid:{color:'rgba(255,255,255,0.04)'}}} };
+  chartSlVol=new Chart(document.getElementById('chartSlVol'),{type:'line',options:opts,data:{labels,datasets:dirs.map(d=>({label:d.label,data:(H[d.key]||[]).map(r=>r.v),borderColor:dirColor(d.key),backgroundColor:dirBg(d.key),tension:0.4,pointRadius:2,borderWidth:2}))} });
+  chartSlSpd=new Chart(document.getElementById('chartSlSpd'),{type:'line',options:opts,data:{labels,datasets:dirs.map(d=>({label:d.label,data:(H[d.key]||[]).map(r=>r.s),borderColor:dirColor(d.key),backgroundColor:dirBg(d.key),tension:0.4,pointRadius:2,borderWidth:2}))} });
+}
+function switchSlTab(tab) {
+  document.getElementById('sltab-profile').classList.toggle('active',tab==='profile');
+  document.getElementById('sltab-segment').classList.toggle('active',tab==='segment');
+  document.getElementById('slview-profile').style.display=tab==='profile'?'block':'none';
+  document.getElementById('slview-segment').style.display=tab==='segment'?'block':'none';
+  if (tab==='profile'){ if(chartSlVol)chartSlVol.resize(); if(chartSlSpd)chartSlSpd.resize(); }
+}
+
+// ── Segment detail (respects the direction filter) ────────────────────
+var chartVol=null,chartSpd=null,lastSegProps=null;
+function showSegmentInfo(p) {
+  lastSegProps=p;
+  switchSlTab('segment');
+  document.getElementById('sl-seg-default').style.display='none';
+  const el=document.getElementById('sl-seg-content'); el.style.display='block';
+  function dirBlock(d) {
+    const adt=p['ADT_'+d.key]; if (!adt) return '';
+    const spd=p['speed_'+d.key], ff=p['freeflow_'+d.key], tti=p['tti_'+d.key], p85=p['p85spd_'+d.key], cong=p['congested_'+d.key];
+    return '<div class="dir-section"><div class="dir-title">'+d.arrow+' '+d.label+'</div>'+
+      '<div class="dir-row"><span class="dir-key">Daily Volume</span><span class="dir-val">'+(adt||0).toLocaleString()+' veh/day</span></div>'+
+      '<div class="dir-row"><span class="dir-key">Avg Speed</span><span class="dir-val">'+(spd||'N/A')+' mph</span></div>'+
+      '<div class="dir-row"><span class="dir-key">Free-Flow Speed</span><span class="dir-val">'+(ff?ff.toFixed(1):'N/A')+' mph</span></div>'+
+      '<div class="dir-row"><span class="dir-key">Travel Time Index</span><span class="dir-val">'+(tti?tti.toFixed(2):'N/A')+'</span></div>'+
+      '<div class="dir-row"><span class="dir-key">85th Pct Speed</span><span class="dir-val">'+(p85||'N/A')+' mph</span></div>'+
+      '<div class="dir-row"><span class="dir-key">Congested?</span><span class="dir-val '+(cong?'congested-yes':'congested-no')+'">'+(cong?'&#9888; Yes':'&#10003; No')+'</span></div></div>';
+  }
+  const adtVal=METRICS.adt.key(p)||0;
+  const adtLbl=currentSlDir==='BOTH'?'Total ADT':(C.dirs.find(d=>d.key===currentSlDir)||{}).short+' ADT';
+  el.innerHTML='<div class="seg-name">'+p.name+'</div>'+
+    '<div class="stats-grid">'+
+      '<div class="stat-card"><div class="stat-val">'+adtVal.toLocaleString()+'</div><div class="stat-lbl">'+adtLbl+'</div></div>'+
+      '<div class="stat-card"><div class="stat-val">'+(p.length_mi?p.length_mi.toFixed(3):'?')+'</div><div class="stat-lbl">Length (mi)</div></div>'+
+    '</div>'+
+    activeDirs().map(dirBlock).join('')+
+    '<div class="sl-chart-wrap"><div class="sl-chart-title">Hourly Volume</div><canvas id="chartSegVol"></canvas></div>'+
+    '<div class="sl-chart-wrap"><div class="sl-chart-title">Hourly Speed</div><canvas id="chartSegSpd"></canvas></div>';
+  const h=p.hourly||{};
+  const firstH=dirKeys().map(k=>h[k]||[]).find(a=>a.length)||[];
+  const labels=firstH.map(r=>r.h);
+  if(chartVol){chartVol.destroy();chartVol=null;} if(chartSpd){chartSpd.destroy();chartSpd=null;}
+  const o={animation:false,responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:9}}}},scales:{x:{ticks:{color:'#8892b0',font:{size:8},maxRotation:45,autoSkip:true,maxTicksLimit:8},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8892b0',font:{size:8}},grid:{color:'rgba(255,255,255,0.04)'}}} };
+  const dsV=[], dsS=[];
+  activeDirs().forEach(d=>{
+    const dh=h[d.key]||[]; if(!dh.length) return;
+    dsV.push({label:d.short,data:dh.map(r=>r.v),borderColor:dirColor(d.key),backgroundColor:dirBg(d.key),tension:0.4,pointRadius:2,borderWidth:2});
+    dsS.push({label:d.short,data:dh.map(r=>r.s),borderColor:dirColor(d.key),backgroundColor:dirBg(d.key),tension:0.4,pointRadius:2,borderWidth:2});
+  });
+  chartVol=new Chart(document.getElementById('chartSegVol'),{type:'line',options:o,data:{labels,datasets:dsV}});
+  chartSpd=new Chart(document.getElementById('chartSegSpd'),{type:'line',options:o,data:{labels,datasets:dsS}});
+}
+
+// ── Count-station charts ──────────────────────────────────────────────
+var chartAadt=null,chartHourly=null,tcdsInited=false;
+function initTcdsCharts() {
+  if(tcdsInited) return; tcdsInited=true;
+  const TCDS=C.tcds, st=TCDS.station;
+  document.getElementById('tcds-title1').textContent='AADT by Year — Station '+st.id;
+  document.getElementById('tcds-sub1').textContent=st.label+'  |  Growth since '+TCDS.aadt.years[0];
+  const sel=document.getElementById('date-filter');
+  sel.innerHTML='';
+  TCDS.dates.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); });
+  const d=TCDS.aadt;
+  chartAadt=new Chart(document.getElementById('chartAadt'),{
+    type:'bar',
+    data:{labels:d.years,datasets:[
+      {type:'bar',label:'AADT',data:d.aadt,yAxisID:'y',backgroundColor:d.aadt.map((_,i)=>i===d.aadt.length-1?'rgba(233,69,96,0.7)':'rgba(255,183,77,0.6)'),borderColor:d.aadt.map((_,i)=>i===d.aadt.length-1?'#e94560':'#ffb74d'),borderWidth:1,borderRadius:3},
+      {type:'line',label:'Growth %',data:d.growth,yAxisID:'y2',borderColor:'#64ffda',backgroundColor:'rgba(100,255,218,0.08)',tension:0.4,pointRadius:4,pointBackgroundColor:'#64ffda',borderWidth:2}
+    ]},
+    options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}},tooltip:{callbacks:{afterLabel:ctx=>ctx.datasetIndex===0?'  Growth: '+d.growth[ctx.dataIndex]+'%':''}}},scales:{x:{ticks:{color:'#8892b0',font:{size:10}},grid:{color:'rgba(255,255,255,0.05)'}},y:{type:'linear',position:'left',ticks:{color:'#8892b0',font:{size:10},callback:v=>v.toLocaleString()},grid:{color:'rgba(255,255,255,0.05)'},title:{display:true,text:'AADT (veh/day)',color:'#8892b0',font:{size:10}}},y2:{type:'linear',position:'right',ticks:{color:'#64ffda',font:{size:10},callback:v=>v+'%'},grid:{drawOnChartArea:false},title:{display:true,text:'Growth %',color:'#64ffda',font:{size:10}}}}}
+  });
+  updateHourlyChart();
+}
+function updateHourlyChart() {
+  const date=document.getElementById('date-filter').value; if(!date) return;
+  const h=C.tcds.hourly[date]; if(!h) return;
+  const labels=h.hours.map(hr=>hr+':00');
+  if(chartHourly){chartHourly.destroy();chartHourly=null;}
+  // per-direction keys in the hourly block use the lowercase short name (eb/wb, nb/sb)
+  const ds=C.dirs.map(d=>{
+    const arr=h[d.short.toLowerCase()]; if(!arr) return null;
+    return {label:d.label,data:arr,backgroundColor:dirBg(d.key).replace('0.1','0.55'),borderColor:dirColor(d.key),borderWidth:1,borderRadius:2};
+  }).filter(Boolean);
+  chartHourly=new Chart(document.getElementById('chartHourly'),{
+    type:'bar', data:{labels,datasets:ds},
+    options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#a8b2d8',font:{size:10}}}},scales:{x:{ticks:{color:'#8892b0',font:{size:9},maxRotation:45},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'#8892b0',font:{size:9}},grid:{color:'rgba(255,255,255,0.04)'},title:{display:true,text:'Vehicles',color:'#8892b0',font:{size:9}}}}}
+  });
+}
+
+// ── Corridor switching ────────────────────────────────────────────────
+function loadCorridor(id){
+  const cfg=REG.find(c=>c.id===id); if(!cfg) return;
+  // turn every layer off against the OLD corridor first
+  if (C){
+    LAYER_DEFS.forEach(d=>{
+      const t=document.getElementById('tog-'+d.id);
+      if (t && t.checked){ t.checked=false; toggleLayer(d.id,false); }
+    });
+  }
+  // destroy every chart + reset per-corridor state
+  [chartTaz,chartSlVol,chartSlSpd,chartVol,chartSpd,chartAadt,chartHourly,chartModes].forEach(ch=>{ if(ch) ch.destroy(); });
+  chartTaz=chartSlVol=chartSlSpd=chartVol=chartSpd=chartAadt=chartHourly=chartModes=null;
+  tcdsInited=false; lastSegProps=null;
+  document.getElementById('date-filter').innerHTML='';
+  document.getElementById('sl-seg-content').innerHTML='';
+  document.getElementById('sl-seg-default').style.display='block';
+  crashSevFilter=new Set([0,1,2,3]);
+  [0,1,2,3].forEach(s=>document.getElementById('legrow-'+s).classList.remove('off'));
+  currentSlDir='BOTH'; currentMetric='adt';
+  document.querySelectorAll('.met-pill').forEach(el=>el.classList.remove('active'));
+  document.getElementById('mpill-adt').classList.add('active');
+  switchSlTab('profile');
+
+  C=cfg;
+  document.title=C.name+' Corridor Study';
+  document.getElementById('hdr-name').textContent=C.name+' Corridor';
+  document.getElementById('hdr-agency').textContent=C.agency+' — Data Dashboard';
+  document.getElementById('corridor-sel').value=C.id;
+  buildLayerList();
+  buildCsBlocks();
+  map.setView(C.center, C.zoom);
+  try { history.replaceState(null,'','#'+C.id); } catch(e) {}
+}
+
+// ── Boot: load corridor config files listed in corridors/manifest.js ──
+(function(){
+  const boot=document.createElement('script');
+  boot.src='corridors/manifest.js';
+  boot.onload=function(){
+    const files=window.CORRIDOR_FILES||[];
+    let i=0;
+    (function next(){
+      if (i>=files.length){ initApp(); return; }
+      const s=document.createElement('script');
+      s.src='corridors/'+files[i++];
+      s.onload=next; s.onerror=next;
+      document.body.appendChild(s);
+    })();
+  };
+  boot.onerror=function(){ initApp(); };
+  document.body.appendChild(boot);
+})();
+function initApp(){
+  const sel=document.getElementById('corridor-sel');
+  if (!REG.length){
+    document.getElementById('hdr-name').textContent='No corridors loaded';
+    document.getElementById('hdr-agency').textContent='Add a config under corridors/ (see README.md)';
+    return;
+  }
+  REG.forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name+' — '+c.agency; sel.appendChild(o); });
+  const want=(location.hash||'').replace('#','');
+  loadCorridor(REG.some(c=>c.id===want)?want:REG[0].id);
+}
+</script>
+</body>
+</html>
