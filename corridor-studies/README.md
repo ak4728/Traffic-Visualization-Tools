@@ -95,6 +95,19 @@ window.registerCorridor({
 });
 ```
 
+## Processing scripts (`scripts/`)
+
+- `filter_crashes_to_corridor.py` — generic: filters statewide CDOT crash-listing
+  `.xlsx` files to within `--buffer-ft` (default 250 ft) of any corridor defined by
+  an INRIX `TMC_Identification.csv`, and maps KABCO injury counts to the dashboard's
+  0–3 severity scheme (with ped/bike flags from the non-motorist fields).
+- `build_east_arapahoe.py` — rebuilds `corridors/east-arapahoe.js` end-to-end from
+  the raw exports in the git-ignored `corridor data/` folder (INRIX day-average +
+  reference speeds, buffer-filtered crashes). Re-run it whenever new raw data lands:
+  `python corridor-studies/scripts/build_east_arapahoe.py`
+
+Use these as templates when standing up the next corridor.
+
 ## Notes
 
 - The original single-corridor page (`../72nd_corridor_map.html`) is untouched;
