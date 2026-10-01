@@ -453,7 +453,7 @@ function slRanges(){ return (C.streetlight && C.streetlight.ranges) || { adt:[0,
 const METRICS = {
   adt:   { key: p => { if (currentSlDir!=='BOTH') return p['ADT_'+currentSlDir];
                        return ('Total_ADT' in p) ? p.Total_ADT : dirKeys().reduce((a,k)=>a+(p['ADT_'+k]||0),0)||null; },
-           mn: ()=>slRanges().adt[0], mx: ()=>currentSlDir==='BOTH'?slRanges().adt[1]:Math.round(slRanges().adt[1]*0.53/500)*500,
+           mn: ()=>slRanges().adt[0], mx: ()=>currentSlDir==='BOTH'?slRanges().adt[1]:(slRanges().adtDir||Math.round(slRanges().adt[1]*0.53/500)*500),
            unit:'veh/day', rev:false },
   speed: { key: p => avgOver(p,'speed'), mn: ()=>slRanges().speed[0], mx: ()=>slRanges().speed[1], unit:'mph', rev:true },
   tti:   { key: p => avgOver(p,'tti'),   mn: ()=>slRanges().tti[0],   mx: ()=>slRanges().tti[1],   unit:'',   rev:false }
@@ -488,7 +488,7 @@ function buildSlLayer() {
     onEachFeature: (f,layer) => {
       const p=f.properties;
       const v=METRICS['adt'].key(p);
-      const dl = C.dirs.filter(d=>currentSlDir==='BOTH'||currentSlDir===d.key)
+      const dl = C.dirs.filter(d=>(currentSlDir==='BOTH'||currentSlDir===d.key) && p['ADT_'+d.key]!=null)
                        .map(d=>d.arrow+' '+(p['ADT_'+d.key]||0).toLocaleString()).join('&nbsp;&nbsp;');
       layer.bindTooltip('<div><b>'+p.name+'</b></div><div class="tooltip-adt">'+(v||0).toLocaleString()+' veh/day</div><div style="color:#a8b2d8;font-size:10px">'+dl+'</div>', {className:'custom-tooltip',sticky:true});
       layer.on('click',()=>showSegmentInfo(p));
