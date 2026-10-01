@@ -180,12 +180,13 @@ with open(os.path.join(DATA, "TMC_Identification.csv"), newline="", encoding="ut
 print(f"INRIX: {len(feats)} TMC segments")
 
 # ── TCDS short counts: MS2 "Volume Count Report" xlsx exports ─────────
-# Station coordinates are approximate, placed from the "Located On"
-# description against the corridor geometry.
+# Station coordinates: Arapahoe stations sit on INRIX TMC on-road points
+# just W/O and E/O Parker Rd; Jordan Rd station is ~100 m south of the
+# geocoded Arapahoe & Jordan intersection (39.59488, -104.82101).
 TCDS_COORDS = {
-    "103876": (39.5947, -104.8085, "Arapahoe Rd W/O Parker Rd (SH 83)"),
-    "203231": (39.5950, -104.8000, "Arapahoe Rd E/O Parker Rd (SH 83)"),
-    "902108": (39.5925, -104.8228, "Jordan Rd S/O Arapahoe Rd"),
+    "103876": (39.59481, -104.80454, "Arapahoe Rd W/O Parker Rd (SH 83)"),
+    "203231": (39.59504, -104.80049, "Arapahoe Rd E/O Parker Rd (SH 83)"),
+    "902108": (39.59400, -104.82101, "Jordan Rd S/O Arapahoe Rd"),
 }
 
 def parse_tcds_folder(folder):
