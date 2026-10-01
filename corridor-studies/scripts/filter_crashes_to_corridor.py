@@ -128,6 +128,8 @@ def filter_crashes(tmc_csv, crash_dir, buffer_ft=250.0):
                                          _num(get(r, "Injury 03")), _num(get(r, "Injury 04")))
             date = get(r, "Crash Date")
             year = date.year if hasattr(date, "year") else _num(str(date)[:4])
+            iso = date.strftime("%Y-%m-%d") if hasattr(date, "strftime") else str(date)[:10]
+            time = str(get(r, "Crash Time") or "")[:5]
             loc1, loc2 = str(get(r, "Location 1") or "").strip(), str(get(r, "Location 2") or "").strip()
             location = (loc1 + (" & " + loc2 if loc2 else "")) or "(no location given)"
             blob = " ".join(str(get(r, c) or "") for c in
@@ -138,6 +140,13 @@ def filter_crashes(tmc_csv, crash_dir, buffer_ft=250.0):
                 "severity": sev, "sev_label": lab,
                 "location": location.title(), "year": year,
                 "ped": ("PED" in blob), "bike": ("BIC" in blob or "CYCL" in blob),
+                # extra context for hover tooltips
+                "type": str(get(r, "Crash Type") or "").strip(),
+                "date": iso, "time": time,
+                "killed": _num(get(r, "Number Killed")), "inj": _num(get(r, "Number Injured")),
+                "wx": str(get(r, "Weather Condition") or "").strip(),
+                "lt": str(get(r, "Lighting Conditions") or "").strip(),
+                "rd": str(get(r, "Road Condition") or "").strip(),
             })
             kept += 1
         wb.close()

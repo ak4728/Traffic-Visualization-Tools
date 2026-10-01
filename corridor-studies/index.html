@@ -328,6 +328,10 @@ input:checked + .slider:before { transform: translateX(13px); }
             <span style="color:#8892b0;font-size:9px">Total visible</span>
             <span style="color:#e94560;font-size:10px;font-weight:700" id="lc-total">0</span>
           </div>
+          <div class="leg-row" style="cursor:default;margin-top:4px">
+            <div class="leg-dot" style="background:rgba(233,69,96,0.18);border:1.5px dashed rgba(233,69,96,0.6)"></div>
+            <span class="leg-label">hotspot cluster (&ge;3 within ~400 ft)</span>
+          </div>
         </div>
 
         <div class="leg-section" id="leg-equity" style="display:none">
@@ -677,14 +681,57 @@ function buildCrashLayer() {
   if (safetyLayer) map.removeLayer(safetyLayer);
   safetyLayer=L.layerGroup();
   const counts={0:0,1:0,2:0,3:0};
-  C.crashes.forEach(c => {
-    if (!crashSevFilter.has(c.severity)) return;
-    if (crashYearFilter && !crashYearFilter.has(c.year)) return;
-    counts[c.severity]++;
+  const vis=C.crashes.filter(c => crashSevFilter.has(c.severity) &&
+                                  !(crashYearFilter && !crashYearFilter.has(c.year)));
+  vis.forEach(c=>counts[c.severity]++);
+
+  // ── transparent hotspot clusters (drawn FIRST = under the dots),
+  //    recomputed from exactly the crashes the filters leave visible ──
+  const CLR=120;                                   // cluster radius, meters (~400 ft)
+  const mLat=111132, mLon=111320*Math.cos(C.center[0]*Math.PI/180);
+  const clusters=[];
+  vis.forEach(c=>{
+    let best=null, bd=CLR;
+    for (const cl of clusters){
+      const d=Math.hypot((c.lat-cl.sumLat/cl.n)*mLat,(c.lon-cl.sumLon/cl.n)*mLon);
+      if (d<bd){ bd=d; best=cl; }
+    }
+    if (!best){ best={sumLat:0,sumLon:0,n:0,sev3:0,ped:0,bike:0,y0:9999,y1:0,types:{}}; clusters.push(best); }
+    best.sumLat+=c.lat; best.sumLon+=c.lon; best.n++;
+    if (c.severity===3) best.sev3++;
+    if (c.ped) best.ped++; if (c.bike) best.bike++;
+    best.y0=Math.min(best.y0,c.year); best.y1=Math.max(best.y1,c.year);
+    if (c.type) best.types[c.type]=(best.types[c.type]||0)+1;
+  });
+  clusters.filter(cl=>cl.n>=3).forEach(cl=>{
+    const r=Math.min(48, 10+5*Math.sqrt(cl.n));
+    const m=L.circleMarker([cl.sumLat/cl.n, cl.sumLon/cl.n],
+      { radius:r, color:'#e94560', weight:1.2, opacity:0.35, dashArray:'4,4',
+        fillColor:'#e94560', fillOpacity:Math.min(0.26, 0.10+cl.n*0.004) });
+    const bits=[cl.sev3?cl.sev3+' fatal/serious':'', cl.ped?'&#128694; '+cl.ped:'', cl.bike?'&#128690; '+cl.bike:''].filter(Boolean).join(' &nbsp;|&nbsp; ');
+    const topType=Object.entries(cl.types).sort((a,b)=>b[1]-a[1])[0];
+    m.bindTooltip('<div style="font-weight:700;color:#e94560">&#9678; Hotspot &mdash; '+cl.n+' crashes</div>'+
+      '<div style="color:#a8b2d8;font-size:10px">within ~400 ft &middot; '+(cl.y0===cl.y1?cl.y0:cl.y0+'&ndash;'+cl.y1)+(bits?' &nbsp;|&nbsp; '+bits:'')+'</div>'+
+      (topType?'<div style="color:#a8b2d8;font-size:10px">most common: '+topType[0]+' ('+topType[1]+' of '+cl.n+')</div>':''),
+      {className:'custom-tooltip',sticky:true});
+    safetyLayer.addLayer(m);
+  });
+
+  // ── individual crash dots on top (tooltips use the richer fields when
+  //    the corridor config provides them, else fall back to the basics) ──
+  vis.forEach(c => {
     const col=CRASH_COLORS[c.severity];
     const m=L.circleMarker([c.lat,c.lon],{radius:CRASH_RADII[c.severity],color:col,fillColor:col,fillOpacity:0.75,weight:1.5});
     const pb=[c.ped?'&#128694; Ped':'',c.bike?'&#128690; Bike':''].filter(Boolean).join(' &nbsp; ');
-    m.bindTooltip('<div style="font-weight:700;color:'+col+'">'+c.sev_label+'</div><div>'+c.location+'</div><div style="color:#a8b2d8;font-size:10px">'+c.year+(pb?' &nbsp;|&nbsp; '+pb:'')+'</div>', {className:'custom-tooltip',sticky:true});
+    const casual=[c.killed?c.killed+' killed':'', c.inj?c.inj+' injured':''].filter(Boolean).join(', ');
+    const when=c.date ? c.date+(c.time?' &middot; '+c.time:'') : ''+c.year;
+    const cond=[c.wx&&c.wx!=='Clear'?c.wx:'', c.lt&&c.lt!=='Daylight'?c.lt:'', c.rd&&c.rd!=='Dry'?c.rd+' road':''].filter(Boolean).join(' &middot; ');
+    m.bindTooltip(
+      '<div style="font-weight:700;color:'+col+'">'+c.sev_label+(c.type?' &mdash; '+c.type:'')+'</div>'+
+      '<div>'+c.location+'</div>'+
+      '<div style="color:#a8b2d8;font-size:10px">'+when+(pb?' &nbsp;|&nbsp; '+pb:'')+(casual?' &nbsp;|&nbsp; <span style="color:#e94560">'+casual+'</span>':'')+'</div>'+
+      (cond?'<div style="color:#8892b0;font-size:10px">'+cond+'</div>':''),
+      {className:'custom-tooltip',sticky:true});
     safetyLayer.addLayer(m);
   });
   safetyLayer.addTo(map);

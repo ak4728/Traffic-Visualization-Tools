@@ -69,7 +69,12 @@ window.registerCorridor({
   },
 
   // ── Safety (optional) ──
-  crashes: [ { id, lat, lon, severity:0-3, sev_label, location, year, ped:bool, bike:bool }, … ],
+  // Extra fields (all optional) enrich the hover tooltip: type (crash type),
+  // date 'YYYY-MM-DD', time 'HH:MM', killed, inj, wx (weather), lt (lighting),
+  // rd (road condition). Transparent hotspot clusters (≥3 crashes within
+  // ~400 ft) are computed automatically from whatever the year/severity
+  // filters leave visible.
+  crashes: [ { id, lat, lon, severity:0-3, sev_label, location, year, ped:bool, bike:bool, … }, … ],
 
   // ── Equity (optional) ──
   equity: { note:'Equity Index Score (DRCOG 2023)', min:13, max:19,
