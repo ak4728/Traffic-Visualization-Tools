@@ -652,12 +652,32 @@ const CRASH_COLORS={0:'#94a3b8',1:'#fbbf24',2:'#fb923c',3:'#e94560'};
 const CRASH_RADII={0:6,1:7,2:8,3:11};
 var safetyLayer=null;
 var crashSevFilter=new Set([0,1,2,3]);
+var crashYearFilter=new Set();          // empty = not yet initialized (= all years)
+function crashYears(){ return [...new Set((C.crashes||[]).map(c=>c.year))].sort(); }
+function buildCrashYearPills(){
+  const host=document.getElementById('crash-year-pills'); if(!host) return;
+  const years=crashYears();
+  if (!crashYearFilter.size) crashYearFilter=new Set(years);
+  host.innerHTML='<span class="dir-pill'+(crashYearFilter.size===years.length?' active':'')+'" onclick="crashAllYears()">All</span>'+
+    years.map(y=>'<span class="dir-pill'+(crashYearFilter.has(y)?' active':'')+'" id="ypill-'+y+'" onclick="toggleCrashYear('+y+')">'+y+'</span>').join('');
+}
+function toggleCrashYear(y){
+  if (crashYearFilter.has(y)) crashYearFilter.delete(y); else crashYearFilter.add(y);
+  buildCrashYearPills();
+  if (safetyLayer) buildCrashLayer();
+}
+function crashAllYears(){
+  crashYearFilter=new Set(crashYears());
+  buildCrashYearPills();
+  if (safetyLayer) buildCrashLayer();
+}
 function buildCrashLayer() {
   if (safetyLayer) map.removeLayer(safetyLayer);
   safetyLayer=L.layerGroup();
   const counts={0:0,1:0,2:0,3:0};
   C.crashes.forEach(c => {
     if (!crashSevFilter.has(c.severity)) return;
+    if (crashYearFilter.size && !crashYearFilter.has(c.year)) return;
     counts[c.severity]++;
     const col=CRASH_COLORS[c.severity];
     const m=L.circleMarker([c.lat,c.lon],{radius:CRASH_RADII[c.severity],color:col,fillColor:col,fillOpacity:0.75,weight:1.5});
@@ -749,6 +769,11 @@ function buildLayerList(){
       const dp=document.createElement('div'); dp.className='dir-pills'; dp.id='sl-dir-pills'; dp.style.display='none';
       host.appendChild(dp);
     }
+    if (d.id==='safety'){
+      const yp=document.createElement('div'); yp.className='dir-pills'; yp.id='crash-year-pills';
+      yp.style.display='none'; yp.style.flexWrap='wrap';
+      host.appendChild(yp);
+    }
   });
   buildDirPills();
 }
@@ -800,8 +825,11 @@ function toggleLayer(name,on) {
     setTimeout(()=>map.invalidateSize(), 380);
   }
   if (name==='safety') {
-    if (on) { buildCrashLayer(); el.classList.add('active'); document.getElementById('leg-crash').style.display='block'; }
-    else { if(safetyLayer){map.removeLayer(safetyLayer);safetyLayer=null;} el.classList.remove('active'); document.getElementById('leg-crash').style.display='none'; }
+    if (on) { buildCrashYearPills(); document.getElementById('crash-year-pills').style.display='flex';
+      buildCrashLayer(); el.classList.add('active'); document.getElementById('leg-crash').style.display='block'; }
+    else { if(safetyLayer){map.removeLayer(safetyLayer);safetyLayer=null;} el.classList.remove('active');
+      document.getElementById('crash-year-pills').style.display='none';
+      document.getElementById('leg-crash').style.display='none'; }
   }
   if (name==='equity') {
     if (on) { buildEquityLayer(); el.classList.add('active'); document.getElementById('leg-equity').style.display='block';
@@ -948,7 +976,7 @@ function loadCorridor(id){
   document.getElementById('date-filter').innerHTML='';
   document.getElementById('sl-seg-content').innerHTML='';
   document.getElementById('sl-seg-default').style.display='block';
-  crashSevFilter=new Set([0,1,2,3]);
+  crashSevFilter=new Set([0,1,2,3]); crashYearFilter=new Set();
   [0,1,2,3].forEach(s=>document.getElementById('legrow-'+s).classList.remove('off'));
   currentSlDir='BOTH'; currentMetric='adt';
   document.querySelectorAll('.met-pill').forEach(el=>el.classList.remove('active'));
