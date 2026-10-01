@@ -459,13 +459,14 @@ const SL_HOURLY  = {"EAST": [{"h": "12am-1am", "v": 33, "s": 35.2}, {"h": "12am-
 // ── Map ───────────────────────────────────────────────────────────────
 const map = L.map('map', { center: [39.8272, -105.1188], zoom: 15 });
 const BASEMAPS = {
-  // all four basemaps are 100% key-free: OSM tiles (restyled with CSS
-  // filters for the dark/light looks — no CARTO, which now serves
-  // "API key required" watermark tiles to many referers) + Esri imagery
-  dark:      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }),
-  light:     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-light' }),
-  street:    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20 }),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 })
+  // all four basemaps are 100% key-free AND served from one host
+  // (server.arcgisonline.com) — no CARTO (needs an API key) and no
+  // tile.openstreetmap.org (volunteer-run OSMF server, blocked on some
+  // networks). Dark/light are the Esri street map restyled with CSS filters.
+  dark:      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }),
+  light:     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20, className:'tiles-light' }),
+  street:    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',    { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 })
 };
 var currentBasemap = 'dark';
 BASEMAPS.dark.addTo(map);

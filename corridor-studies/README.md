@@ -2,7 +2,10 @@
 
 A generic, multi-corridor version of the 72nd Avenue dashboard. One `index.html`
 engine + one small JS config file per corridor. A dropdown in the sidebar header
-switches corridors. **No API keys anywhere** (OpenStreetMap + Esri tiles).
+switches corridors. **No API keys anywhere** — all four basemaps come from
+Esri's public tile services (`server.arcgisonline.com`), with the dark/light
+looks produced by CSS filters. No CARTO (key required) and no
+`tile.openstreetmap.org` (volunteer-run server, blocked on some networks).
 
 Works straight from `file://` — no web server needed (configs are plain `<script>`
 files, not fetched JSON).

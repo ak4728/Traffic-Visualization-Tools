@@ -414,11 +414,13 @@ var C = null;            // the active corridor config
 // ── Map ───────────────────────────────────────────────────────────────
 const map = L.map('map', { center: [39.8272, -105.1188], zoom: 15 });
 const BASEMAPS = {
-  // 100% key-free: OSM tiles (CSS-restyled dark/light) + Esri imagery
-  dark:      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }),
-  light:     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20, className:'tiles-light' }),
-  street:    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',                   { attribution:'&copy; OpenStreetMap contributors', maxNativeZoom:19, maxZoom:20 }),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 })
+  // 100% key-free AND all from one host (server.arcgisonline.com) — no CARTO
+  // (needs an API key), no tile.openstreetmap.org (volunteer-run OSMF server,
+  // blocked on some networks). Dark/light = Esri street map + CSS filters.
+  dark:      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }),
+  light:     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20, className:'tiles-light' }),
+  street:    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',    { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20 })
 };
 var currentBasemap = 'dark';
 BASEMAPS.dark.addTo(map);
