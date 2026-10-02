@@ -71,6 +71,8 @@ a.backlink:hover { text-decoration:underline; }
     <select id="dateSelect"></select>
     <button id="randomBtn" class="btn">Random day</button>
     <span style="color:#1e4a7a">|</span>
+    <label for="yearSel">Year:</label>
+    <select id="yearSel"></select>
     <label for="bandBasis">Bands from:</label>
     <select id="bandBasis">
       <option value="weekday">Weekdays (M-F)</option>
@@ -123,11 +125,33 @@ function chartOptions(){
   };
 }
 
-function statsOf(d){
-  // new shape: stats.{weekday,weekend,all}; legacy shape: flat stats
-  if (d.stats.mean) return d.stats;
+// bands are computed CLIENT-SIDE from the per-day curves, so the year
+// filter and the weekday/weekend basis combine freely
+function pctl(sorted,p){
+  const k=(sorted.length-1)*p/100, lo=Math.floor(k), hi=Math.min(lo+1,sorted.length-1);
+  return sorted[lo]+(sorted[hi]-sorted[lo])*(k-lo);
+}
+function filteredDays(d){
+  const yr=document.getElementById('yearSel').value;
   const basis=document.getElementById('bandBasis').value;
-  return d.stats[basis] || d.stats.all || Object.values(d.stats)[0];
+  return d.days.filter(dy=>
+    (yr==='all'||dy.date.slice(0,4)===yr) &&
+    (basis==='all' || (basis==='weekend')===(dy.day==='Saturday'||dy.day==='Sunday')));
+}
+function statsOf(d){
+  const sel=filteredDays(d);
+  const st={mean:[],pct5:[],pct25:[],pct75:[],pct95:[]};
+  const n=(TT.intervals||[]).length;
+  for(let b=0;b<n;b++){
+    const vals=[];
+    sel.forEach(dy=>{ const v=dy.tt[b]; if(v!=null) vals.push(v); });
+    if(!vals.length){ Object.keys(st).forEach(k=>st[k].push(null)); continue; }
+    vals.sort((a,z)=>a-z);
+    st.mean.push(vals.reduce((s,v)=>s+v,0)/vals.length);
+    st.pct5.push(pctl(vals,5)); st.pct25.push(pctl(vals,25));
+    st.pct75.push(pctl(vals,75)); st.pct95.push(pctl(vals,95));
+  }
+  return st;
 }
 function buildCharts(){
   charts.forEach(c=>c.chart.destroy());
@@ -184,18 +208,36 @@ function loadCorridor(id){
   document.getElementById('backlink').href='index.html#'+C.id;
   document.getElementById('corridor-sel').value=C.id;
   const days=(Object.values(TT.dirs)[0]||{days:[]}).days;
-  const sel=document.getElementById('dateSelect');
-  sel.innerHTML=days.map(d=>'<option value="'+d.date+'">'+d.date+' ('+d.day+')</option>').join('');
+  // year filter options from the data itself
+  const years=[...new Set(days.map(d=>d.date.slice(0,4)))].sort();
+  const ys=document.getElementById('yearSel');
+  ys.innerHTML='<option value="all">All ('+years[0]+'–'+years[years.length-1]+')</option>'+
+    years.map(y=>'<option value="'+y+'">'+y+'</option>').join('');
+  ys.value='all';
   document.getElementById('bandNote').textContent =
     days.length<2 ? '⚠ only '+days.length+' day in the INRIX export — bands collapse onto that day; pull a multi-day export for real percentiles' : '';
+  refreshDateOptions();
   buildCharts();
-  if (days.length){
-    // default overlay: the most recent full weekday in the data
-    const wd=[...days].reverse().find(d=>d.day!=='Saturday'&&d.day!=='Sunday'&&d.tt.filter(v=>v!=null).length>=90);
-    const pick=(wd||days[days.length-1]).date;
-    sel.value=pick; applyOverlay(pick);
-  }
+  applyDefaultOverlay();
   try{ history.replaceState(null,'','#'+C.id); }catch(e){}
+}
+function yearDays(){
+  const days=(Object.values(TT.dirs)[0]||{days:[]}).days;
+  const yr=document.getElementById('yearSel').value;
+  return yr==='all' ? days : days.filter(d=>d.date.slice(0,4)===yr);
+}
+function refreshDateOptions(){
+  const days=yearDays();
+  document.getElementById('dateSelect').innerHTML =
+    days.map(d=>'<option value="'+d.date+'">'+d.date+' ('+d.day+')</option>').join('');
+}
+function applyDefaultOverlay(){
+  const days=yearDays(); if(!days.length) return;
+  // default overlay: the most recent full weekday within the filter
+  const wd=[...days].reverse().find(d=>d.day!=='Saturday'&&d.day!=='Sunday'&&d.tt.filter(v=>v!=null).length>=90);
+  const pick=(wd||days[days.length-1]).date;
+  document.getElementById('dateSelect').value=pick;
+  applyOverlay(pick);
 }
 
 document.getElementById('dateSelect').addEventListener('change',e=>applyOverlay(e.target.value));
@@ -203,6 +245,17 @@ document.getElementById('bandBasis').addEventListener('change',()=>{
   buildCharts();
   const sel=document.getElementById('dateSelect');
   if (sel.value) applyOverlay(sel.value);
+  document.getElementById('toggleAverage').checked=true;
+  document.getElementById('toggleBands').checked=true;
+});
+document.getElementById('yearSel').addEventListener('change',()=>{
+  const prev=document.getElementById('dateSelect').value;
+  refreshDateOptions();
+  buildCharts();
+  const sel=document.getElementById('dateSelect');
+  // keep the overlay day if it's still inside the year filter
+  if ([...sel.options].some(o=>o.value===prev)){ sel.value=prev; applyOverlay(prev); }
+  else applyDefaultOverlay();
   document.getElementById('toggleAverage').checked=true;
   document.getElementById('toggleBands').checked=true;
 });
