@@ -87,6 +87,14 @@ a.backlink:hover { text-decoration:underline; }
 #odMatrix td.q3 { background:rgba(233,69,96,0.35); }
 #odMatrix td.q4 { background:rgba(233,69,96,0.65); color:#fff; }
 
+/* percentage chips pinned to arc midpoints while a node is highlighted */
+.arc-label { background:none; border:none; }
+.arc-label-inner {
+  display:inline-block; transform:translate(-50%,-50%);
+  background:rgba(22,33,62,0.88); border:1px solid rgba(100,255,218,0.55);
+  border-radius:9px; color:#64ffda; font-weight:700; font-size:10px;
+  padding:1px 6px; white-space:nowrap; pointer-events:none;
+}
 .custom-tooltip {
   background:rgba(22,33,62,0.95) !important; border:1px solid #0f3460 !important;
   border-radius:6px !important; color:#ccd6f6 !important; font-size:11px !important;
@@ -220,6 +228,12 @@ function drawArc(fl,color,weight,opacity,permanentTip,denom,denomLabel){
   arc.bindTooltip(flowTip(fl,denom,denomLabel),{className:'custom-tooltip',sticky:true,permanent:!!permanentTip});
   arc.addTo(arcLayer);
 }
+// small % chip pinned to an arc's midpoint
+function arcLabel(fl,pct){
+  const mid=arcPoints(OD.origins[fl.o],OD.dests[fl.d],18)[9];
+  L.marker(mid,{interactive:false,icon:L.divIcon({className:'arc-label',iconSize:null,
+    html:'<div class="arc-label-inner">'+pctStr(pct)+'</div>'})}).addTo(arcLayer);
+}
 function weightFor(fl,flows,base,range){
   const vs=flows.map(x=>x.traffic);
   const mn=Math.min(...vs), mx=Math.max(...vs);
@@ -228,6 +242,9 @@ function weightFor(fl,flows,base,range){
 function drawAllFlows(highlight){
   arcLayer.clearLayers();
   const total=odData.reduce((s,x)=>s+x.traffic,0);
+  // when a node is highlighted, % chips on its arcs show each flow's share
+  // of THAT node's trips
+  const hlTot=highlight?odData.filter(fl=>highlight(fl)).reduce((s,x)=>s+x.traffic,0):0;
   odData.forEach(fl=>{
     const hl = highlight && highlight(fl);
     drawArc(fl,
@@ -235,6 +252,7 @@ function drawAllFlows(highlight){
       weightFor(fl,odData,1,5)+(hl?2:0),
       highlight ? (hl?0.85:0.1) : 0.4,
       false, total, 'of all shown trips');
+    if (hl && hlTot>0) arcLabel(fl, fl.traffic/hlTot*100);
   });
 }
 function showFromOrigin(oi){
@@ -246,6 +264,7 @@ function showFromOrigin(oi){
   const sm=L.circleMarker(bounds[0],{radius:14,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   flows.forEach(fl=>{
     drawArc(fl,'#64ffda',weightFor(fl,flows,2,8),0.65,false,oTot,'of trips from this origin');
+    arcLabel(fl, fl.traffic/oTot*100);
     L.circleMarker([OD.dests[fl.d].lat,OD.dests[fl.d].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#e94560',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
     bounds.push([OD.dests[fl.d].lat,OD.dests[fl.d].lon]);
   });
@@ -261,6 +280,7 @@ function showToDest(di){
   const sm=L.circleMarker(bounds[0],{radius:14,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   flows.forEach(fl=>{
     drawArc(fl,'#ffb74d',weightFor(fl,flows,2,8),0.65,false,dTot,'of trips to this destination');
+    arcLabel(fl, fl.traffic/dTot*100);
     L.circleMarker([OD.origins[fl.o].lat,OD.origins[fl.o].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#22c55e',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
     bounds.push([OD.origins[fl.o].lat,OD.origins[fl.o].lon]);
   });
@@ -280,6 +300,7 @@ function clearSelection(toHome){
   if (toHome && homeBounds) map.fitBounds(homeBounds,{padding:[50,50]});
 }
 
+var hoverKey=null;   // which node currently owns the hover highlight
 function buildMarkers(){
   originLayer.clearLayers(); destLayer.clearLayers();
   OD.origins.forEach((z,i)=>{
@@ -288,8 +309,10 @@ function buildMarkers(){
     m.on('click',()=>{ selO=(selO===i&&!selCell&&selD===null)?null:i; selD=null; selCell=null;
       showingAll=selO===null; updateMatrixSelection();
       if (selO===null) clearSelection(true); else showFromOrigin(selO); });
-    m.on('mouseover',function(){ this.setStyle({radius:11,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.o===i); this.bringToFront(); });
-    m.on('mouseout', function(){ this.setStyle({radius:8,fillOpacity:0.85}); if(showingAll) drawAllFlows(); });
+    m.on('mouseover',function(){ this.setStyle({radius:11,fillOpacity:1});
+      hoverKey='o'+i; if(showingAll) drawAllFlows(fl=>fl.o===i); this.bringToFront(); });
+    m.on('mouseout', function(){ this.setStyle({radius:8,fillOpacity:0.85});
+      if (hoverKey==='o'+i){ hoverKey=null; if(showingAll) drawAllFlows(); } });
     m.addTo(originLayer);
   });
   OD.dests.forEach((z,i)=>{
@@ -298,8 +321,10 @@ function buildMarkers(){
     m.on('click',()=>{ selD=(selD===i&&!selCell&&selO===null)?null:i; selO=null; selCell=null;
       showingAll=selD===null; updateMatrixSelection();
       if (selD===null) clearSelection(true); else showToDest(selD); });
-    m.on('mouseover',function(){ this.setStyle({radius:9,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.d===i?'dest':false); this.bringToFront(); });
-    m.on('mouseout', function(){ this.setStyle({radius:6,fillOpacity:0.85}); if(showingAll) drawAllFlows(); });
+    m.on('mouseover',function(){ this.setStyle({radius:9,fillOpacity:1});
+      hoverKey='d'+i; if(showingAll) drawAllFlows(fl=>fl.d===i?'dest':false); this.bringToFront(); });
+    m.on('mouseout', function(){ this.setStyle({radius:6,fillOpacity:0.85});
+      if (hoverKey==='d'+i){ hoverKey=null; if(showingAll) drawAllFlows(); } });
     m.addTo(destLayer);
   });
 }
