@@ -205,13 +205,19 @@ function arcPoints(a,b,n){
   }
   return pts;
 }
-function flowTip(fl){
+function pctStr(v){ return v>=10?Math.round(v)+'%':v.toFixed(1)+'%'; }
+function flowTip(fl,denom,denomLabel){
+  let pct='';
+  if (denom>0){
+    const p=fl.traffic/denom*100;
+    pct='<br><span style="color:#64ffda;font-weight:700">'+pctStr(p)+'</span> <span style="color:#8892b0">'+denomLabel+'</span>';
+  }
   return '<b>'+OD.origins[fl.o].label+'</b> &#8594; <b>'+OD.dests[fl.d].label+'</b><br>'+
-         Math.round(fl.traffic).toLocaleString()+' trips/day'+mins(fl.tt);
+         Math.round(fl.traffic).toLocaleString()+' trips/day'+mins(fl.tt)+pct;
 }
-function drawArc(fl,color,weight,opacity,permanentTip){
+function drawArc(fl,color,weight,opacity,permanentTip,denom,denomLabel){
   const arc=L.polyline(arcPoints(OD.origins[fl.o],OD.dests[fl.d],18),{color,weight,opacity});
-  arc.bindTooltip(flowTip(fl),{className:'custom-tooltip',sticky:true,permanent:!!permanentTip});
+  arc.bindTooltip(flowTip(fl,denom,denomLabel),{className:'custom-tooltip',sticky:true,permanent:!!permanentTip});
   arc.addTo(arcLayer);
 }
 function weightFor(fl,flows,base,range){
@@ -221,12 +227,14 @@ function weightFor(fl,flows,base,range){
 }
 function drawAllFlows(highlight){
   arcLayer.clearLayers();
+  const total=odData.reduce((s,x)=>s+x.traffic,0);
   odData.forEach(fl=>{
     const hl = highlight && highlight(fl);
     drawArc(fl,
       hl===true?'#22c55e':hl==='dest'?'#e94560':'#64ffda',
       weightFor(fl,odData,1,5)+(hl?2:0),
-      highlight ? (hl?0.85:0.1) : 0.4);
+      highlight ? (hl?0.85:0.1) : 0.4,
+      false, total, 'of all shown trips');
   });
 }
 function showFromOrigin(oi){
@@ -234,9 +242,10 @@ function showFromOrigin(oi){
   const flows=odData.filter(x=>x.o===oi);
   if(!flows.length){ drawAllFlows(); return; }
   const bounds=[[OD.origins[oi].lat,OD.origins[oi].lon]];
+  const oTot=flows.reduce((s,x)=>s+x.traffic,0);
   L.circleMarker(bounds[0],{radius:14,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   flows.forEach(fl=>{
-    drawArc(fl,'#64ffda',weightFor(fl,flows,2,8),0.65);
+    drawArc(fl,'#64ffda',weightFor(fl,flows,2,8),0.65,false,oTot,'of trips from this origin');
     L.circleMarker([OD.dests[fl.d].lat,OD.dests[fl.d].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#e94560',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
     bounds.push([OD.dests[fl.d].lat,OD.dests[fl.d].lon]);
   });
@@ -247,9 +256,10 @@ function showToDest(di){
   const flows=odData.filter(x=>x.d===di);
   if(!flows.length){ drawAllFlows(); return; }
   const bounds=[[OD.dests[di].lat,OD.dests[di].lon]];
+  const dTot=flows.reduce((s,x)=>s+x.traffic,0);
   L.circleMarker(bounds[0],{radius:14,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   flows.forEach(fl=>{
-    drawArc(fl,'#ffb74d',weightFor(fl,flows,2,8),0.65);
+    drawArc(fl,'#ffb74d',weightFor(fl,flows,2,8),0.65,false,dTot,'of trips to this destination');
     L.circleMarker([OD.origins[fl.o].lat,OD.origins[fl.o].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#22c55e',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
     bounds.push([OD.origins[fl.o].lat,OD.origins[fl.o].lon]);
   });
@@ -257,7 +267,7 @@ function showToDest(di){
 }
 function showPair(fl){
   arcLayer.clearLayers();
-  drawArc(fl,'#64ffda',5,0.95,true);
+  drawArc(fl,'#64ffda',5,0.95,true,odData.reduce((s,x)=>s+x.traffic,0),'of all shown trips');
   L.circleMarker([OD.origins[fl.o].lat,OD.origins[fl.o].lon],{radius:12,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   L.circleMarker([OD.dests[fl.d].lat,OD.dests[fl.d].lon],{radius:12,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   map.fitBounds(L.latLngBounds([[OD.origins[fl.o].lat,OD.origins[fl.o].lon],[OD.dests[fl.d].lat,OD.dests[fl.d].lon]]),{padding:[70,70]});
