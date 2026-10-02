@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O-D Flow Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+window.REG = [];
+window.registerCorridor = function(cfg){ window.REG.push(cfg); };
+</script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Arial, sans-serif; overflow:hidden; background:#1a1a2e; }
+#map { position:absolute; inset:0; height:100vh; }
+
+/* key-free dark basemap (Esri street tiles + CSS filter) */
+.tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.35); }
+
+#controls {
+  position:absolute; top:14px; left:14px; z-index:1000; width:270px;
+  background:rgba(22,33,62,0.97); border:1px solid #0f3460; border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.5); padding:13px 14px;
+  max-height:calc(100vh - 28px); overflow-y:auto;
+}
+#controls h3 { color:#e94560; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:3px; }
+#controls .sub { color:#8892b0; font-size:10px; margin-bottom:10px; }
+#controls label { display:block; color:#a8b2d8; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin:9px 0 4px; }
+#controls select, #controls button {
+  width:100%; background:#0f3460; border:1px solid #1e4a7a; color:#ccd6f6;
+  border-radius:5px; padding:6px 7px; font-size:11px; cursor:pointer;
+}
+#controls select[multiple] { font-size:10px; }
+#controls option { background:#16213e; }
+#controls button:hover { border-color:#64ffda; color:#64ffda; }
+#stats { margin-top:11px; padding-top:9px; border-top:1px solid #0f3460; }
+.stat-row { display:flex; justify-content:space-between; margin:4px 0; font-size:11px; }
+.stat-label { color:#8892b0; }
+.stat-val { color:#64ffda; font-weight:700; }
+a.backlink { display:inline-block; margin-top:10px; color:#64ffda; font-size:11px; text-decoration:none; }
+a.backlink:hover { text-decoration:underline; }
+
+.legend {
+  position:absolute; top:14px; right:14px; z-index:1000;
+  background:rgba(22,33,62,0.95); border:1px solid #0f3460; border-radius:8px;
+  padding:10px 12px; font-size:11px; box-shadow:0 2px 8px rgba(0,0,0,0.4);
+}
+.legend-title { color:#ccd6f6; font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:0.7px; margin-bottom:7px; }
+.legend-item { display:flex; align-items:center; gap:7px; margin:4px 0; color:#a8b2d8; }
+.legend-dot { width:13px; height:13px; border-radius:50%; border:2px solid #fff; }
+
+#tableOverlay {
+  position:absolute; bottom:14px; right:14px; z-index:1000;
+  background:rgba(22,33,62,0.97); border:1px solid #0f3460; border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,0.5); max-width:660px; max-height:460px;
+  overflow:hidden; display:flex; flex-direction:column;
+}
+#tableOverlay.minimized { max-height:42px; }
+.table-header {
+  padding:10px 14px; background:linear-gradient(135deg,#0f3460,#16213e);
+  color:#64ffda; display:flex; justify-content:space-between; align-items:center;
+  cursor:pointer; border-bottom:1px solid #0f3460;
+}
+.table-header h3 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.7px; }
+.table-header button { background:rgba(100,255,218,0.12); border:1px solid rgba(100,255,218,0.3); color:#64ffda; padding:3px 9px; border-radius:4px; cursor:pointer; font-size:10px; }
+#matrixContainer { overflow:auto; max-height:400px; }
+#odMatrix { border-collapse:collapse; font-size:10px; }
+#odMatrix thead { position:sticky; top:0; z-index:10; }
+#odMatrix th {
+  padding:6px 4px; text-align:center; font-weight:700; color:#a8b2d8;
+  border:1px solid #0f3460; font-size:9px; min-width:44px; max-width:70px;
+  cursor:pointer; user-select:none; background:#121c36; position:relative;
+}
+#odMatrix th.corner-cell { background:#0f3460; color:#ccd6f6; cursor:default; position:sticky; left:0; z-index:11; }
+#odMatrix th:hover:not(.corner-cell) { color:#64ffda; }
+#odMatrix th.selected-col { background:#64ffda; color:#16213e; }
+#odMatrix td { padding:5px 4px; border:1px solid rgba(15,52,96,0.6); text-align:center; cursor:pointer; color:#ccd6f6; }
+#odMatrix td.row-header { position:sticky; left:0; background:#121c36; color:#a8b2d8; font-weight:700; text-align:left; padding-left:7px; border-right:2px solid #0f3460; z-index:8; font-size:9px; max-width:120px; }
+#odMatrix td.row-header:hover { color:#64ffda; }
+#odMatrix td.row-header.selected-row { background:#64ffda; color:#16213e; }
+#odMatrix td:not(.row-header):hover { outline:1.5px solid #64ffda; }
+#odMatrix td.selected-cell { background:#64ffda !important; color:#16213e !important; font-weight:700; }
+#odMatrix td.no-traffic { color:#3a4668; cursor:default; }
+#odMatrix td.q1 { background:rgba(14,124,134,0.18); }
+#odMatrix td.q2 { background:rgba(14,124,134,0.42); }
+#odMatrix td.q3 { background:rgba(233,69,96,0.35); }
+#odMatrix td.q4 { background:rgba(233,69,96,0.65); color:#fff; }
+
+.custom-tooltip {
+  background:rgba(22,33,62,0.95) !important; border:1px solid #0f3460 !important;
+  border-radius:6px !important; color:#ccd6f6 !important; font-size:11px !important;
+  font-family:Arial, sans-serif !important; padding:7px 10px !important;
+  box-shadow:0 4px 15px rgba(0,0,0,0.4) !important;
+}
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:#16213e; }
+::-webkit-scrollbar-thumb { background:#0f3460; border-radius:3px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="controls">
+  <h3>O-D Flow Explorer</h3>
+  <div class="sub" id="odNote">StreetLight origin-destination flows</div>
+  <label for="corridor-sel">Corridor</label>
+  <select id="corridor-sel" onchange="loadCorridor(this.value)"></select>
+  <label for="dayType">Day Type</label>
+  <select id="dayType"></select>
+  <label for="dayPart">Time Period</label>
+  <select id="dayPart"></select>
+  <label for="excludeOrigins">Exclude Origins</label>
+  <select id="excludeOrigins" multiple size="3"></select>
+  <label for="excludeDestinations">Exclude Destinations</label>
+  <select id="excludeDestinations" multiple size="3"></select>
+  <button id="clearExclusions" style="margin-top:7px">Clear Exclusions</button>
+  <div id="stats">
+    <div class="stat-row"><span class="stat-label">O-D pairs shown</span><span class="stat-val" id="totalFlows">0</span></div>
+    <div class="stat-row"><span class="stat-label">Total daily trips</span><span class="stat-val" id="totalTraffic">0</span></div>
+    <button id="resetView" style="margin-top:8px">Reset View</button>
+  </div>
+  <a class="backlink" id="backlink" href="index.html">&#8592; back to corridor dashboard</a>
+</div>
+
+<div class="legend">
+  <div class="legend-title">Legend</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div><span>Origin gate</span></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#e94560"></div><span>Destination gate</span></div>
+  <div class="legend-item"><div style="width:20px;height:3px;background:#64ffda;border-radius:2px"></div><span>flow arc (width &prop; trips)</span></div>
+  <div class="legend-item" style="color:#8892b0;font-size:10px">click a gate, matrix row,<br>column or cell to filter</div>
+</div>
+
+<div id="tableOverlay">
+  <div class="table-header" onclick="toggleTable()">
+    <h3>Origin &#8594; Destination Matrix (daily trips)</h3>
+    <button id="toggleBtn" onclick="event.stopPropagation(); toggleTable()">Minimize</button>
+  </div>
+  <div id="matrixContainer">
+    <table id="odMatrix">
+      <thead><tr id="matrixHeader"><th class="corner-cell">O \ D</th></tr></thead>
+      <tbody id="matrixBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ── O-D Flow Explorer: companion page to the corridor dashboard.
+//    Reads the same corridors/*.js registry; uses each corridor's `od`
+//    block (origins/dests with centroids + compact [o,d,dt,dp,vol,tt] rows).
+var C=null, OD=null;
+const map = L.map('map');
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  { attribution:'&copy; Esri', maxNativeZoom:19, maxZoom:20, className:'tiles-dark' }).addTo(map);
+
+const originLayer=L.layerGroup().addTo(map);
+const destLayer=L.layerGroup().addTo(map);
+const arcLayer=L.layerGroup().addTo(map);
+
+let odData=[];                       // aggregated for current filters: {o,d,traffic,tt}
+let excludedO=new Set(), excludedD=new Set();
+let showingAll=true, selO=null, selD=null, selCell=null;
+let homeBounds=null;
+
+const fmt=t=>t>=1000?(t/1000).toFixed(1)+'k':Math.round(t).toString();
+const mins=tt=>tt!=null?' &middot; ~'+(tt/60).toFixed(1)+' min':'';
+
+// ── filtering + aggregation ───────────────────────────────────────────
+function filterOD(){
+  const dt=+document.getElementById('dayType').value;
+  const dp=+document.getElementById('dayPart').value;
+  const agg={};
+  OD.flows.forEach(f=>{
+    if (f[2]!==dt || f[3]!==dp) return;
+    if (excludedO.has(f[0]) || excludedD.has(f[1])) return;
+    if (!(f[4]>0)) return;
+    const k=f[0]+'|'+f[1];
+    if (!agg[k]) agg[k]={o:f[0], d:f[1], traffic:0, tt:f[5]};
+    agg[k].traffic+=f[4];
+  });
+  odData=Object.values(agg).sort((a,b)=>b.traffic-a.traffic);
+  buildMatrix();
+  updateStats();
+  reapplySelection();
+}
+function reapplySelection(){
+  if (selCell){ const fl=odData.find(x=>x.o===selCell.o&&x.d===selCell.d); if(fl){showPair(fl);return;} }
+  else if (selO!==null){ showFromOrigin(selO); return; }
+  else if (selD!==null){ showToDest(selD); return; }
+  showingAll=true; drawAllFlows();
+}
+
+// ── map drawing ───────────────────────────────────────────────────────
+function arcPoints(a,b,n){
+  const dLat=b.lat-a.lat, dLon=b.lon-a.lon;
+  const dist=Math.sqrt(dLat*dLat+dLon*dLon)||1e-9;
+  const cLat=(a.lat+b.lat)/2 - dLon/dist*dist*0.3;
+  const cLon=(a.lon+b.lon)/2 + dLat/dist*dist*0.3;
+  const pts=[];
+  for(let i=0;i<=n;i++){
+    const t=i/n;
+    pts.push([(1-t)*(1-t)*a.lat+2*(1-t)*t*cLat+t*t*b.lat,
+              (1-t)*(1-t)*a.lon+2*(1-t)*t*cLon+t*t*b.lon]);
+  }
+  return pts;
+}
+function flowTip(fl){
+  return '<b>'+OD.origins[fl.o].label+'</b> &#8594; <b>'+OD.dests[fl.d].label+'</b><br>'+
+         Math.round(fl.traffic).toLocaleString()+' trips/day'+mins(fl.tt);
+}
+function drawArc(fl,color,weight,opacity,permanentTip){
+  const arc=L.polyline(arcPoints(OD.origins[fl.o],OD.dests[fl.d],18),{color,weight,opacity});
+  arc.bindTooltip(flowTip(fl),{className:'custom-tooltip',sticky:true,permanent:!!permanentTip});
+  arc.addTo(arcLayer);
+}
+function weightFor(fl,flows,base,range){
+  const vs=flows.map(x=>x.traffic);
+  const mn=Math.min(...vs), mx=Math.max(...vs);
+  return mx===mn ? base+range/2 : base+(fl.traffic-mn)/(mx-mn)*range;
+}
+function drawAllFlows(highlight){
+  arcLayer.clearLayers();
+  odData.forEach(fl=>{
+    const hl = highlight && highlight(fl);
+    drawArc(fl,
+      hl===true?'#22c55e':hl==='dest'?'#e94560':'#64ffda',
+      weightFor(fl,odData,1,5)+(hl?2:0),
+      highlight ? (hl?0.85:0.1) : 0.4);
+  });
+}
+function showFromOrigin(oi){
+  arcLayer.clearLayers();
+  const flows=odData.filter(x=>x.o===oi);
+  if(!flows.length){ drawAllFlows(); return; }
+  const bounds=[[OD.origins[oi].lat,OD.origins[oi].lon]];
+  L.circleMarker(bounds[0],{radius:14,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
+  flows.forEach(fl=>{
+    drawArc(fl,'#64ffda',weightFor(fl,flows,2,8),0.65);
+    L.circleMarker([OD.dests[fl.d].lat,OD.dests[fl.d].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#e94560',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
+    bounds.push([OD.dests[fl.d].lat,OD.dests[fl.d].lon]);
+  });
+  map.fitBounds(L.latLngBounds(bounds),{padding:[60,60]});
+}
+function showToDest(di){
+  arcLayer.clearLayers();
+  const flows=odData.filter(x=>x.d===di);
+  if(!flows.length){ drawAllFlows(); return; }
+  const bounds=[[OD.dests[di].lat,OD.dests[di].lon]];
+  L.circleMarker(bounds[0],{radius:14,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
+  flows.forEach(fl=>{
+    drawArc(fl,'#ffb74d',weightFor(fl,flows,2,8),0.65);
+    L.circleMarker([OD.origins[fl.o].lat,OD.origins[fl.o].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#22c55e',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
+    bounds.push([OD.origins[fl.o].lat,OD.origins[fl.o].lon]);
+  });
+  map.fitBounds(L.latLngBounds(bounds),{padding:[60,60]});
+}
+function showPair(fl){
+  arcLayer.clearLayers();
+  drawArc(fl,'#64ffda',5,0.95,true);
+  L.circleMarker([OD.origins[fl.o].lat,OD.origins[fl.o].lon],{radius:12,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
+  L.circleMarker([OD.dests[fl.d].lat,OD.dests[fl.d].lon],{radius:12,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
+  map.fitBounds(L.latLngBounds([[OD.origins[fl.o].lat,OD.origins[fl.o].lon],[OD.dests[fl.d].lat,OD.dests[fl.d].lon]]),{padding:[70,70]});
+}
+function clearSelection(toHome){
+  selO=selD=selCell=null; showingAll=true;
+  updateMatrixSelection(); drawAllFlows();
+  if (toHome && homeBounds) map.fitBounds(homeBounds,{padding:[50,50]});
+}
+
+function buildMarkers(){
+  originLayer.clearLayers(); destLayer.clearLayers();
+  OD.origins.forEach((z,i)=>{
+    const m=L.circleMarker([z.lat,z.lon],{radius:8,fillColor:'#22c55e',color:'#fff',weight:2,fillOpacity:0.85});
+    m.bindTooltip('<b style="color:#22c55e">Origin:</b> '+z.label+'<br><span style="color:#8892b0;font-size:10px">click: all trips FROM here</span>',{className:'custom-tooltip',sticky:true});
+    m.on('click',()=>{ selO=(selO===i&&!selCell&&selD===null)?null:i; selD=null; selCell=null;
+      showingAll=selO===null; updateMatrixSelection();
+      if (selO===null) clearSelection(true); else showFromOrigin(selO); });
+    m.on('mouseover',function(){ this.setStyle({radius:11,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.o===i); });
+    m.on('mouseout', function(){ this.setStyle({radius:8,fillOpacity:0.85}); if(showingAll) drawAllFlows(); });
+    m.addTo(originLayer);
+  });
+  OD.dests.forEach((z,i)=>{
+    const m=L.circleMarker([z.lat,z.lon],{radius:6,fillColor:'#e94560',color:'#fff',weight:2,fillOpacity:0.85});
+    m.bindTooltip('<b style="color:#e94560">Destination:</b> '+z.label+'<br><span style="color:#8892b0;font-size:10px">click: all trips TO here</span>',{className:'custom-tooltip',sticky:true});
+    m.on('click',()=>{ selD=(selD===i&&!selCell&&selO===null)?null:i; selO=null; selCell=null;
+      showingAll=selD===null; updateMatrixSelection();
+      if (selD===null) clearSelection(true); else showToDest(selD); });
+    m.on('mouseover',function(){ this.setStyle({radius:9,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.d===i?'dest':false); });
+    m.on('mouseout', function(){ this.setStyle({radius:6,fillOpacity:0.85}); if(showingAll) drawAllFlows(); });
+    m.addTo(destLayer);
+  });
+}
+
+// ── matrix table ──────────────────────────────────────────────────────
+function buildMatrix(){
+  const header=document.getElementById('matrixHeader');
+  const tbody=document.getElementById('matrixBody');
+  header.innerHTML='<th class="corner-cell">O \\ D</th>';
+  tbody.innerHTML='';
+  const cells={}; let maxT=0;
+  odData.forEach(fl=>{ cells[fl.o+'|'+fl.d]=fl; maxT=Math.max(maxT,fl.traffic); });
+  const oUsed=[...new Set(odData.map(x=>x.o))].sort((a,b)=>a-b);
+  const dUsed=[...new Set(odData.map(x=>x.d))].sort((a,b)=>a-b);
+  dUsed.forEach(di=>{
+    const th=document.createElement('th');
+    th.textContent=OD.dests[di].label; th.title=OD.dests[di].name;
+    th.dataset.di=di;
+    th.onclick=()=>{ selD=(selD===di&&selO===null&&!selCell)?null:di; selO=null; selCell=null;
+      showingAll=selD===null; updateMatrixSelection();
+      if(selD===null) clearSelection(true); else showToDest(selD); };
+    header.appendChild(th);
+  });
+  oUsed.forEach(oi=>{
+    const tr=document.createElement('tr');
+    const rh=document.createElement('td');
+    rh.className='row-header'; rh.textContent=OD.origins[oi].label; rh.title=OD.origins[oi].name;
+    rh.dataset.oi=oi;
+    rh.onclick=()=>{ selO=(selO===oi&&selD===null&&!selCell)?null:oi; selD=null; selCell=null;
+      showingAll=selO===null; updateMatrixSelection();
+      if(selO===null) clearSelection(true); else showFromOrigin(selO); };
+    tr.appendChild(rh);
+    dUsed.forEach(di=>{
+      const td=document.createElement('td');
+      const fl=cells[oi+'|'+di];
+      if (fl){
+        td.textContent=fmt(fl.traffic);
+        td.title=OD.origins[oi].label+' → '+OD.dests[di].label+'\n'+Math.round(fl.traffic).toLocaleString()+' trips/day';
+        const p=fl.traffic/maxT;
+        td.className = p>0.75?'q4':p>0.5?'q3':p>0.25?'q2':'q1';
+        td.dataset.oi=oi; td.dataset.di=di;
+        td.onclick=()=>{ selCell=(selCell&&selCell.o===oi&&selCell.d===di)?null:{o:oi,d:di}; selO=null; selD=null;
+          showingAll=!selCell; updateMatrixSelection();
+          if(!selCell) clearSelection(true); else showPair(fl); };
+      } else { td.className='no-traffic'; td.textContent='–'; }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  updateMatrixSelection();
+}
+function updateMatrixSelection(){
+  document.querySelectorAll('#odMatrix th.selected-col').forEach(e=>e.classList.remove('selected-col'));
+  document.querySelectorAll('#odMatrix td.selected-row').forEach(e=>e.classList.remove('selected-row'));
+  document.querySelectorAll('#odMatrix td.selected-cell').forEach(e=>e.classList.remove('selected-cell'));
+  if (selD!==null){ const e=document.querySelector('#odMatrix th[data-di="'+selD+'"]'); if(e) e.classList.add('selected-col'); }
+  if (selO!==null){ const e=document.querySelector('#odMatrix td.row-header[data-oi="'+selO+'"]'); if(e) e.classList.add('selected-row'); }
+  if (selCell){ const e=document.querySelector('#odMatrix td[data-oi="'+selCell.o+'"][data-di="'+selCell.d+'"]'); if(e) e.classList.add('selected-cell'); }
+}
+function updateStats(){
+  document.getElementById('totalFlows').textContent=odData.length;
+  document.getElementById('totalTraffic').textContent=Math.round(odData.reduce((s,x)=>s+x.traffic,0)).toLocaleString();
+}
+function toggleTable(){
+  const o=document.getElementById('tableOverlay');
+  o.classList.toggle('minimized');
+  document.getElementById('toggleBtn').textContent=o.classList.contains('minimized')?'Maximize':'Minimize';
+}
+
+// ── corridor switching / boot ─────────────────────────────────────────
+function loadCorridor(id){
+  const cfg=REG.find(c=>c.id===id); if(!cfg||!cfg.od) return;
+  C=cfg; OD=C.od;
+  document.title=C.name+' O-D Flows';
+  document.getElementById('odNote').textContent=OD.note||'StreetLight origin-destination flows';
+  document.getElementById('corridor-sel').value=C.id;
+  document.getElementById('backlink').href='index.html#'+C.id;
+  const mkSel=(id2,vals)=>{ const s=document.getElementById(id2); s.innerHTML='';
+    vals.forEach((v,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=v.replace(/^\d+: /,''); s.appendChild(o); }); s.value=0; };
+  mkSel('dayType',OD.dayTypes); mkSel('dayPart',OD.dayParts);
+  const exO=document.getElementById('excludeOrigins'), exD=document.getElementById('excludeDestinations');
+  exO.innerHTML=''; exD.innerHTML='';
+  OD.origins.forEach((z,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=z.label; exO.appendChild(o); });
+  OD.dests.forEach((z,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=z.label; exD.appendChild(o); });
+  excludedO=new Set(); excludedD=new Set();
+  selO=selD=selCell=null; showingAll=true;
+  const all=OD.origins.concat(OD.dests);
+  homeBounds=L.latLngBounds(all.map(z=>[z.lat,z.lon]));
+  map.fitBounds(homeBounds,{padding:[50,50]});
+  buildMarkers();
+  filterOD();
+  try{ history.replaceState(null,'','#'+C.id); }catch(e){}
+}
+document.getElementById('dayType').addEventListener('change',filterOD);
+document.getElementById('dayPart').addEventListener('change',filterOD);
+document.getElementById('excludeOrigins').addEventListener('change',e=>{ excludedO=new Set([...e.target.selectedOptions].map(o=>+o.value)); filterOD(); });
+document.getElementById('excludeDestinations').addEventListener('change',e=>{ excludedD=new Set([...e.target.selectedOptions].map(o=>+o.value)); filterOD(); });
+document.getElementById('clearExclusions').addEventListener('click',()=>{
+  document.getElementById('excludeOrigins').selectedIndex=-1;
+  document.getElementById('excludeDestinations').selectedIndex=-1;
+  excludedO.clear(); excludedD.clear(); filterOD();
+});
+document.getElementById('resetView').addEventListener('click',()=>{
+  document.getElementById('dayType').value=0; document.getElementById('dayPart').value=0;
+  document.getElementById('excludeOrigins').selectedIndex=-1;
+  document.getElementById('excludeDestinations').selectedIndex=-1;
+  excludedO.clear(); excludedD.clear();
+  selO=selD=selCell=null; showingAll=true;
+  filterOD();
+  if (homeBounds) map.fitBounds(homeBounds,{padding:[50,50]});
+});
+
+(function(){
+  const boot=document.createElement('script');
+  boot.src='corridors/manifest.js';
+  boot.onload=function(){
+    const files=window.CORRIDOR_FILES||[];
+    let i=0;
+    (function next(){
+      if (i>=files.length){ initApp(); return; }
+      const s=document.createElement('script');
+      s.src='corridors/'+files[i++];
+      s.onload=next; s.onerror=next;
+      document.body.appendChild(s);
+    })();
+  };
+  boot.onerror=function(){ initApp(); };
+  document.body.appendChild(boot);
+})();
+function initApp(){
+  const withOD=REG.filter(c=>c.od);
+  const sel=document.getElementById('corridor-sel');
+  if (!withOD.length){
+    document.getElementById('odNote').textContent='No corridor has O-D data yet (see README.md)';
+    map.setView([39.6,-104.84],12);
+    return;
+  }
+  withOD.forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name+' — '+c.agency; sel.appendChild(o); });
+  const want=(location.hash||'').replace('#','');
+  loadCorridor(withOD.some(c=>c.id===want)?want:withOD[0].id);
+}
+</script>
+</body>
+</html>

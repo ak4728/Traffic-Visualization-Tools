@@ -75,6 +75,18 @@ window.registerCorridor({
     //  keys — is still accepted and normalized automatically)
   },
 
+  // ── StreetLight O-D (optional) — explored in the companion od.html page
+  //    (arc map + interactive O-D matrix, like SantaFeOD.html); the dashboard
+  //    sidebar shows an "O-D Flow Explorer ↗" link row when this is present.
+  od: {
+    note: 'StreetLight O-D 2087595 · Jan 2025 – Aug 2026',
+    origins: [ { name, label, lat, lon }, … ],     // gate centroids
+    dests:   [ { name, label, lat, lon }, … ],
+    dayTypes: ['0: All Days (M-Su)', …],
+    dayParts: ['0: All Day (12am-12am)', …],
+    flows: [ [oIdx, dIdx, dayTypeIdx, dayPartIdx, dailyTrips, avgTravelTimeSec], … ]
+  },
+
   // ── Safety (optional) ──
   // Extra fields (all optional) enrich the hover tooltip: type (crash type),
   // date 'YYYY-MM-DD', time 'HH:MM', killed, inj, wx (weather), lt (lighting),

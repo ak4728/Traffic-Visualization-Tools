@@ -68,7 +68,7 @@ def read_shapefile_zip(zip_path):
         body = shp[p + 8: p + 8 + clen]
         p += 8 + clen
         shape_type = struct.unpack("<i", body[0:4])[0]
-        if shape_type in (3, 13):          # PolyLine / PolyLineZ
+        if shape_type in (3, 5, 13, 15):   # PolyLine / Polygon (+Z variants)
             n_parts, n_pts = struct.unpack("<ii", body[36:44])
             pts_off = 44 + 4 * n_parts
             pts = [list(struct.unpack("<dd", body[pts_off + 16 * k: pts_off + 16 * k + 16]))
@@ -231,6 +231,85 @@ print(f"TCDS: {len(tcds_stations)} stations: " +
       ", ".join(s["id"] + " (" + "/".join(sorted({d for c in s['counts'].values() for d in c['dirs']})) + ")"
                 for s in tcds_stations))
 
+# ── StreetLight O-D (analysis 2087595): zone centroids + compact flows ─
+OD_DIR = os.path.join(DATA, "2087595_Arapahoe_Road_OD")
+
+def _abbrev(name):
+    s = name.split(" / ")[0]
+    for a, b in (("East ", "E "), ("West ", "W "), ("North ", "N "), ("South ", "S "),
+                 ("Road", "Rd"), ("Street", "St"), ("Avenue", "Ave"), ("Parkway", "Pkwy"),
+                 ("Boulevard", "Blvd"), ("Drive", "Dr"), ("primary_link", "Ramp")):
+        s = s.replace(a, b)
+    return s
+
+def _compass(deg):
+    try: deg = float(deg) % 360
+    except (TypeError, ValueError): return ""
+    return "NB" if deg < 45 or deg >= 315 else "EB" if deg < 135 else "SB" if deg < 225 else "WB"
+
+def od_zone_list(kind):
+    """[(full zone name, label, lat, lon)] from the origin/destination shapefile."""
+    zp = os.path.join(OD_DIR, "Shapefile", f"2087595_Arapahoe_Road_OD_{kind}.zip")
+    out = []
+    for attrs, pts in read_shapefile_zip(zp):
+        if not pts:
+            continue
+        lat = sum(p[1] for p in pts) / len(pts)
+        lon = sum(p[0] for p in pts) / len(pts)
+        name = attrs["name"]
+        wid = name.split(" / ")[-1] if " / " in name else ""
+        label = _abbrev(name) + " " + _compass(attrs.get("direction")) + (" ·" + wid[-4:] if wid else "")
+        out.append((name, label.strip(), round(lat, 6), round(lon, 6)))
+    return out
+
+od_cfg = None
+if os.path.isdir(OD_DIR):
+    o_zones = od_zone_list("origin")
+    d_zones = od_zone_list("destination")
+    # dbf names are 30-char truncated; index by prefix for the CSV join
+    def zone_index(zones):
+        return {name: i for i, (name, _, _, _) in enumerate(zones)}
+    def find_zone(idx_map, zones, full_name):
+        if full_name in idx_map:
+            return idx_map[full_name]
+        for i, (name, _, _, _) in enumerate(zones):
+            if full_name.startswith(name) or name.startswith(full_name):
+                return i
+        return None
+    o_idx, d_idx = zone_index(o_zones), zone_index(d_zones)
+    day_types, day_parts, flows = [], [], []
+    missed = set()
+    with open(os.path.join(OD_DIR, "2087595_Arapahoe_Road_OD_od_all.csv"),
+              newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            oi = find_zone(o_idx, o_zones, r["Origin Zone Name"])
+            di = find_zone(d_idx, d_zones, r["Destination Zone Name"])
+            if oi is None or di is None:
+                missed.add((r["Origin Zone Name"], r["Destination Zone Name"]))
+                continue
+            dt, dp = r["Day Type"], r["Day Part"]
+            if dt not in day_types: day_types.append(dt)
+            if dp not in day_parts: day_parts.append(dp)
+            try: vol = round(float(r["Average Daily O-D Traffic (StL Volume)"]))
+            except ValueError: continue
+            try: tt = round(float(r["Avg Travel Time (sec)"]))
+            except (KeyError, ValueError): tt = None
+            flows.append([oi, di, day_types.index(dt), day_parts.index(dp), vol, tt])
+    od_cfg = {
+        "note": "StreetLight O-D 2087595 · Jan 2025 – Aug 2026",
+        "origins": [{"name": n, "label": l, "lat": a, "lon": o} for n, l, a, o in o_zones],
+        "dests":   [{"name": n, "label": l, "lat": a, "lon": o} for n, l, a, o in d_zones],
+        "dayTypes": sorted(day_types), "dayParts": sorted(day_parts),
+        "flows": flows,
+    }
+    # flows were built against first-seen order; re-map onto the sorted tables
+    dt_map = {i: od_cfg["dayTypes"].index(v) for i, v in enumerate(day_types)}
+    dp_map = {i: od_cfg["dayParts"].index(v) for i, v in enumerate(day_parts)}
+    for fl in od_cfg["flows"]:
+        fl[2], fl[3] = dt_map[fl[2]], dp_map[fl[3]]
+    print(f"OD: {len(o_zones)} origins x {len(d_zones)} dests, {len(flows)} flow rows"
+          + (f", UNMATCHED zone names: {missed}" if missed else ""))
+
 # ── Crashes: statewide listings -> corridor buffer ────────────────────
 crashes = filter_crashes(os.path.join(DATA, "TMC_Identification.csv"),
                          CRASH_DIR, a.buffer_ft)
@@ -267,7 +346,8 @@ src = (
     "  },\n"
     f"  inrix: {{ geojson: {gj} }},\n"
     f"  tcds: {{ stations: {json.dumps(tcds_stations, separators=(',', ':'))} }},\n"
-    f"  crashes: {cj}\n"
+    + (f"  od: {json.dumps(od_cfg, separators=(',', ':'))},\n" if od_cfg else "")
+    + f"  crashes: {cj}\n"
     "});\n"
 )
 with open(OUT, "w", encoding="utf-8") as f:

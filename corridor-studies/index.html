@@ -818,6 +818,7 @@ const LAYER_DEFS=[
   { id:'streetlight', label:()=>'StreetLight Traffic',        dot:'#64ffda', avail:c=>!!c.streetlight },
   { id:'inrix',       label:()=>'INRIX Speeds',               dot:'#fb923c', avail:c=>!!c.inrix },
   { id:'replica',     label:()=>'Replica Modes / O-D',        dot:'#34d399', avail:c=>!!c.replica },
+  { id:'od',          label:()=>'O-D Flow Explorer',          dot:'#c084fc', avail:c=>!!c.od, link:c=>'od.html#'+c.id },
   { id:'tcds',        label:()=>'Count Station Volumes',      dot:'#ffb74d', avail:c=>!!c.tcds },
   { id:'safety',      label:()=>'Safety / Crashes',           dot:'#e94560', avail:c=>!!(c.crashes&&c.crashes.length) },
   { id:'equity',      label:()=>'Equity Index',               dot:'#818cf8', avail:c=>!!c.equity },
@@ -833,6 +834,15 @@ function buildLayerList(){
     const lbl=typeof d.label==='function'?d.label(C):d.label;
     const row=document.createElement('div');
     row.className='layer-item'+(avail?'':' disabled'); row.id='lyr-'+d.id;
+    if (d.link){
+      // link row: opens a companion page instead of toggling a map layer
+      row.innerHTML='<div class="layer-dot" style="background:'+d.dot+'"></div><span class="layer-label">'+lbl+'</span>'+
+        (avail?'<span class="layer-badge" style="background:rgba(192,132,252,0.15);color:#c084fc;border:1px solid rgba(192,132,252,0.35)">open &#8599;</span>'
+              :'<span class="layer-badge badge-soon">No data</span>');
+      if (avail) row.addEventListener('click',()=>window.open(d.link(C),'_blank'));
+      host.appendChild(row);
+      return;
+    }
     row.innerHTML='<div class="layer-dot" style="background:'+d.dot+'"></div><span class="layer-label">'+lbl+'</span>'+
       (avail?'':'<span class="layer-badge badge-soon">No data</span>')+
       '<label class="toggle"><input type="checkbox" id="tog-'+d.id+'" '+(avail?'':'disabled')+'><span class="slider"></span></label>';
