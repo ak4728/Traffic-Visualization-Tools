@@ -243,12 +243,13 @@ function showFromOrigin(oi){
   if(!flows.length){ drawAllFlows(); return; }
   const bounds=[[OD.origins[oi].lat,OD.origins[oi].lon]];
   const oTot=flows.reduce((s,x)=>s+x.traffic,0);
-  L.circleMarker(bounds[0],{radius:14,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
+  const sm=L.circleMarker(bounds[0],{radius:14,fillColor:'#22c55e',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   flows.forEach(fl=>{
     drawArc(fl,'#64ffda',weightFor(fl,flows,2,8),0.65,false,oTot,'of trips from this origin');
     L.circleMarker([OD.dests[fl.d].lat,OD.dests[fl.d].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#e94560',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
     bounds.push([OD.dests[fl.d].lat,OD.dests[fl.d].lon]);
   });
+  sm.bringToFront();
   map.fitBounds(L.latLngBounds(bounds),{padding:[60,60]});
 }
 function showToDest(di){
@@ -257,12 +258,13 @@ function showToDest(di){
   if(!flows.length){ drawAllFlows(); return; }
   const bounds=[[OD.dests[di].lat,OD.dests[di].lon]];
   const dTot=flows.reduce((s,x)=>s+x.traffic,0);
-  L.circleMarker(bounds[0],{radius:14,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
+  const sm=L.circleMarker(bounds[0],{radius:14,fillColor:'#e94560',color:'#fff',weight:3,fillOpacity:1}).addTo(arcLayer);
   flows.forEach(fl=>{
     drawArc(fl,'#ffb74d',weightFor(fl,flows,2,8),0.65,false,dTot,'of trips to this destination');
     L.circleMarker([OD.origins[fl.o].lat,OD.origins[fl.o].lon],{radius:6+weightFor(fl,flows,0,4),fillColor:'#22c55e',color:'#fff',weight:2,fillOpacity:0.85}).addTo(arcLayer);
     bounds.push([OD.origins[fl.o].lat,OD.origins[fl.o].lon]);
   });
+  sm.bringToFront();
   map.fitBounds(L.latLngBounds(bounds),{padding:[60,60]});
 }
 function showPair(fl){
@@ -286,7 +288,7 @@ function buildMarkers(){
     m.on('click',()=>{ selO=(selO===i&&!selCell&&selD===null)?null:i; selD=null; selCell=null;
       showingAll=selO===null; updateMatrixSelection();
       if (selO===null) clearSelection(true); else showFromOrigin(selO); });
-    m.on('mouseover',function(){ this.setStyle({radius:11,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.o===i); });
+    m.on('mouseover',function(){ this.setStyle({radius:11,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.o===i); this.bringToFront(); });
     m.on('mouseout', function(){ this.setStyle({radius:8,fillOpacity:0.85}); if(showingAll) drawAllFlows(); });
     m.addTo(originLayer);
   });
@@ -296,7 +298,7 @@ function buildMarkers(){
     m.on('click',()=>{ selD=(selD===i&&!selCell&&selO===null)?null:i; selO=null; selCell=null;
       showingAll=selD===null; updateMatrixSelection();
       if (selD===null) clearSelection(true); else showToDest(selD); });
-    m.on('mouseover',function(){ this.setStyle({radius:9,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.d===i?'dest':false); });
+    m.on('mouseover',function(){ this.setStyle({radius:9,fillOpacity:1}); if(showingAll) drawAllFlows(fl=>fl.d===i?'dest':false); this.bringToFront(); });
     m.on('mouseout', function(){ this.setStyle({radius:6,fillOpacity:0.85}); if(showingAll) drawAllFlows(); });
     m.addTo(destLayer);
   });
