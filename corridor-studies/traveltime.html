@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Travel Time Explorer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+window.REG = [];
+window.registerCorridor = function(cfg){ window.REG.push(cfg); };
+</script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Arial, sans-serif; background:#1a1a2e; color:#ccd6f6; padding:14px; }
+.container { max-width:1800px; margin:0 auto; }
+.header {
+  background:linear-gradient(135deg,#0f3460,#16213e); border:1px solid #0f3460;
+  border-radius:10px; padding:14px 18px; margin-bottom:12px;
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+}
+.header h1 { color:#e94560; font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+.header .subtitle { color:#8892b0; font-size:11px; margin-top:3px; }
+.header select {
+  background:#0f3460; border:1px solid #1e4a7a; color:#ccd6f6;
+  border-radius:5px; padding:6px 9px; font-size:12px; font-weight:600; cursor:pointer;
+}
+.header option { background:#16213e; }
+a.backlink { color:#64ffda; font-size:11px; text-decoration:none; }
+a.backlink:hover { text-decoration:underline; }
+
+.controls {
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:#16213e; border:1px solid #0f3460; padding:10px 14px;
+  border-radius:8px; margin-bottom:12px; font-size:12px;
+}
+.controls label { color:#a8b2d8; font-weight:600; }
+.controls select, .btn {
+  background:#0f3460; border:1px solid #1e4a7a; color:#ccd6f6;
+  border-radius:5px; padding:5px 9px; font-size:12px; cursor:pointer;
+}
+.controls option { background:#16213e; }
+.btn:hover { border-color:#64ffda; color:#64ffda; }
+.controls .chk { display:flex; align-items:center; gap:5px; color:#a8b2d8; cursor:pointer; }
+#bandNote { color:#ffb74d; font-size:11px; }
+
+.charts-wrapper { display:grid; grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); gap:12px; }
+.chart-container {
+  background:#16213e; border:1px solid #0f3460; border-radius:10px;
+  padding:34px 14px 10px; position:relative; height:clamp(380px,52vh,620px);
+}
+.chart-title {
+  position:absolute; top:10px; left:50%; transform:translateX(-50%);
+  font-size:12px; font-weight:700; color:#64ffda; text-transform:uppercase; letter-spacing:0.7px;
+}
+.chart-container canvas { width:100% !important; height:100% !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1 id="hdr">Corridor Travel Time</h1>
+      <div class="subtitle" id="sub">INRIX travel times by time of day — mean, percentile bands and single-day overlays</div>
+      <a class="backlink" id="backlink" href="index.html">&#8592; back to corridor dashboard</a>
+    </div>
+    <select id="corridor-sel" onchange="loadCorridor(this.value)"></select>
+  </div>
+
+  <div class="controls">
+    <label for="dateSelect">Overlay day:</label>
+    <select id="dateSelect"></select>
+    <button id="randomBtn" class="btn">Random day</button>
+    <span style="color:#1e4a7a">|</span>
+    <span style="color:#a8b2d8">Show:</span>
+    <label class="chk"><input type="checkbox" id="toggleAverage" checked> Average</label>
+    <label class="chk"><input type="checkbox" id="toggleBands" checked> Percentile bands</label>
+    <label class="chk"><input type="checkbox" id="toggleSelected" checked> Selected day</label>
+    <span id="bandNote"></span>
+  </div>
+
+  <div class="charts-wrapper" id="charts"></div>
+</div>
+
+<script>
+'use strict';
+// ── Travel Time Explorer (PenaViz-style): companion page to the corridor
+//    dashboard. Reads the same corridors/*.js registry; uses each corridor's
+//    `travelTime` block (per-direction day curves + across-day percentiles).
+var C=null, TT=null, charts=[];
+const OVERLAY='#a855f7';
+
+function chartOptions(){
+  return {
+    responsive:true, maintainAspectRatio:false, resizeDelay:50,
+    layout:{padding:{left:6,right:6,top:4,bottom:10}},
+    interaction:{mode:'index',intersect:false},
+    plugins:{
+      legend:{ display:true, position:'bottom', onClick:()=>{},
+        labels:{ color:'#a8b2d8', font:{size:10},
+          filter:item=>['Average (all days)','Selected day','5% - 95% range','25% - 75% range'].includes(item.text) } },
+      tooltip:{ backgroundColor:'rgba(22,33,62,0.95)', titleColor:'#ccd6f6', bodyColor:'#ccd6f6',
+        borderColor:'#64ffda', borderWidth:1, padding:8,
+        callbacks:{ label:ctx=>ctx.parsed.y==null?null:(ctx.dataset.label||'')+': '+ctx.parsed.y.toFixed(1)+' min' } }
+    },
+    scales:{
+      x:{ grid:{color:'rgba(255,255,255,0.05)'},
+          ticks:{ color:'#8892b0', font:{size:10}, maxRotation:0, autoSkip:false,
+            callback:function(v,i){ const l=this.chart.data.labels[i]||''; if(!l.includes(':00')) return '';
+              let h=parseInt(l,10); const pm=l.includes('PM');
+              if(pm&&h!==12)h+=12; if(!pm&&h===12)h=0; return h%2===0?l:''; } },
+          title:{display:true,text:'Time of day',color:'#8892b0',font:{size:11,weight:'600'}} },
+      y:{ grid:{color:'rgba(255,255,255,0.05)'},
+          ticks:{color:'#8892b0',font:{size:10}},
+          title:{display:true,text:'Corridor travel time (minutes)',color:'#8892b0',font:{size:11,weight:'600'}} }
+    }
+  };
+}
+
+function buildCharts(){
+  charts.forEach(c=>c.chart.destroy());
+  charts=[];
+  const host=document.getElementById('charts');
+  host.innerHTML='';
+  Object.keys(TT.dirs).forEach(k=>{
+    const d=TT.dirs[k];
+    const box=document.createElement('div');
+    box.className='chart-container';
+    box.innerHTML='<div class="chart-title">'+d.label+'</div><canvas></canvas>';
+    host.appendChild(box);
+    const st=d.stats;
+    const ds=[
+      {label:'5th (base)',group:'bands',data:st.pct5,borderColor:'transparent',backgroundColor:'rgba(14,124,134,0.16)',fill:false,pointRadius:0,tension:0.3,spanGaps:true},
+      {label:'5% - 95% range',group:'bands',data:st.pct95,borderColor:'transparent',backgroundColor:'rgba(14,124,134,0.16)',fill:'-1',pointRadius:0,tension:0.3,spanGaps:true},
+      {label:'25th (base)',group:'bands',data:st.pct25,borderColor:'transparent',backgroundColor:'rgba(100,255,218,0.14)',fill:false,pointRadius:0,tension:0.3,spanGaps:true},
+      {label:'25% - 75% range',group:'bands',data:st.pct75,borderColor:'transparent',backgroundColor:'rgba(100,255,218,0.14)',fill:'-1',pointRadius:0,tension:0.3,spanGaps:true},
+      {label:'Average (all days)',group:'average',data:st.mean,borderColor:'#ffb74d',backgroundColor:'transparent',fill:false,pointRadius:0,borderWidth:2,tension:0.3,spanGaps:true}
+    ];
+    const chart=new Chart(box.querySelector('canvas'),{type:'line',data:{labels:TT.intervals,datasets:ds},options:chartOptions()});
+    charts.push({key:k,chart});
+  });
+}
+
+function applyOverlay(date){
+  Object.keys(TT.dirs).forEach(k=>{
+    const d=TT.dirs[k];
+    const rec=d.days.find(x=>x.date===date);
+    const entry=charts.find(c=>c.key===k);
+    if (!entry) return;
+    const dsArr=entry.chart.data.datasets;
+    const i=dsArr.findIndex(x=>x.label==='Selected day');
+    if (i!==-1) dsArr.splice(i,1);
+    if (rec) dsArr.push({label:'Selected day',group:'selected',data:rec.tt,
+      borderColor:OVERLAY,backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3,spanGaps:false,
+      hidden:!document.getElementById('toggleSelected').checked});
+    entry.chart.update();
+  });
+}
+function setGroup(group,visible){
+  charts.forEach(({chart})=>{
+    chart.data.datasets.forEach(ds=>{ if(ds.group===group) ds.hidden=!visible; });
+    chart.update();
+  });
+}
+
+function loadCorridor(id){
+  const cfg=REG.find(c=>c.id===id); if(!cfg||!cfg.travelTime) return;
+  C=cfg; TT=C.travelTime;
+  document.title=C.name+' Travel Times';
+  document.getElementById('hdr').textContent=C.name+' — Corridor Travel Time';
+  document.getElementById('sub').textContent=(TT.note||'')+' — mean, percentile bands and single-day overlays';
+  document.getElementById('backlink').href='index.html#'+C.id;
+  document.getElementById('corridor-sel').value=C.id;
+  const days=(Object.values(TT.dirs)[0]||{days:[]}).days;
+  const sel=document.getElementById('dateSelect');
+  sel.innerHTML=days.map(d=>'<option value="'+d.date+'">'+d.date+' ('+d.day+')</option>').join('');
+  document.getElementById('bandNote').textContent =
+    days.length<2 ? '⚠ only '+days.length+' day in the INRIX export — bands collapse onto that day; pull a multi-day export for real percentiles' : '';
+  buildCharts();
+  if (days.length){ sel.value=days[0].date; applyOverlay(days[0].date); }
+  try{ history.replaceState(null,'','#'+C.id); }catch(e){}
+}
+
+document.getElementById('dateSelect').addEventListener('change',e=>applyOverlay(e.target.value));
+document.getElementById('randomBtn').addEventListener('click',()=>{
+  const sel=document.getElementById('dateSelect');
+  if (!sel.options.length) return;
+  sel.selectedIndex=Math.floor(Math.random()*sel.options.length);
+  document.getElementById('toggleSelected').checked=true;
+  setGroup('selected',true);
+  applyOverlay(sel.value);
+});
+document.getElementById('toggleAverage').addEventListener('change',e=>setGroup('average',e.target.checked));
+document.getElementById('toggleBands').addEventListener('change',e=>setGroup('bands',e.target.checked));
+document.getElementById('toggleSelected').addEventListener('change',e=>setGroup('selected',e.target.checked));
+
+(function(){
+  const boot=document.createElement('script');
+  boot.src='corridors/manifest.js';
+  boot.onload=function(){
+    const files=window.CORRIDOR_FILES||[];
+    let i=0;
+    (function next(){
+      if (i>=files.length){ initApp(); return; }
+      const s=document.createElement('script');
+      s.src='corridors/'+files[i++];
+      s.onload=next; s.onerror=next;
+      document.body.appendChild(s);
+    })();
+  };
+  boot.onerror=function(){ initApp(); };
+  document.body.appendChild(boot);
+})();
+function initApp(){
+  const withTT=REG.filter(c=>c.travelTime);
+  const sel=document.getElementById('corridor-sel');
+  if (!withTT.length){
+    document.getElementById('hdr').textContent='No corridor has travel-time data yet';
+    return;
+  }
+  withTT.forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name+' — '+c.agency; sel.appendChild(o); });
+  const want=(location.hash||'').replace('#','');
+  loadCorridor(withTT.some(c=>c.id===want)?want:withTT[0].id);
+}
+</script>
+</body>
+</html>

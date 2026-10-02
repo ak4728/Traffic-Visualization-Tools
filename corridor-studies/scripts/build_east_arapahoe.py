@@ -179,6 +179,81 @@ with open(os.path.join(DATA, "TMC_Identification.csv"), newline="", encoding="ut
         })
 print(f"INRIX: {len(feats)} TMC segments")
 
+# ── INRIX corridor travel times (PenaViz-style percentile bands) ──────
+# Per direction and 15-min bin: corridor travel time = sum of TMC travel
+# times (a TMC missing at a timestamp is filled with its own day mean).
+# Percentile bands are computed ACROSS DAYS — with a single-day export the
+# bands collapse onto that day's line; they become meaningful once a
+# multi-day RITIS export replaces East-Arapahoe-Road.csv.
+def build_travel_time(tmc_csv, speed_csv, dirs):
+    tmc_dir = {}
+    with open(tmc_csv, newline="", encoding="utf-8-sig") as f:
+        for t in csv.DictReader(f):
+            tmc_dir[t["tmc"]] = "EAST" if t["direction"] == "EASTBOUND" else "WEST"
+    # rows[(date, hh:mm)][tmc] = travel time (min)
+    by_stamp = defaultdict(dict)
+    tmc_sum, tmc_n = defaultdict(float), defaultdict(int)
+    with open(speed_csv, newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            try: tt = float(r["travel_time_minutes"])
+            except (KeyError, ValueError): continue
+            ts = r["measurement_tstamp"]
+            by_stamp[(ts[:10], ts[11:16])][r["tmc_code"]] = tt
+            tmc_sum[r["tmc_code"]] += tt; tmc_n[r["tmc_code"]] += 1
+    tmc_mean = {k: tmc_sum[k] / tmc_n[k] for k in tmc_sum}
+    dir_tmcs = {d: [k for k, v in tmc_dir.items() if v == d and k in tmc_mean] for d in ("EAST", "WEST")}
+    # per (date, 15-min bin, dir): list of 5-min corridor sums
+    bins = defaultdict(list)
+    dates = set()
+    for (date, hm), tts in by_stamp.items():
+        dates.add(date)
+        b = int(hm[:2]) * 4 + int(hm[3:5]) // 15
+        for d, tmcs in dir_tmcs.items():
+            if not tmcs: continue
+            total = sum(tts.get(k, tmc_mean[k]) for k in tmcs)
+            bins[(date, b, d)].append(total)
+    dates = sorted(dates)
+    intervals = []
+    for b in range(96):
+        h24, m = b // 4, (b % 4) * 15
+        ap = "AM" if h24 < 12 else "PM"
+        h = h24 % 12 or 12
+        intervals.append(f"{h}:{m:02d} {ap}")
+    def pctl(vals, p):
+        s = sorted(vals); k = (len(s) - 1) * p / 100.0
+        lo, hi = int(k), min(int(k) + 1, len(s) - 1)
+        return s[lo] + (s[hi] - s[lo]) * (k - lo)
+    out_dirs = {}
+    for d in ("EAST", "WEST"):
+        if not dir_tmcs[d]: continue
+        days = []
+        for date in dates:
+            tt = [round(sum(v) / len(v), 2) if (v := bins.get((date, b, d))) else None for b in range(96)]
+            dn = datetime.date(*map(int, date.split("-"))).strftime("%A")
+            days.append({"date": date, "day": dn, "tt": tt})
+        stats = {k: [] for k in ("mean", "pct5", "pct25", "pct75", "pct95")}
+        for b in range(96):
+            vals = [dy["tt"][b] for dy in days if dy["tt"][b] is not None]
+            if not vals:
+                for k in stats: stats[k].append(None)
+            else:
+                stats["mean"].append(round(sum(vals) / len(vals), 2))
+                for k, p in (("pct5", 5), ("pct25", 25), ("pct75", 75), ("pct95", 95)):
+                    stats[k].append(round(pctl(vals, p), 2))
+        lab = next(dd["label"] for dd in dirs if dd["key"] == d)
+        out_dirs[d] = {"label": lab, "days": days, "stats": stats}
+    return {
+        "note": f"INRIX TMC travel times · {dates[0]}" + (f" – {dates[-1]}" if len(dates) > 1 else "")
+                + f" · {len(dates)} day(s)",
+        "intervals": intervals, "dirs": out_dirs,
+    }
+
+DIRS_CFG = [{"key": "EAST", "label": "Eastbound", "short": "EB"},
+            {"key": "WEST", "label": "Westbound", "short": "WB"}]
+travel_time = build_travel_time(os.path.join(DATA, "TMC_Identification.csv"),
+                                os.path.join(DATA, "East-Arapahoe-Road.csv"), DIRS_CFG)
+print(f"travel time: {travel_time['note']}, dirs: {list(travel_time['dirs'])}")
+
 # ── TCDS short counts: MS2 "Volume Count Report" xlsx exports ─────────
 # Station coordinates: Arapahoe stations sit on INRIX TMC on-road points
 # just W/O and E/O Parker Rd; Jordan Rd station is ~100 m south of the
@@ -345,6 +420,7 @@ src = (
     f"    hourly: {shj}\n"
     "  },\n"
     f"  inrix: {{ geojson: {gj} }},\n"
+    f"  travelTime: {json.dumps(travel_time, separators=(',', ':'))},\n"
     f"  tcds: {{ stations: {json.dumps(tcds_stations, separators=(',', ':'))} }},\n"
     + (f"  od: {json.dumps(od_cfg, separators=(',', ':'))},\n" if od_cfg else "")
     + f"  crashes: {cj}\n"

@@ -75,6 +75,20 @@ window.registerCorridor({
     //  keys — is still accepted and normalized automatically)
   },
 
+  // ── INRIX corridor travel times (optional) — explored in the companion
+  //    traveltime.html page (PenaViz-style: per-direction time-of-day curves,
+  //    across-day mean + 5/25/75/95% bands, selectable single-day overlay).
+  //    With a single-day export the bands collapse onto that day; use a
+  //    multi-day RITIS export for meaningful percentiles.
+  travelTime: {
+    note: 'INRIX TMC travel times · 2026-10-01 · 1 day(s)',
+    intervals: ['12:00 AM', …],                      // 96 x 15-min bins
+    dirs: { EAST: { label:'Eastbound',
+                    days: [ { date:'2026-10-01', day:'Thursday', tt:[…96, null where no data] }, … ],
+                    stats: { mean:[…], pct5:[…], pct25:[…], pct75:[…], pct95:[…] } },
+            WEST: { … } }
+  },
+
   // ── StreetLight O-D (optional) — explored in the companion od.html page
   //    (arc map + interactive O-D matrix, like SantaFeOD.html); the dashboard
   //    sidebar shows an "O-D Flow Explorer ↗" link row when this is present.
