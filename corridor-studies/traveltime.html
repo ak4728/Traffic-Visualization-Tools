@@ -71,6 +71,13 @@ a.backlink:hover { text-decoration:underline; }
     <select id="dateSelect"></select>
     <button id="randomBtn" class="btn">Random day</button>
     <span style="color:#1e4a7a">|</span>
+    <label for="bandBasis">Bands from:</label>
+    <select id="bandBasis">
+      <option value="weekday">Weekdays (M-F)</option>
+      <option value="weekend">Weekends (Sa-Su)</option>
+      <option value="all">All days</option>
+    </select>
+    <span style="color:#1e4a7a">|</span>
     <span style="color:#a8b2d8">Show:</span>
     <label class="chk"><input type="checkbox" id="toggleAverage" checked> Average</label>
     <label class="chk"><input type="checkbox" id="toggleBands" checked> Percentile bands</label>
@@ -116,6 +123,12 @@ function chartOptions(){
   };
 }
 
+function statsOf(d){
+  // new shape: stats.{weekday,weekend,all}; legacy shape: flat stats
+  if (d.stats.mean) return d.stats;
+  const basis=document.getElementById('bandBasis').value;
+  return d.stats[basis] || d.stats.all || Object.values(d.stats)[0];
+}
 function buildCharts(){
   charts.forEach(c=>c.chart.destroy());
   charts=[];
@@ -127,7 +140,7 @@ function buildCharts(){
     box.className='chart-container';
     box.innerHTML='<div class="chart-title">'+d.label+'</div><canvas></canvas>';
     host.appendChild(box);
-    const st=d.stats;
+    const st=statsOf(d);
     const ds=[
       {label:'5th (base)',group:'bands',data:st.pct5,borderColor:'transparent',backgroundColor:'rgba(14,124,134,0.16)',fill:false,pointRadius:0,tension:0.3,spanGaps:true},
       {label:'5% - 95% range',group:'bands',data:st.pct95,borderColor:'transparent',backgroundColor:'rgba(14,124,134,0.16)',fill:'-1',pointRadius:0,tension:0.3,spanGaps:true},
@@ -176,11 +189,23 @@ function loadCorridor(id){
   document.getElementById('bandNote').textContent =
     days.length<2 ? '⚠ only '+days.length+' day in the INRIX export — bands collapse onto that day; pull a multi-day export for real percentiles' : '';
   buildCharts();
-  if (days.length){ sel.value=days[0].date; applyOverlay(days[0].date); }
+  if (days.length){
+    // default overlay: the most recent full weekday in the data
+    const wd=[...days].reverse().find(d=>d.day!=='Saturday'&&d.day!=='Sunday'&&d.tt.filter(v=>v!=null).length>=90);
+    const pick=(wd||days[days.length-1]).date;
+    sel.value=pick; applyOverlay(pick);
+  }
   try{ history.replaceState(null,'','#'+C.id); }catch(e){}
 }
 
 document.getElementById('dateSelect').addEventListener('change',e=>applyOverlay(e.target.value));
+document.getElementById('bandBasis').addEventListener('change',()=>{
+  buildCharts();
+  const sel=document.getElementById('dateSelect');
+  if (sel.value) applyOverlay(sel.value);
+  document.getElementById('toggleAverage').checked=true;
+  document.getElementById('toggleBands').checked=true;
+});
 document.getElementById('randomBtn').addEventListener('click',()=>{
   const sel=document.getElementById('dateSelect');
   if (!sel.options.length) return;

@@ -190,29 +190,26 @@ def build_travel_time(tmc_csv, speed_csv, dirs):
     with open(tmc_csv, newline="", encoding="utf-8-sig") as f:
         for t in csv.DictReader(f):
             tmc_dir[t["tmc"]] = "EAST" if t["direction"] == "EASTBOUND" else "WEST"
-    # rows[(date, hh:mm)][tmc] = travel time (min)
-    by_stamp = defaultdict(dict)
+    # streaming aggregation (the RITIS export can be hundreds of MB):
+    # acc[(date, 15-min bin, tmc)] = [tt sum, n]
+    acc = {}
     tmc_sum, tmc_n = defaultdict(float), defaultdict(int)
     with open(speed_csv, newline="", encoding="utf-8-sig") as f:
-        for r in csv.DictReader(f):
-            try: tt = float(r["travel_time_minutes"])
-            except (KeyError, ValueError): continue
-            ts = r["measurement_tstamp"]
-            by_stamp[(ts[:10], ts[11:16])][r["tmc_code"]] = tt
-            tmc_sum[r["tmc_code"]] += tt; tmc_n[r["tmc_code"]] += 1
+        rd = csv.reader(f)
+        hdr = next(rd)
+        i_tmc, i_ts, i_tt = hdr.index("tmc_code"), hdr.index("measurement_tstamp"), hdr.index("travel_time_minutes")
+        for row in rd:
+            try: tt = float(row[i_tt])
+            except (ValueError, IndexError): continue
+            ts = row[i_ts]
+            key = (ts[:10], int(ts[11:13]) * 4 + int(ts[14:16]) // 15, row[i_tmc])
+            a = acc.get(key)
+            if a: a[0] += tt; a[1] += 1
+            else: acc[key] = [tt, 1]
+            tmc_sum[row[i_tmc]] += tt; tmc_n[row[i_tmc]] += 1
     tmc_mean = {k: tmc_sum[k] / tmc_n[k] for k in tmc_sum}
     dir_tmcs = {d: [k for k, v in tmc_dir.items() if v == d and k in tmc_mean] for d in ("EAST", "WEST")}
-    # per (date, 15-min bin, dir): list of 5-min corridor sums
-    bins = defaultdict(list)
-    dates = set()
-    for (date, hm), tts in by_stamp.items():
-        dates.add(date)
-        b = int(hm[:2]) * 4 + int(hm[3:5]) // 15
-        for d, tmcs in dir_tmcs.items():
-            if not tmcs: continue
-            total = sum(tts.get(k, tmc_mean[k]) for k in tmcs)
-            bins[(date, b, d)].append(total)
-    dates = sorted(dates)
+    dates = sorted({k[0] for k in acc})
     intervals = []
     for b in range(96):
         h24, m = b // 4, (b % 4) * 15
@@ -225,21 +222,40 @@ def build_travel_time(tmc_csv, speed_csv, dirs):
         return s[lo] + (s[hi] - s[lo]) * (k - lo)
     out_dirs = {}
     for d in ("EAST", "WEST"):
-        if not dir_tmcs[d]: continue
+        tmcs = dir_tmcs[d]
+        if not tmcs: continue
         days = []
         for date in dates:
-            tt = [round(sum(v) / len(v), 2) if (v := bins.get((date, b, d))) else None for b in range(96)]
+            tt = []
+            for b in range(96):
+                present = [acc[(date, b, k)] for k in tmcs if (date, b, k) in acc]
+                if not present:
+                    tt.append(None); continue
+                # corridor time = sum of each TMC's bin mean; TMCs with no
+                # reading in this bin are filled with their period-wide mean
+                total = 0.0
+                for k in tmcs:
+                    a = acc.get((date, b, k))
+                    total += (a[0] / a[1]) if a else tmc_mean[k]
+                tt.append(round(total, 2))
             dn = datetime.date(*map(int, date.split("-"))).strftime("%A")
             days.append({"date": date, "day": dn, "tt": tt})
-        stats = {k: [] for k in ("mean", "pct5", "pct25", "pct75", "pct95")}
-        for b in range(96):
-            vals = [dy["tt"][b] for dy in days if dy["tt"][b] is not None]
-            if not vals:
-                for k in stats: stats[k].append(None)
-            else:
-                stats["mean"].append(round(sum(vals) / len(vals), 2))
-                for k, p in (("pct5", 5), ("pct25", 25), ("pct75", 75), ("pct95", 95)):
-                    stats[k].append(round(pctl(vals, p), 2))
+        # percentile bands per basis: weekdays, weekends, all days
+        stats = {}
+        for basis, pick in (("weekday", lambda dy: dy["day"] not in ("Saturday", "Sunday")),
+                            ("weekend", lambda dy: dy["day"] in ("Saturday", "Sunday")),
+                            ("all",     lambda dy: True)):
+            st = {k: [] for k in ("mean", "pct5", "pct25", "pct75", "pct95")}
+            sel = [dy for dy in days if pick(dy)]
+            for b in range(96):
+                vals = [dy["tt"][b] for dy in sel if dy["tt"][b] is not None]
+                if not vals:
+                    for k in st: st[k].append(None)
+                else:
+                    st["mean"].append(round(sum(vals) / len(vals), 2))
+                    for k, p in (("pct5", 5), ("pct25", 25), ("pct75", 75), ("pct95", 95)):
+                        st[k].append(round(pctl(vals, p), 2))
+            stats[basis] = st
         lab = next(dd["label"] for dd in dirs if dd["key"] == d)
         out_dirs[d] = {"label": lab, "days": days, "stats": stats}
     return {
@@ -250,8 +266,11 @@ def build_travel_time(tmc_csv, speed_csv, dirs):
 
 DIRS_CFG = [{"key": "EAST", "label": "Eastbound", "short": "EB"},
             {"key": "WEST", "label": "Westbound", "short": "WB"}]
-travel_time = build_travel_time(os.path.join(DATA, "TMC_Identification.csv"),
-                                os.path.join(DATA, "East-Arapahoe-Road.csv"), DIRS_CFG)
+# prefer the full multi-day RITIS export when present
+TT_CSV = os.path.join(DATA, "Arapahoe-Road-Travel-Times-5-min.csv")
+if not os.path.exists(TT_CSV):
+    TT_CSV = os.path.join(DATA, "East-Arapahoe-Road.csv")
+travel_time = build_travel_time(os.path.join(DATA, "TMC_Identification.csv"), TT_CSV, DIRS_CFG)
 print(f"travel time: {travel_time['note']}, dirs: {list(travel_time['dirs'])}")
 
 # ── TCDS short counts: MS2 "Volume Count Report" xlsx exports ─────────
