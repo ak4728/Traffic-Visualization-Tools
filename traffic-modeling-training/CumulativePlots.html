@@ -127,7 +127,7 @@
         <button class="action" id="ncPlay">⏸ Pause</button>
         <button class="action sec" id="ncReset">↺ Reset</button>
         <div class="control-group">
-          <label>Mean arrival headway (both lanes)</label>
+          <label>Mean arrival headway (per lane)</label>
           <input type="range" id="ncHead" min="1" max="4" step="0.25" value="2">
           <span class="val" id="ncHeadVal">2.0 s</span>
         </div>
@@ -309,7 +309,7 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       const v={ t0:tA, v0:0.05*(1+(Math.random()*0.2-0.1)), lane, leader:lastInLane[lane], hist:[] };
       lastInLane[lane]=v;
       vehicles.push(v);
-      tA += (hbar/2)*(0.5+Math.random());   // slider = combined two-lane headway
+      tA += (hbar/2)*(0.5+Math.random());   // slider = PER-LANE headway, so combined inter-arrival averages hbar/2
     }
   }
 
@@ -362,24 +362,28 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
     pass1=vehicles.map(v=>passOf(v,d1));
     pass2=vehicles.map(v=>passOf(v,d2));
   }
-  function countLE(arr, ts){ let n=0; for(const p of arr){ if(p!==null && p>=0 && p<=ts) n++; } return n; }
+  // COUNT ALL crossings up to ts, including those before the t=0 window:
+  // warm-up vehicles that passed X₁ before the clock started must still be
+  // in N₁, otherwise N₂ overtakes N₁ early on and the accumulation
+  // N₁ − N₂ (vehicles currently between the detectors) goes negative
+  function countLE(arr, ts){ let n=0; for(const p of arr){ if(p!==null && p<=ts) n++; } return n; }
 
-  // per-vehicle delay: trip time minus own free-flow trip time
+  // per-vehicle delay: trip time minus own free-flow trip time (in finish order)
   function delays(){
     const out=[];
     for(let i=0;i<vehicles.length;i++){
-      if(pass1[i]!==null && pass1[i]>=0 && pass2[i]!==null && pass2[i]<=t){
+      if(pass1[i]!==null && pass2[i]!==null && pass2[i]>=0 && pass2[i]<=t){
         const ff=(d2-d1)/vehicles[i].v0;
-        out.push({ lane:vehicles[i].lane, delay:Math.max(0,(pass2[i]-pass1[i])-ff) });
+        out.push({ lane:vehicles[i].lane, delay:Math.max(0,(pass2[i]-pass1[i])-ff), fin:pass2[i] });
       }
     }
-    return out;
+    return out.sort((a,b)=>a.fin-b.fin);
   }
 
   function smoothCurveOf(passes){
-    const evs=passes.filter(p=>p!==null&&p>=0).sort((a,b)=>a-b);
+    const evs=passes.filter(p=>p!==null).sort((a,b)=>a-b);
     if(evs.length<3) return null;
-    const xs=[Math.max(0,evs[0]-0.5)], ys=[0];
+    const xs=[evs[0]-0.5], ys=[0];
     evs.forEach((p,k)=>{ xs.push(Math.max(p, xs[xs.length-1]+1e-4)); ys.push(k+1); });
     return pchip(xs,ys);
   }
@@ -411,12 +415,14 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       for(let x=tNow; x>=0; x-=0.25) cx.lineTo(s.X(x), s.Y(Math.min(f2(x),NMAX)));
       cx.closePath(); cx.fill();
     }
-    // step curves (light)
+    // step curves (light) — start at the count already past the detector at t=0
     function stepCurve(passes, color){
-      const evs=passes.filter(p=>p!==null&&p>=0&&p<=tNow).sort((a,b)=>a-b);
+      const all=passes.filter(p=>p!==null&&p<=tNow).sort((a,b)=>a-b);
+      let n=all.filter(p=>p<0).length;
+      const evs=all.filter(p=>p>=0);
       cx.strokeStyle=color; cx.lineWidth=1.5; cx.lineJoin='round'; cx.globalAlpha=0.4;
       cx.beginPath();
-      let n=0, py=s.Y(0);
+      let py=s.Y(Math.min(n,NMAX));
       cx.moveTo(s.X(0), py);
       evs.forEach(pt=>{
         cx.lineTo(s.X(pt), py);
@@ -465,12 +471,18 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
         [`N₁ = ${h1} · N₂ = ${h2}`, '#4b5563', false],
         [`accumulation = ${h1-h2} veh`, '#ef5350', false]
       ];
-      if(hN<=vehicles.length && pass1[hN-1]!==null && pass2[hN-1]!==null && pass2[hN-1]<=tNow){
+      // vehicle #n = the n-th X₂ crossing (curve numbering), paired with the
+      // SAME vehicle's own X₁ crossing — not the n-th entry in spawn order
+      const order=vehicles.map((v,i)=>i)
+        .filter(i=>pass1[i]!==null&&pass2[i]!==null)
+        .sort((a,b)=>pass2[a]-pass2[b]);
+      const vi=order[hN-1];
+      if(vi!==undefined && pass2[vi]<=tNow){
         cx.strokeStyle='#7c3aed'; cx.lineWidth=2; cx.setLineDash([5,4]);
-        cx.beginPath(); cx.moveTo(s.X(pass1[hN-1]), s.Y(hN)); cx.lineTo(s.X(pass2[hN-1]), s.Y(hN)); cx.stroke();
+        cx.beginPath(); cx.moveTo(s.X(Math.max(0,pass1[vi])), s.Y(hN)); cx.lineTo(s.X(pass2[vi]), s.Y(hN)); cx.stroke();
         cx.setLineDash([]);
-        const ffh=(d2-d1)/vehicles[hN-1].v0;
-        rows.push([`veh #${hN} trip = ${(pass2[hN-1]-pass1[hN-1]).toFixed(1)} s (delay ${Math.max(0,pass2[hN-1]-pass1[hN-1]-ffh).toFixed(1)} s)`, '#7c3aed', false]);
+        const ffh=(d2-d1)/vehicles[vi].v0;
+        rows.push([`veh #${hN} trip = ${(pass2[vi]-pass1[vi]).toFixed(1)} s (delay ${Math.max(0,pass2[vi]-pass1[vi]-ffh).toFixed(1)} s)`, '#7c3aed', false]);
       }
       tooltipCard(cx, hover.x, hover.y, rows, P, s.pw, s.ph);
     }
@@ -750,7 +762,6 @@ function tooltipCard(ctx, x, y, rows, P, pw, ph){
       cx.beginPath(); cx.moveTo(hover.x, s.Y(A[i])); cx.lineTo(hover.x, s.Y(D[i])); cx.stroke();
       cx.setLineDash([]);
       // delay of the vehicle at hovered height
-      const hN=(1-(hover.y-P.t)/s.ph)*(s.Y? 1:1);
       const nVal=Math.max(1, Math.round((1-(hover.y-P.t)/s.ph)* (Math.ceil(A[A.length-1]/100)*100 || 100)));
       const ta=invOf(A,nVal), td=invOf(D,nVal);
       const rows=[
